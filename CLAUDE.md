@@ -1,24 +1,33 @@
 # SharkCut
 
-Editor de video de escritorio para Windows, de uso personal (KyoSumiVT).
+Editor de video nativo de escritorio para Windows, de uso personal (KyoSumiVT).
+Pensado para VODs de Twitch largos (40+ min) y para shorts/clips.
 El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes.
-La sección 13 del plan recoge ajustes técnicos que prevalecen sobre las
-secciones anteriores cuando difieren.
 
 ## Stack
-- Electron + JavaScript (módulos ES). Sin frameworks de UI salvo que se acuerde.
-- Render: WebGL2 + shaders GLSL. Vista previa y exportación usan el MISMO motor.
-- Codificación: ffmpeg nativo en vendor/ffmpeg, invocado desde el proceso principal
-  con `spawn` y argumentos en lista.
-- Seguridad Electron: contextIsolation activado, nodeIntegration desactivado,
-  sandbox activado, toda la comunicación por preload.js + IPC. Medios locales
-  servidos con un protocolo propio (`media://`), nunca con webSecurity desactivado.
+- C++20 + Qt 6 (LTS ≥ 6.8), interfaz en Qt Quick / QML.
+- Render: QRhi (backend Direct3D 11 en Windows) + shaders GLSL 440 compilados
+  con qsb. Vista previa y exportación usan el MISMO compositor.
+- Medios: FFmpeg enlazado como biblioteca (libavformat/libavcodec), con
+  NVDEC (D3D11VA) para decodificar y NVENC para codificar. Los fotogramas se
+  quedan en la GPU siempre que sea posible.
+- Audio: miniaudio (WASAPI) + mezclador propio; el audio es el reloj maestro.
+- Compilación: CMake + vcpkg. Tests: Catch2 + ctest.
 - Archivo de proyecto: `.sharkp` (JSON con campo `version`).
-- Tiempos internos en enteros (microsegundos o fotogramas), no en segundos float.
+- Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
+  nunca segundos en coma flotante.
+
+## Arquitectura
+- src/core no depende de Qt Quick ni de la interfaz; debe poder probarse sin
+  ventanas.
+- Código específico de Windows/NVIDIA solo en src/media/platform/win/, detrás
+  de interfaces, con un camino por software que compila en Linux.
+- Toda modificación del proyecto pasa por un comando (deshacer/rehacer).
+- Nada de decodificar ni acceder a disco en el hilo de interfaz.
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.
-  Proxies, miniaturas y ondas van a la carpeta de caché del proyecto.
+  Proxies, miniaturas, ondas y remux van a la carpeta de caché del proyecto.
 - No copiar código ni recursos de Premiere Composer ni de otros productos de pago.
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.
 - Respetar las fases del plan; no adelantar funciones de fases posteriores.
@@ -26,7 +35,6 @@ secciones anteriores cuando difieren.
 - Estilo visual de la app: marca Marea Nocturna de KyoSumiVT.
 
 ## Comandos (actualizar cuando existan)
-- npm install
-- npm run dev       # arranca la app en modo desarrollo
-- npm run build     # genera el instalador .exe
-- npm test
+- cmake --preset windows-release
+- cmake --build --preset windows-release
+- ctest --preset windows-release

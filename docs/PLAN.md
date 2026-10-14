@@ -486,9 +486,13 @@ ctest --preset windows-debug
      quitar dejando hueco), historial de deshacer/rehacer por instantáneas del proyecto
      y archivo `.sharkp` (JSON con `version`, rutas absolutas y relativas, guardado
      atómico). Todo con tests.
-   - [ ] Etapa 2: la línea de tiempo en la interfaz. Biblioteca de medios (arrastrar y
-     soltar), reproducción de la línea de tiempo (video y audio de varios clips),
-     herramientas de edición con ratón y atajos, deshacer/rehacer.
+   - [x] Etapa 2: la línea de tiempo en la interfaz. Pestaña Editor con biblioteca de
+     medios (importar en segundo plano, arrastrar y soltar), línea de tiempo V1/A1 con
+     regla, zoom e imán, herramientas Selección (mover, recortar bordes) y Cuchilla,
+     dividir en el cabezal, quitar, deshacer/rehacer. Reproducción: dos hilos de video
+     (el clip actual y el siguiente preparado en su primer fotograma) y audio de la línea
+     de tiempo con fundidos de 2 ms en los cortes. Desde Origen se envía el tramo marcado
+     al final o al cabezal. Pendiente de validar en el PC de Kyo.
    - [ ] Etapa 3: guardar y abrir proyectos desde la interfaz y exportar la línea de
      tiempo completa a MP4.
 

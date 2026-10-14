@@ -72,9 +72,50 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
+### Fase 2, etapa 2: la línea de tiempo
+
+SharkCut abre ahora en la pestaña **1 · Editor**: visor arriba, biblioteca de medios a
+la derecha y línea de tiempo abajo, con una pista de video (**V1**) y una de audio (**A1**).
+Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
+
+**Montar:**
+
+- [ ] **Importar…** (o `Ctrl + I`, o arrastrar archivos desde el explorador a la
+  biblioteca) añade los videos a **Medios**, con su duración y formato.
+- [ ] Arrastra un medio de la biblioteca a la línea de tiempo: aparece una línea donde va a
+  caer y, al soltar, el clip se coloca ahí (video en V1 y audio en A1, enlazados).
+  El botón **+** lo añade al final.
+- [ ] El primer clip fija el formato del proyecto (panel **Proyecto**: `1920×1080 · 60 fps`).
+- [ ] Doble clic en un medio lo abre en **Origen**: marca un tramo con I y O y envíalo con
+  **Al final** o **En el cabezal**.
+- [ ] También puedes arrastrar archivos del explorador directamente a las pistas.
+
+**Editar** (con la herramienta **Selección**, tecla `V`):
+
+- [ ] Clic en un clip lo selecciona (también su audio); `Ctrl`/`Mayús` + clic suma clips.
+- [ ] Arrastrar un clip lo mueve. Si cae encima de otro, lo **sobrescribe** (como en
+  Premiere). El hueco que deja no se cierra solo (la eliminación con rizo llega en la fase 4).
+- [ ] Arrastrar el **borde** izquierdo o derecho de un clip lo recorta. No deja pasar del
+  principio o final del video ni pisar el clip vecino.
+- [ ] Con el **Imán** (`S`) activado, los clips y los recortes se pegan a los bordes de
+  otros clips y al cabezal.
+- [ ] `Ctrl + K` divide los clips bajo el cabezal. La **Cuchilla** (`C`) divide donde haces clic.
+- [ ] `Supr` (o Retroceso) quita los clips seleccionados.
+- [ ] `Ctrl + Z` deshace y `Ctrl + Mayús + Z` (o `Ctrl + Y`) rehace, también varias veces.
+
+**Ver:**
+
+- [ ] Espacio reproduce la línea de tiempo con su audio. Al pasar por un corte la imagen
+  y el sonido siguen fluidos (sin parones ni chasquidos). En los huecos se ve negro.
+- [ ] Clic o arrastre en la regla (arriba de las pistas) mueve el cabezal.
+- [ ] `Ctrl + rueda` hace zoom; la rueda sola desplaza. `+`, `-` y **Ajustar** (`\`) también.
+- [ ] Prueba con un VOD largo (40 min) cortado en muchos trozos: ¿va fluido?
+
+> Guardar el proyecto y exportar la línea de tiempo llegan en la etapa 3.
+
 ### Fase 1: laboratorio de transiciones y exportación (validada)
 
-SharkCut tiene ahora dos pestañas arriba: **1 · Origen** y **2 · Transición**.
+Pestañas **2 · Origen** y **3 · Transición** (antes 1 y 2).
 
 **Marcas de entrada y salida (como el monitor de origen de Premiere).** En vez de cortar
 los videos en archivos separados, eliges un tramo dentro de un video:
@@ -85,12 +126,12 @@ los videos en archivos separados, eliges un tramo dentro de un video:
    queda resaltado en la barra. Sin marcas se usa el video entero.
 3. Pulsa **Usar como clip A**.
 4. Marca otro tramo (del mismo video o de otro) y pulsa **Usar como clip B**.
-5. Ve a **2 · Transición** (o pulsa **Ir a la transición →**, o la tecla **2**).
+5. Ve a **3 · Transición** (o pulsa **Ir a la transición →**, o la tecla **3**).
 
 > La transición solapa el **final de A** con el **principio de B**: deja un poco de
 > margen al final del tramo A y al principio del B.
 
-Atajo: `SharkCut.exe clipA.mp4 clipB.mp4` carga los dos videos enteros como A y B.
+Atajo: `SharkCut.exe a.mp4 b.mp4` importa los videos y los coloca en la línea de tiempo.
 
 **En la pestaña Transición:**
 

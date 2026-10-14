@@ -34,7 +34,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   presentación) y sus shaders; lo usan el visor y la exportación (mismo motor).
   src/app: Player (origen, marcas I/O), TransitionLab (secuencia de prueba),
   PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem + Compositor).
-  src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC).
+  src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC) y
+  TimelineAudioSource (audio de la línea de tiempo).
+  src/app también: Editor (proyecto + historial, herramientas y reproducción de la línea
+  de tiempo); interfaz en qml/LineaTiempo.qml.
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
   (útil para revisar cambios en transition.frag); con --export exporta como la app.

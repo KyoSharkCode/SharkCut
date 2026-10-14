@@ -11,18 +11,22 @@ Window {
     minimumWidth: 1000
     minimumHeight: 620
     visible: true
-    title: reproductor.fileName.length > 0
+    title: modo === "origen" && reproductor.fileName.length > 0
            ? reproductor.fileName + " — SharkCut " + AppInfo.appVersion
            : "SharkCut " + AppInfo.appVersion
     color: Theme.fondo
 
-    // "origen": ver un video y marcar tramos · "transicion": probar la transición A → B
-    property string modo: "origen"
+    // "editor": línea de tiempo · "origen": ver un video y marcar tramos ·
+    // "transicion": probar la transición A → B
+    property string modo: "editor"
+    readonly property bool enEditor: modo === "editor"
     readonly property bool enOrigen: modo === "origen"
+    readonly property bool enTransicion: modo === "transicion"
 
     function cambiarModo(nuevo) {
         if (nuevo === modo)
             return
+        editor.pause()
         reproductor.pause()
         laboratorio.pause()
         modo = nuevo
@@ -44,6 +48,9 @@ Window {
     readonly property bool apiEsperada: !esWindows
                                         || contenido.GraphicsInfo.api === GraphicsInfo.Direct3D11
 
+    Editor {
+        id: editor
+    }
     Player {
         id: reproductor
     }
@@ -56,6 +63,7 @@ Window {
         id: reloj
         running: true
         onTriggered: {
+            editor.advance()
             reproductor.advance()
             laboratorio.advance()
         }
@@ -73,8 +81,6 @@ Window {
         }
     }
 
-    // Archivos al abrir: uno se abre en Origen; con dos, se cargan como clips A y B.
-    property int cargaInicial: AppInfo.initialFiles.length >= 2 ? 0 : -1
     FileDialog {
         id: dialogoExportar
         title: "Exportar prueba de transición"
@@ -84,30 +90,24 @@ Window {
         onAccepted: laboratorio.exportTo(selectedFile)
     }
 
+    FileDialog {
+        id: dialogoImportar
+        title: "Importar medios"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: ["Videos y audio (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts *.mp3 *.wav *.m4a *.aac *.flac *.ogg)",
+                      "Todos los archivos (*)"]
+        onAccepted: editor.importFiles(selectedFiles)
+    }
+
+    // Archivos al abrir (p. ej. "SharkCut.exe a.mp4 b.mp4"): se importan y se colocan
+    // en la línea de tiempo, uno detrás de otro.
     Component.onCompleted: {
         if (AppInfo.initialFiles.length > 0)
-            reproductor.openPath(AppInfo.initialFiles[0])
-    }
-    Connections {
-        target: reproductor
-        enabled: ventana.cargaInicial >= 0
-        function onLoadedChanged() {
-            if (!reproductor.loaded)
-                return
-            if (ventana.cargaInicial === 0) {
-                laboratorio.setClipA(reproductor)
-                ventana.cargaInicial = 1
-                reproductor.openPath(AppInfo.initialFiles[1])
-            } else {
-                laboratorio.setClipB(reproductor)
-                ventana.cargaInicial = -1
-                ventana.cambiarModo("transicion")
-            }
-        }
+            editor.importPaths(AppInfo.initialFiles, 0)
     }
 
     // Atajos de teclado (estilo Premiere). Actúan sobre la pestaña visible.
-    readonly property var activo: enOrigen ? reproductor : laboratorio
+    readonly property var activo: enEditor ? editor : enOrigen ? reproductor : laboratorio
     Shortcut { sequence: "Space"; onActivated: ventana.activo.togglePlay() }
     Shortcut { sequence: "Left"; onActivated: ventana.activo.step(-1) }
     Shortcut { sequence: "Right"; onActivated: ventana.activo.step(1) }
@@ -125,9 +125,31 @@ Window {
     Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrir.open() }
     Shortcut { sequence: "I"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkIn() }
     Shortcut { sequence: "O"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkOut() }
-    Shortcut { sequence: "T"; enabled: !ventana.enOrigen; onActivated: laboratorio.playTransition() }
-    Shortcut { sequence: "1"; onActivated: ventana.cambiarModo("origen") }
-    Shortcut { sequence: "2"; onActivated: ventana.cambiarModo("transicion") }
+    Shortcut { sequence: "T"; enabled: ventana.enTransicion; onActivated: laboratorio.playTransition() }
+    Shortcut { sequence: "1"; onActivated: ventana.cambiarModo("editor") }
+    Shortcut { sequence: "2"; onActivated: ventana.cambiarModo("origen") }
+    Shortcut { sequence: "3"; onActivated: ventana.cambiarModo("transicion") }
+
+    // Edición (pestaña Editor)
+    Shortcut { sequence: "Ctrl+K"; enabled: ventana.enEditor; onActivated: editor.splitAtPlayhead() }
+    Shortcut {
+        sequences: ["Delete", "Backspace"]
+        enabled: ventana.enEditor
+        onActivated: editor.removeSelection()
+    }
+    Shortcut { sequences: [StandardKey.Undo]; enabled: ventana.enEditor; onActivated: editor.undo() }
+    Shortcut {
+        sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
+        enabled: ventana.enEditor
+        onActivated: editor.redo()
+    }
+    Shortcut { sequence: "V"; enabled: ventana.enEditor; onActivated: lineaTiempo.herramienta = "seleccion" }
+    Shortcut { sequence: "C"; enabled: ventana.enEditor; onActivated: lineaTiempo.herramienta = "cuchilla" }
+    Shortcut { sequence: "S"; enabled: ventana.enEditor; onActivated: lineaTiempo.iman = !lineaTiempo.iman }
+    Shortcut { sequences: ["+", "="]; enabled: ventana.enEditor; onActivated: lineaTiempo.acercar() }
+    Shortcut { sequence: "-"; enabled: ventana.enEditor; onActivated: lineaTiempo.alejar() }
+    Shortcut { sequence: "\\"; enabled: ventana.enEditor; onActivated: lineaTiempo.encajar() }
+    Shortcut { sequence: "Ctrl+I"; enabled: ventana.enEditor; onActivated: dialogoImportar.open() }
 
     ColumnLayout {
         id: contenido
@@ -146,17 +168,22 @@ Window {
                 font.pixelSize: Theme.tamTitulo
                 font.bold: true
             }
-            Chip { texto: "FASE 1 · TRANSICIONES" }
+            Chip { texto: "FASE 2 · EDITOR" }
 
             Item { implicitWidth: 12 }
             Pestana {
-                texto: "1 · Origen"
+                texto: "1 · Editor"
+                activa: ventana.enEditor
+                onPulsada: ventana.cambiarModo("editor")
+            }
+            Pestana {
+                texto: "2 · Origen"
                 activa: ventana.enOrigen
                 onPulsada: ventana.cambiarModo("origen")
             }
             Pestana {
-                texto: "2 · Transición"
-                activa: !ventana.enOrigen
+                texto: "3 · Transición"
+                activa: ventana.enTransicion
                 onPulsada: ventana.cambiarModo("transicion")
             }
 
@@ -195,17 +222,19 @@ Window {
                         id: visor
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        source: ventana.enOrigen ? reproductor : laboratorio
+                        source: ventana.activo
                         backgroundColor: Theme.visorFondo
 
                         Column {
                             anchors.centerIn: parent
                             spacing: 6
-                            visible: ventana.enOrigen ? !reproductor.loaded : !laboratorio.ready
+                            visible: ventana.enEditor ? editor.frameCount === 0
+                                     : ventana.enOrigen ? !reproductor.loaded : !laboratorio.ready
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: ventana.enOrigen
+                                text: ventana.enEditor ? "Línea de tiempo vacía"
+                                      : ventana.enOrigen
                                       ? (reproductor.busy ? "Abriendo…" : "Origen")
                                       : "Transición"
                                 color: Theme.texto
@@ -216,13 +245,48 @@ Window {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 visible: !reproductor.busy || !ventana.enOrigen
                                 horizontalAlignment: Text.AlignHCenter
-                                text: ventana.enOrigen
+                                text: ventana.enEditor
+                                      ? "Importa medios (Ctrl+I) y arrástralos a la línea de tiempo."
+                                      : ventana.enOrigen
                                       ? "Arrastra un video aquí o pulsa «Abrir video…» (Ctrl+O)."
                                       : "En la pestaña Origen, marca un tramo y envíalo como clip A\n"
                                         + "y otro como clip B. Después vuelve aquí."
                                 color: Theme.textoSecundario
                                 font.pixelSize: Theme.tamTexto
                             }
+                        }
+                    }
+
+                    // Controles de la pestaña Editor
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: ventana.enEditor
+                        enabled: editor.frameCount > 0
+                        opacity: enabled ? 1 : 0.4
+                        spacing: 6
+
+                        Boton { texto: "|◀"; onPulsado: { editor.pause(); editor.seek(0) } }
+                        Boton { texto: "◀"; onPulsado: editor.step(-1) }
+                        Boton {
+                            texto: editor.playing ? "❚❚" : "▶"
+                            acentuado: true
+                            implicitWidth: 56
+                            onPulsado: editor.togglePlay()
+                        }
+                        Boton { texto: "▶"; onPulsado: editor.step(1) }
+                        Boton {
+                            texto: "▶|"
+                            onPulsado: { editor.pause(); editor.seek(editor.frameCount - 1) }
+                        }
+                        Item { implicitWidth: 8 }
+                        Boton {
+                            texto: editor.muted ? "Sin sonido" : "Sonido"
+                            onPulsado: editor.muted = !editor.muted
+                        }
+                        Item { Layout.fillWidth: true }
+                        CodigoTiempo {
+                            actual: editor.timecode
+                            total: editor.durationTimecode
                         }
                     }
 
@@ -283,7 +347,7 @@ Window {
                     // Controles de la pestaña Transición
                     ColumnLayout {
                         Layout.fillWidth: true
-                        visible: !ventana.enOrigen
+                        visible: ventana.enTransicion
                         enabled: laboratorio.ready
                         opacity: enabled ? 1 : 0.4
                         spacing: 6
@@ -334,11 +398,15 @@ Window {
                     anchors.fill: parent
                     keys: ["text/uri-list"]
                     onDropped: (drop) => {
-                        if (drop.hasUrls && drop.urls.length > 0) {
+                        if (!drop.hasUrls || drop.urls.length === 0)
+                            return
+                        if (ventana.enEditor) {
+                            editor.importFiles(drop.urls)
+                        } else {
                             ventana.cambiarModo("origen")
                             reproductor.open(drop.urls[0])
-                            drop.acceptProposedAction()
                         }
+                        drop.acceptProposedAction()
                     }
                 }
             }
@@ -351,9 +419,17 @@ Window {
                 radius: Theme.radio
                 border.color: Theme.borde
 
+                // --- Pestaña Editor: biblioteca de medios y proyecto ---
+                PanelEditor {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    visible: ventana.enEditor
+                }
+
                 Flickable {
                     anchors.fill: parent
                     anchors.margins: 16
+                    visible: !ventana.enEditor
                     contentHeight: ventana.enOrigen ? panelOrigen.implicitHeight
                                                     : panelTransicion.implicitHeight
                     clip: true
@@ -382,6 +458,31 @@ Window {
                             text: "Coloca el cabezal y pulsa I para marcar la entrada y O para la "
                                   + "salida. Sin marcas se usa el clip entero."
                         }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Enviar el tramo a la línea de tiempo:"
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Al final"
+                                acentuado: true
+                                enabled: reproductor.loaded
+                                onPulsado: editor.addFromSource(reproductor, false)
+                            }
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "En el cabezal"
+                                enabled: reproductor.loaded
+                                onPulsado: editor.addFromSource(reproductor, true)
+                            }
+                        }
+                        Separador {}
+                        Titulo { texto: "Prueba de transición" }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
@@ -468,7 +569,7 @@ Window {
                     // --- Pestaña Transición: clips y parámetros ---
                     ColumnLayout {
                         id: panelTransicion
-                        visible: !ventana.enOrigen
+                        visible: ventana.enTransicion
                         width: parent.width
                         spacing: 14
 
@@ -583,13 +684,22 @@ Window {
             }
         }
 
+        LineaTiempo {
+            id: lineaTiempo
+            editor: editor
+            visible: ventana.enEditor
+            Layout.fillWidth: true
+            Layout.preferredHeight: 250
+        }
+
         // Barra de estado
         Text {
             Layout.fillWidth: true
-            readonly property string error: ventana.enOrigen ? reproductor.errorString
-                                                             : laboratorio.errorString
-            readonly property bool ocupado: ventana.enOrigen ? reproductor.busy : laboratorio.busy
-            text: error.length > 0 ? "Aviso: " + error : ocupado ? "Cargando…" : "Listo"
+            readonly property string error: ventana.activo.errorString
+            readonly property bool ocupado: ventana.activo.busy || (ventana.enEditor && editor.importing)
+            text: error.length > 0 ? "Aviso: " + error
+                  : ventana.enEditor && editor.importing ? "Importando…"
+                  : ocupado ? "Cargando…" : "Listo"
             color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
             font.pixelSize: Theme.tamTextoPequeno
             elide: Text.ElideRight
@@ -655,6 +765,176 @@ Window {
             color: Theme.textoSecundario
             font.pixelSize: Theme.tamTexto
             font.family: "Consolas, monospace"
+        }
+    }
+
+    // Lo que se ve al arrastrar un medio de la biblioteca a la línea de tiempo.
+    Rectangle {
+        id: fantasma
+        property var mediaId: undefined
+        property string nombre
+        visible: Drag.active
+        z: 100
+        width: Math.min(220, textoFantasma.implicitWidth + 20)
+        height: 28
+        radius: Theme.radio
+        color: Theme.panelElevado
+        border.color: Theme.acento
+        opacity: 0.9
+        Drag.keys: ["sharkcut/medio"]
+        Drag.hotSpot.x: 10
+        Drag.hotSpot.y: 14
+        Text {
+            id: textoFantasma
+            anchors.verticalCenter: parent.verticalCenter
+            x: 10
+            width: parent.width - 20
+            text: fantasma.nombre
+            color: Theme.texto
+            font.pixelSize: Theme.tamTextoPequeno
+            elide: Text.ElideRight
+        }
+    }
+
+    // Panel lateral del editor: biblioteca de medios, selección y proyecto.
+    component PanelEditor: ColumnLayout {
+        spacing: 10
+
+        RowLayout {
+            Layout.fillWidth: true
+            Titulo { texto: "Medios" }
+            Item { Layout.fillWidth: true }
+            Boton {
+                texto: "Importar…"
+                acentuado: true
+                onPulsado: dialogoImportar.open()
+            }
+        }
+
+        ListView {
+            id: listaMedios
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            spacing: 4
+            model: editor.mediaItems
+
+            delegate: Rectangle {
+                id: medio
+                required property var modelData
+                width: ListView.view.width
+                height: 50
+                radius: Theme.radio
+                color: zonaMedio.containsMouse ? Theme.panelElevado : Theme.fondo
+                border.color: Theme.borde
+
+                ColumnLayout {
+                    anchors.left: parent.left
+                    anchors.right: botonAnadir.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 6
+                    spacing: 2
+                    Text {
+                        Layout.fillWidth: true
+                        text: medio.modelData.name
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        elide: Text.ElideMiddle
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: medio.modelData.duration + " · " + medio.modelData.details
+                              + (medio.modelData.video && !medio.modelData.audio ? " · sin audio" : "")
+                        color: Theme.textoSecundario
+                        font.pixelSize: Theme.tamTextoPequeno
+                        elide: Text.ElideRight
+                    }
+                }
+                MouseArea {
+                    id: zonaMedio
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    drag.target: fantasma
+                    drag.threshold: 6
+                    onPressed: (m) => {
+                        const p = mapToItem(fantasma.parent, m.x, m.y)
+                        fantasma.x = p.x - 10
+                        fantasma.y = p.y - 14
+                        fantasma.mediaId = medio.modelData.id
+                        fantasma.nombre = medio.modelData.name
+                    }
+                    onPositionChanged: {
+                        if (drag.active && !fantasma.Drag.active)
+                            fantasma.Drag.active = true
+                    }
+                    onReleased: {
+                        if (fantasma.Drag.active) {
+                            fantasma.Drag.drop()
+                            fantasma.Drag.active = false
+                        }
+                    }
+                    // Doble clic: abrirlo en Origen para marcar un tramo.
+                    onDoubleClicked: {
+                        ventana.cambiarModo("origen")
+                        reproductor.openPath(medio.modelData.path)
+                    }
+                }
+                Boton {
+                    id: botonAnadir
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    texto: "+"
+                    onPulsado: editor.addMedia(medio.modelData.id, -1)
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                width: parent.width - 20
+                visible: listaMedios.count === 0
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "Pulsa «Importar…» o arrastra videos aquí.\n\nArrástralos después a la "
+                      + "línea de tiempo, o pulsa + para añadirlos al final. Doble clic: "
+                      + "abrir en Origen para marcar un tramo."
+                color: Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+
+            DropArea {
+                anchors.fill: parent
+                keys: ["text/uri-list"]
+                onDropped: (drop) => {
+                    if (drop.hasUrls) {
+                        editor.importFiles(drop.urls)
+                        drop.acceptProposedAction()
+                    }
+                }
+            }
+        }
+
+        Separador {}
+        Titulo { texto: "Selección" }
+        Text {
+            Layout.fillWidth: true
+            text: editor.selectionDescription.length > 0 ? editor.selectionDescription
+                                                         : "Ningún clip seleccionado"
+            color: editor.selectionDescription.length > 0 ? Theme.texto : Theme.textoDesactivado
+            font.pixelSize: Theme.tamTextoPequeno
+            wrapMode: Text.WrapAnywhere
+        }
+        Separador {}
+        Titulo { texto: "Proyecto" }
+        FilaDato { etiqueta: "Formato"; valor: editor.projectDescription }
+        FilaDato { etiqueta: "Duración"; valor: editor.durationTimecode }
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.textoSecundario
+            font.pixelSize: Theme.tamTextoPequeno
+            text: "El primer clip con video fija la resolución y los fps del proyecto."
         }
     }
 }

@@ -37,6 +37,7 @@ target_link_libraries(SharkCut PRIVATE
     Qt6::GuiPrivate
     sharkcut_core
     sharkcut_media
+    sharkcut_audio
     sharkcut_warnings
 )
 sharkcut_copy_runtime_dlls(SharkCut)

@@ -12,7 +12,7 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   de Gyan 9.0.2 descargada por cmake/FFmpeg.cmake; Linux: pkg-config), con
   NVDEC (D3D11VA) para decodificar y NVENC para codificar. Los fotogramas se
   quedan en la GPU siempre que sea posible.
-- Audio: miniaudio (WASAPI) + mezclador propio; el audio es el reloj maestro.
+- Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
 - Archivo de proyecto: `.sharkp` (JSON con campo `version`).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
@@ -21,7 +21,14 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 ## Arquitectura
 - src/core y src/media no dependen de Qt; deben poder probarse sin ventanas.
   src/media: análisis (probeMedia), VideoDecoder, DecodeWorker (hilo + cola), color.
+  src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
   src/app: Player (reloj y estado) y VideoViewer (QQuickRhiItem + shaders).
+- Formato de audio interno: float estéreo intercalado a 48 kHz; la muestra 0 es el
+  primer fotograma del video. El reloj de reproducción lo marca el audio.
+- El callback de audio es tiempo real: sin esperas, sin reservas de memoria, sin
+  bloqueos (solo try_lock).
+- Pruebas sin tarjeta de sonido: SHARKCUT_AUDIO_DEVICE=null (salida muda que avanza
+  a velocidad real); los tests usan AudioOutput::Device::Null.
 - El código debe compilar con FFmpeg 6.1 (Ubuntu) y 9.x (Windows): solo API moderna
   (nada de key_frame, avcodec_close ni av_err2str).
 - Código específico de Windows/NVIDIA solo en src/media/platform/win/, detrás

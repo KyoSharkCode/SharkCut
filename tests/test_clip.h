@@ -22,10 +22,19 @@ struct ClipOptions {
     int gopSize = 30;            // distancia entre fotogramas clave
     bool fragmented = false;     // MP4 fragmentado, como graba OBS
     bool packetDurations = true; // false: paquetes sin duración (desvía los fps medios)
+
+    // Pista de audio a 48 kHz estéreo. Pcm exige contenedor "matroska".
+    enum class Audio { None, Pcm, Aac };
+    Audio audio = Audio::None;
+    std::string container = "mp4";
+    int audioDelayFrames = 0; // el audio empieza este número de fotogramas más tarde
 };
 
 // Escribe el clip en `path`. Devuelve el nombre del códec usado ("h264" o "mpeg4").
 std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& options);
+
+// Valor (float, ambos canales) de las muestras de audio PCM durante el fotograma `index`.
+float audioLevelFor(int index);
 
 // Nivel de luminancia (rango limitado) que representa el dígito `digit` (0–15).
 int levelFor(int digit);

@@ -15,12 +15,14 @@ add_executable(sharkcut_tests
     test_time.cpp
     test_media.cpp
     test_color.cpp
+    test_audio.cpp
     test_clip.h
     test_clip.cpp
 )
 target_link_libraries(sharkcut_tests PRIVATE
     sharkcut_core
     sharkcut_media
+    sharkcut_audio
     sharkcut_warnings
     Catch2::Catch2WithMain
     # El generador de clips de prueba usa FFmpeg directamente.

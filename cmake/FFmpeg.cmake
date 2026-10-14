@@ -1,12 +1,12 @@
 # Localiza FFmpeg y define los objetivos importados:
-#   FFmpeg::avformat  FFmpeg::avcodec  FFmpeg::avutil  FFmpeg::swscale
+#   FFmpeg::avformat  FFmpeg::avcodec  FFmpeg::avutil  FFmpeg::swscale  FFmpeg::swresample
 #
 # Windows: descarga automáticamente la build compartida de Gyan (incluye NVENC,
 #          NVDEC y D3D11VA) a .deps/, con versión y hash fijados. Se puede usar una copia
 #          local con -DSHARKCUT_FFMPEG_DIR=<carpeta con bin/, include/ y lib/>.
 # Linux:   usa las bibliotecas del sistema mediante pkg-config.
 
-set(SHARKCUT_FFMPEG_LIBS avformat avcodec avutil swscale)
+set(SHARKCUT_FFMPEG_LIBS avformat avcodec avutil swscale swresample)
 
 if(WIN32)
     set(SHARKCUT_FFMPEG_VERSION "9.0.2")
@@ -43,8 +43,7 @@ if(WIN32)
     endif()
     message(STATUS "FFmpeg: ${SHARKCUT_FFMPEG_DIR}")
 
-    # swresample no se usa directamente, pero avcodec-*.dll depende de él.
-    foreach(lib IN LISTS SHARKCUT_FFMPEG_LIBS ITEMS swresample)
+    foreach(lib IN LISTS SHARKCUT_FFMPEG_LIBS)
         file(GLOB dll "${SHARKCUT_FFMPEG_DIR}/bin/${lib}-*.dll")
         if(NOT dll)
             message(FATAL_ERROR "Falta ${lib}-*.dll en ${SHARKCUT_FFMPEG_DIR}/bin")
@@ -56,8 +55,6 @@ if(WIN32)
             INTERFACE_INCLUDE_DIRECTORIES "${SHARKCUT_FFMPEG_DIR}/include"
         )
     endforeach()
-
-    set_property(TARGET FFmpeg::avcodec APPEND PROPERTY INTERFACE_LINK_LIBRARIES FFmpeg::swresample)
 
     set(SHARKCUT_FFMPEG_LICENSE "${SHARKCUT_FFMPEG_DIR}/LICENSE")
 else()
@@ -74,7 +71,7 @@ endif()
 # Qt busca sus plugins junto a su propia DLL y una copia suelta no los encontraría.
 function(sharkcut_copy_runtime_dlls target)
     if(WIN32)
-        foreach(lib IN LISTS SHARKCUT_FFMPEG_LIBS ITEMS swresample)
+        foreach(lib IN LISTS SHARKCUT_FFMPEG_LIBS)
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         $<TARGET_FILE:FFmpeg::${lib}> $<TARGET_FILE_DIR:${target}>

@@ -448,7 +448,12 @@ ctest --preset windows-debug
      (H.264 1920×1080 a 60 fps, 3:35): decodificación por GPU (d3d11va), Direct3D 11.
    - [ ] Etapa 2b: sin copias: la textura D3D11 de NVDEC pasa directamente al visor
      (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
-   - [ ] Etapa 3: audio sincronizado (el audio pasa a ser el reloj maestro).
+   - [x] Etapa 3: audio sincronizado. FFmpeg decodifica y convierte a float estéreo
+     48 kHz alineado con el primer fotograma (silencio o recorte si el audio empieza
+     antes o después); miniaudio (WASAPI) reproduce desde un búfer en anillo sin
+     bloqueos y su contador de muestras, descontando la latencia, es el reloj maestro.
+     Sin audio o sin tarjeta de sonido se usa un temporizador. Probada en Linux con el
+     dispositivo nulo; pendiente de validar a oído en el PC de Kyo.
 5. Fase 1: transiciones.
 
 ### Decisiones tomadas

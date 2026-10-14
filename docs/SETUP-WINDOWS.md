@@ -72,7 +72,22 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Etapa 2: reproducir un clip de OBS
+### Etapa 3: audio sincronizado
+
+Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmadas).
+
+1. En el panel **Clip**, **Audio** debe indicar el códec (p. ej. `AAC · 48 kHz · estéreo`).
+2. En **Sistema**, **Salida de audio** debe mostrar `WASAPI · <tus altavoces/auriculares>`.
+3. Reproduce y comprueba:
+   - [ ] Se oye el audio y la voz va **sincronizada con los labios** (o la palmada con la imagen).
+   - [ ] Al saltar con la barra mientras reproduce, el audio continúa desde el punto nuevo
+     y sigue sincronizado.
+   - [ ] Pausa/reanudar (Espacio) no desincroniza.
+   - [ ] **M** (o el botón **Sonido**) silencia y vuelve a activar el audio.
+   - [ ] Reproduce el clip hasta el final: al terminar se detiene sola.
+4. Si notas desfase, di si la voz va **adelantada** o **retrasada** respecto a la imagen.
+
+### Etapa 2: reproducir un clip de OBS (validada)
 
 1. Abre SharkCut y pulsa **Abrir video…** (o `Ctrl + O`), o arrastra un MP4 al visor.
    También funciona `SharkCut.exe ruta\al\clip.mp4`.

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 project(SharkCut
     VERSION 0.1.0
     DESCRIPTION "Editor de video nativo para Windows"
-    LANGUAGES CXX)
+    LANGUAGES C CXX) # C: miniaudio
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,9 +22,11 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(FFmpeg)
+include(miniaudio)
 
 add_subdirectory(src/core)
 add_subdirectory(src/media)
+add_subdirectory(src/audio)
 
 if(SHARKCUT_BUILD_APP)
     # GuiPrivate: cabeceras de QRhi (rhi/qrhi.h), la capa gráfica que usa el visor.

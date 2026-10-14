@@ -69,6 +69,7 @@ Window {
         onActivated: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
     }
     Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrir.open() }
+    Shortcut { sequence: "M"; onActivated: reproductor.muted = !reproductor.muted }
 
     ColumnLayout {
         id: contenido
@@ -218,6 +219,10 @@ Window {
                                    : "—"
                         }
                         FilaDato {
+                            etiqueta: "Audio"
+                            valor: reproductor.audioDescription
+                        }
+                        FilaDato {
                             etiqueta: "Decodificación"
                             valor: reproductor.decoderText
                             colorValor: !reproductor.loaded ? Theme.texto
@@ -246,6 +251,11 @@ Window {
                         FilaDato {
                             etiqueta: "Fps del visor"
                             valor: Math.round(ventana.fpsVisor).toString()
+                        }
+                        FilaDato {
+                            etiqueta: "Salida de audio"
+                            valor: reproductor.audioOutputText
+                            colorValor: reproductor.audioOutputAvailable ? Theme.texto : Theme.aviso
                         }
                         FilaDato { etiqueta: "Qt"; valor: AppInfo.qtVersion }
                         FilaDato { etiqueta: "Sistema"; valor: AppInfo.operatingSystem }
@@ -294,6 +304,12 @@ Window {
             Boton {
                 texto: "▶|"
                 onPulsado: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
+            }
+
+            Boton {
+                texto: reproductor.muted ? "Sin sonido" : "Sonido"
+                visible: reproductor.hasAudio
+                onPulsado: reproductor.muted = !reproductor.muted
             }
 
             Item { Layout.fillWidth: true }

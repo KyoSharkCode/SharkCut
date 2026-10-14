@@ -360,7 +360,7 @@ desincronía en SharkCut, y se puede saltar a cualquier fotograma.
 **Hecho cuando:** la calidad visual convence frente a Premiere Composer y el
 resultado exportado es idéntico a la vista previa.
 
-### Fase 2 — Editor básico
+### Fase 2 — Editor básico ✅
 - Biblioteca de medios (arrastrar y soltar archivos).
 - Línea de tiempo: 1 pista de video + 1 de audio; cortar, recortar, mover,
   dividir, eliminar. Comandos + deshacer/rehacer desde el inicio.
@@ -498,7 +498,22 @@ ctest --preset windows-debug
      cambios) y exportación de la línea de tiempo a MP4 con el mismo exportador de la
      fase 1, ahora genérico (prueba de transición o línea de tiempo). Comprobado en Linux
      que cada fotograma exportado coincide con su origen (cortes y huecos incluidos).
-   - Pendiente de validar en el PC de Kyo (docs/SETUP-WINDOWS.md, "Fase 2").
+   - **Fase 2 terminada.** Validada en el PC de Kyo con dos VODs largos (40 y 21 min):
+     corta, mueve y reproduce sin tirones, audio perfecto, exportación con h264_nvenc.
+   - Comentarios de Kyo tras probarla (lo que echa de menos frente a Premiere), con la
+     fase donde encaja cada uno según el plan actual:
+     - Rediseñar la interfaz (la de ahora es provisional, para probar) → por decidir.
+     - Iconos de herramientas y cursores, logo de la app e icono de los `.sharkp`
+       (se pueden diseñar en Figma) → por decidir; el icono de archivo, con el instalador.
+     - Ver la onda del audio en la línea de tiempo → fase 4 (ondas en segundo plano).
+     - Poner videos uno encima de otro (varias pistas de video) → fase 4.
+     - Añadir pistas de audio (música, etc.) arrastrando un archivo a la línea de tiempo
+       o desde Medios → fase 4 (varias pistas de audio).
+     - Aplicar la transición directamente entre dos clips de la línea de tiempo, sin pasar
+       por Origen y el laboratorio → fase 3.
+     - Keyframes para hacer zoom y movimiento dentro de un clip → fase 5.
+     - Croma (pantalla verde) → fase 5 (efectos).
+     - Subtítulos automáticos → fase 5 (whisper.cpp).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

@@ -569,13 +569,16 @@ ctest --preset windows-debug
        rellenar, dividir, quitar), desplazamiento vertical con muchas pistas.
      - Comprobado en Linux: un short vertical 1080×1920 con gameplay rellenando el lienzo
        en V1, facecam recortada en V2 y música a −6 dB en A2 se ve en el visor igual que
-       en el MP4 exportado, y suena la mezcla. Pendiente de validar en el PC de Kyo.
+       en el MP4 exportado, y suena la mezcla.
      - Primera prueba de Kyo (VODs reales): mover un clip a otra pista hacía saltar una
        aserción de MSVC (se buscaba destino también para pistas sin clips que mover);
        corregido con test, y en Linux Debug ahora se activa `_GLIBCXX_ASSERTIONS` para
        ver estos fallos igual que en Windows. La onda se dibuja de abajo arriba (raíz de
        la amplitud: −12 dB llega a la mitad) y muestra "Calculando la onda…" mientras se
        calcula.
+     - Validada en el PC de Kyo con VODs reales de OBS (proyecto de 11 min con V1, V2, A1
+       y A2, cortes y clips movidos entre pistas): se ve, se oye y se exporta bien, y la
+       exportación sigue sin problemas aunque se abra otro proyecto mientras tanto.
      - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
        en V2 y música en A2 se ve, se oye y se exporta igual.
    - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.

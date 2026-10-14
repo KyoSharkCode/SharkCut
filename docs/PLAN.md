@@ -614,6 +614,26 @@ ctest --preset windows-debug
        presets/sfx/LICENCIAS.md).
    - **Fase 3 terminada.** Se monta un short con facecam, música y transiciones sin salir
      de la pestaña Editor.
+   - Comentarios de Kyo al cerrar la fase 3, con la fase donde encaja cada uno:
+     - Q y W como en Premiere: Q recorta desde el cabezal hacia atrás (quita del inicio
+       del clip hasta el cabezal y cierra el hueco) y W desde el cabezal hacia delante →
+       fase 4 (edición rápida).
+     - Arrastrar un medio a la zona vacía de la línea de tiempo (encima de la pista de
+       video más alta o debajo de la última de audio): que se vea que ahí se crea una
+       pista nueva y que se cree al soltar → fase 4.
+     - Mejorar los efectos de sonido → fase 4.
+8. Fase 4: VODs y uso diario. Etapas propuestas (pendientes de que Kyo las apruebe):
+   - [ ] Etapa 1: edición rápida y trabajo seguro. Q/W, eliminación con rizo (ripple
+     delete), J/K/L, marcadores, crear pista al soltar en la zona vacía, autoguardado
+     (`.sharkp.autosave`) y recuperación tras un cierre inesperado.
+   - [ ] Etapa 2: textos y títulos con la marca (Marea Nocturna, fuentes de marca) y
+     "Duplicar como vertical".
+   - [ ] Etapa 3: rendimiento con VODs largos. Visor sin copias (textura de NVDEC directa
+     al compositor), caché de fotogramas, proxies opcionales y línea de tiempo
+     virtualizada.
+   - [ ] Etapa 4: entrega. Instalador, icono de los `.sharkp` y asociación con SharkCut,
+     carpeta de licencias (FFmpeg, Qt), mejora de los efectos de sonido y una 0.1.0 Early
+     Access para Kyo y sus amigos.
      - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
        transiciones sin salir de la pestaña Editor).
 

@@ -371,12 +371,14 @@ resultado exportado es idéntico a la vista previa.
 
 ### Fase 3 — Interfaz definitiva y montaje real
 Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
-- Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
+- ✅ Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
   (también para lo que llegará después: efectos, transiciones, propiedades del
-  clip), iconos de herramientas y cursores, y logo de la app. Primero una maqueta
-  para aprobar; después, la implementación con el tema Marea Profunda.
+  clip) e iconos de herramientas. Primero una maqueta aprobada; después, la
+  implementación con el tema Marea Profunda. (El logo definitivo, los cursores y el
+  icono de los .sharkp se diseñan con el instalador, en la fase 4.)
 - Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
-  onda del audio dibujada en la línea de tiempo.
+  onda del audio dibujada en la línea de tiempo, y posición y escala de cada clip
+  (facecam encima, reencuadrar un video 16:9 en un lienzo vertical).
 - Transiciones integradas en la línea de tiempo (arrastrar entre clips y
   ajustarlas ahí mismo) y efectos de sonido emparejados con cada transición.
 **Hecho cuando:** se monta un short con facecam o música encima y transiciones
@@ -534,10 +536,34 @@ ctest --preset windows-debug
      derecha, iconos vectoriales propios, Exportar en la esquina inferior derecha con
      su ventana (nombre, ubicación, calidad) y "Nuevo proyecto" con el lienzo (16:9,
      9:16, 1:1) y los fps: el lienzo es del proyecto y se exporta tal cual se edita.
-     Pendiente de validar en el PC de Kyo.
-   - [ ] Etapa 2: varias pistas de video y audio, onda del audio, y posición y escala
-     de cada clip (facecam en V2, reencuadrar un video 16:9 en un lienzo vertical).
-   - [ ] Etapa 3: transiciones y efectos de sonido en la línea de tiempo.
+     Validada en el PC de Kyo (proyecto vertical 1080×1920 con clips de OBS): "se ve
+     de maravilla". Las pestañas Transiciones, Efectos y Propiedades muestran de
+     momento lo que llegará; la onda del audio en los clips llega en la etapa 2.
+   - [ ] Etapa 2: varias pistas y reencuadre.
+     - Modelo: pistas de video y audio en número variable (V1, V2… encima; A1, A2…),
+       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio.
+       Archivo `.sharkp` versión 2, que abre los de la versión 1.
+     - Compositor con N capas apiladas (V2 sobre V1…) y transformación por clip:
+       posición, escala (y opacidad). Igual en vista previa y exportación.
+     - Propiedades del clip editables en su pestaña y arrastrando en el visor para
+       reencuadrar (un video 16:9 en un lienzo 9:16, la facecam en una esquina).
+     - Audio: mezcla de todas las pistas, volumen por clip; ocultar, silenciar y
+       bloquear pistas desde su cabecera (los iconos pasan a funcionar).
+     - Onda del audio de cada clip, calculada en segundo plano y guardada en la caché
+       del proyecto (nunca junto a los medios originales).
+     - Música: arrastrar un archivo de audio a A2 (o a cualquier pista de audio).
+     - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
+       en V2 y música en A2 se ve, se oye y se exporta igual.
+   - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.
+     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips:
+       los clips se solapan lo que dura la transición (como en el laboratorio).
+     - Ajustarla ahí mismo: duración arrastrando sus bordes; tipo, intensidad,
+       desenfoque y curva en Propiedades. Se reproduce y exporta con el compositor.
+     - Biblioteca de efectos de sonido con licencia libre (registrados en
+       presets/sfx/LICENCIAS.md) y emparejamiento: al poner una transición se coloca
+       su sonido (whoosh, impacto…) en una pista de audio, ajustable o quitable.
+     - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
+       transiciones sin salir de la pestaña Editor).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

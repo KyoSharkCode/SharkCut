@@ -72,7 +72,7 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Fase 3, etapa 1: la interfaz nueva
+### Fase 3, etapa 1: la interfaz nueva (validada)
 
 La pestaña **1 · Editor** tiene ya la distribución de la maqueta.
 
@@ -95,7 +95,7 @@ La pestaña **1 · Editor** tiene ya la distribución de la maqueta.
   moverlo y escalarlo para reencuadrar llega en la etapa 2.
 - [ ] ¿La distribución se ve bien en tu pantalla? ¿Algo que cambiarías?
 
-### Fase 2: editor básico (línea de tiempo, proyectos y exportación)
+### Fase 2: editor básico (línea de tiempo, proyectos y exportación) (validada)
 
 SharkCut abre ahora en la pestaña **1 · Editor**: visor arriba, biblioteca de medios a
 la derecha y línea de tiempo abajo, con una pista de video (**V1**) y una de audio (**A1**).

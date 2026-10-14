@@ -37,6 +37,7 @@ struct MediaItem {
     int height = 0;
     bool hasVideo = false;
     bool hasAudio = false;
+    ObjectId folder = 0; // carpeta de la biblioteca (0 = raíz)
 
     friend bool operator==(const MediaItem&, const MediaItem&) = default;
 };

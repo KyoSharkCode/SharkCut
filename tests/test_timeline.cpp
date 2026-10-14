@@ -1,3 +1,4 @@
+#include "core/document.h"
 #include "core/edit.h"
 #include "core/history.h"
 #include "core/project.h"
@@ -719,4 +720,95 @@ TEST_CASE("Transition sounds go to a free audio track", "[timeline][transitions]
     REQUIRE(removeTransition(p, t));
     CHECK(p.clip(again) == nullptr);
     checkInvariants(p);
+}
+
+// --- Documentos: secuencias y carpetas --------------------------------------------------
+
+TEST_CASE("Sequences share the media of their project", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 10, true, true));
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    ProjectSettings vertical;
+    vertical.width = 1080;
+    vertical.height = 1920;
+    const ObjectId shortId = addSequence(d, "Short", vertical);
+    CHECK(d.sequence(shortId)->tracks.size() == 4); // V1, V2, A1, A2
+
+    // Editar una secuencia no toca la otra.
+    REQUIRE(edit(d, vod, [m](Project& p) { return placeClip(p, m, 0) != 0; }));
+    REQUIRE(edit(d, shortId, [m](Project& p) { return placeClip(p, m, 100, 0, 60) != 0; }));
+    CHECK(d.view(vod).length() == 600);
+    CHECK(d.view(shortId).length() == 160);
+    CHECK(d.view(shortId).settings.height == 1920);
+    CHECK_FALSE(edit(d, 12345, [](Project&) { return true; }));
+
+    // Los ids no se repiten entre secuencias.
+    const Project a = d.view(vod);
+    const Project b = d.view(shortId);
+    for (const Track& ta : a.tracks) {
+        for (const Clip& c : ta.clips) {
+            CHECK(b.clip(c.id) == nullptr);
+        }
+    }
+
+    // Quitar el medio lo quita de todas (también de pistas bloqueadas, que siguen así).
+    REQUIRE(edit(d, shortId, [](Project& p) { return setTrackLocked(p, kVideoTrack, true); }));
+    REQUIRE(removeMediaEverywhere(d, m));
+    CHECK(d.sequence(shortId)->tracks[kVideoTrack].locked);
+    CHECK(d.media.empty());
+    CHECK(d.view(vod).length() == 0);
+    CHECK(d.view(shortId).length() == 0);
+}
+
+TEST_CASE("Duplicated sequences get fresh ids and keep links and transitions", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 20, true, true));
+    placeClip(base, m, 0, 0, 300);
+    placeClip(base, m, 300, 400, 200);
+    const ObjectId t = addTransition(base, kVideoTrack, 300, TransitionParams{});
+    REQUIRE(t != 0);
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    const ObjectId copy = duplicateSequence(d, vod, "Vertical", std::pair{1080, 1920});
+    REQUIRE(copy != 0);
+    const Project original = d.view(vod);
+    const Project dup = d.view(copy);
+    CHECK(dup.settings.width == 1080);
+    CHECK(dup.settings.height == 1920);
+    CHECK(dup.length() == original.length());
+    for (const Track& track : dup.tracks) {
+        for (const Clip& c : track.clips) {
+            CHECK(original.clip(c.id) == nullptr);
+            if (c.link != 0) {
+                CHECK(dup.clip(c.link) != nullptr);
+            }
+        }
+    }
+    REQUIRE(dup.tracks[kVideoTrack].transitions.size() == 1);
+    const Transition& dt = dup.tracks[kVideoTrack].transitions.front();
+    CHECK(dt.id != t);
+    CHECK(dup.clip(dt.from) != nullptr);
+    CHECK(dup.cutOf(dt) == 300);
+
+    CHECK(renameSequence(d, copy, "Short vertical"));
+    CHECK(d.sequence(copy)->name == "Short vertical");
+    CHECK(removeSequence(d, copy));
+    CHECK_FALSE(removeSequence(d, vod)); // siempre queda una
+}
+
+TEST_CASE("Folders hold media and sequences", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 10, true, true));
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    const ObjectId folder = addFolder(d, "Clips");
+    CHECK(moveToFolder(d, {m, vod}, folder));
+    CHECK(d.media.front().folder == folder);
+    CHECK(d.sequence(vod)->folder == folder);
+    CHECK_FALSE(moveToFolder(d, {m}, 999)); // carpeta que no existe
+    CHECK(renameFolder(d, folder, "Gameplay"));
+    CHECK(removeFolder(d, folder));
+    CHECK(d.media.front().folder == 0);
+    CHECK(d.sequence(vod)->folder == 0);
 }

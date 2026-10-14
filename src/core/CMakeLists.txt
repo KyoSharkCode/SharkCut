@@ -15,7 +15,8 @@ add_library(sharkcut_core STATIC
     edit.h
     edit.cpp
     history.h
-    history.cpp
+    document.h
+    document.cpp
     project_file.h
     project_file.cpp
 )

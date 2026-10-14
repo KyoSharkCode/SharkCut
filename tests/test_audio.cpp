@@ -193,10 +193,18 @@ TEST_CASE("AudioWorker alimenta la salida y el reloj avanza", "[audio]") {
     CHECK(clock.sample > 24'000);
     CHECK(clock.sample <= 24'000 + 48'000);
 
+    // El medidor de la mezcla recibe el pico de lo que ha sonado (fotogramas 30–72).
+    const AudioOutput::Levels levels = output->takePeakLevels();
+    CHECK(levels.left > audioLevelFor(30));
+    CHECK(levels.left <= audioLevelFor(80));
+    CHECK(levels.right == Catch::Approx(levels.left));
+
     worker.pause();
     const std::int64_t paused = output->clock().sample;
+    output->takePeakLevels();
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    CHECK(output->clock().sample == paused); // en pausa el reloj no avanza
+    CHECK(output->clock().sample == paused);      // en pausa el reloj no avanza
+    CHECK(output->takePeakLevels().left == 0.0f); // ni suena nada
 }
 
 TEST_CASE("SequenceAudioSource mezcla A y B con fundido cruzado", "[audio][sequence]") {

@@ -36,6 +36,7 @@ Project sampleProject(const std::string& mediaPath) {
     p.settings.frameRate = {30000, 1001};
     p.settings.width = 1080;
     p.settings.height = 1920;
+    p.settings.adoptCanvas = false; // lienzo elegido en "Nuevo proyecto"
     MediaItem item;
     item.path = mediaPath;
     item.name = "Directo ñandú.mp4";
@@ -130,4 +131,15 @@ TEST_CASE("Loading repairs the next id", "[project]") {
     const Project loaded = projectFromJson(json, {});
     CHECK(loaded.nextId == p.nextId);
     CHECK(loaded.tracks == p.tracks);
+}
+
+TEST_CASE("Older project files keep their format", "[project]") {
+    // Sin los campos adopt*: el formato ya estaba fijado y no debe cambiar al añadir clips.
+    const std::string json = R"({"version": 1,
+        "settings": {"frameRate": [30, 1], "width": 1080, "height": 1920},
+        "media": [], "tracks": [{"kind": "video", "clips": []}, {"kind": "audio", "clips": []}]})";
+    const Project p = projectFromJson(json, {});
+    CHECK_FALSE(p.settings.adoptCanvas);
+    CHECK_FALSE(p.settings.adoptFrameRate);
+    CHECK(Project{}.settings.adoptCanvas);
 }

@@ -68,6 +68,10 @@ struct ProjectSettings {
     FrameRate frameRate{60, 1};
     int width = 1920;
     int height = 1080;
+    // Mientras la línea de tiempo está vacía, el primer clip con video fija el lienzo
+    // y/o los fps. Al elegirlos en "Nuevo proyecto" se desactivan.
+    bool adoptCanvas = true;
+    bool adoptFrameRate = true;
 
     friend bool operator==(const ProjectSettings&, const ProjectSettings&) = default;
 };

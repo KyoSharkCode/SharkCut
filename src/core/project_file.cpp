@@ -126,6 +126,8 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
         {"frameRate", rateToJson(project.settings.frameRate)},
         {"width", project.settings.width},
         {"height", project.settings.height},
+        {"adoptCanvas", project.settings.adoptCanvas},
+        {"adoptFrameRate", project.settings.adoptFrameRate},
     };
 
     json media = json::array();
@@ -190,6 +192,9 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
         project.settings.frameRate = rateFromJson(settings.at("frameRate"));
         project.settings.width = settings.at("width").get<int>();
         project.settings.height = settings.at("height").get<int>();
+        // Proyectos anteriores a estos campos: el formato ya quedó fijado.
+        project.settings.adoptCanvas = settings.value("adoptCanvas", false);
+        project.settings.adoptFrameRate = settings.value("adoptFrameRate", false);
 
         const std::filesystem::path dir = projectDir(projectFile);
         for (const json& entry : root.at("media")) {

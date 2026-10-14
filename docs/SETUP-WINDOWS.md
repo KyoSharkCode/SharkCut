@@ -72,6 +72,29 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
+### Fase 3, etapa 1: la interfaz nueva
+
+La pestaña **1 · Editor** tiene ya la distribución de la maqueta.
+
+- [ ] **Izquierda**, panel con pestañas: **Medios** (buscador, botón lista/cuadrícula,
+  Importar…), **Transiciones**, **Efectos** y **Propiedades** (las tres últimas
+  muestran lo que llegará; Propiedades enseña el clip seleccionado).
+- [ ] En **cuadrícula**, cada video muestra una **miniatura** (tarda un momento la primera
+  vez) con su duración. Arrastrar y el botón **+** funcionan igual que en la lista.
+- [ ] **Derecha**, el visor **Programa** con la etiqueta del lienzo (`LIENZO 16:9`).
+- [ ] **Abajo**, la línea de tiempo con las pistas **V2, V1, A1, A2** (V2 y A2 atenuadas:
+  llegan en la etapa 2) y las **herramientas en vertical** a la izquierda. Al pasar el
+  ratón por cada icono aparece su nombre y su atajo.
+- [ ] A la derecha de la línea de tiempo, el medidor **Mezcla**: al reproducir, las barras
+  L y R suben y bajan con el volumen (verde, amarillo cerca del máximo, rojo si satura).
+- [ ] **Exportar** está abajo a la derecha. Abre una ventana con el formato (el lienzo
+  del proyecto), **nombre**, **ubicación** (Elegir…) y **calidad**. El progreso se ve
+  abajo, junto al botón, y se puede cancelar.
+- [ ] **Nuevo** pide nombre, **lienzo** (16:9, 9:16 o 1:1) y fps. Con 9:16 el visor
+  muestra el lienzo vertical; un video de OBS entra ajustado (con franjas negras):
+  moverlo y escalarlo para reencuadrar llega en la etapa 2.
+- [ ] ¿La distribución se ve bien en tu pantalla? ¿Algo que cambiarías?
+
 ### Fase 2: editor básico (línea de tiempo, proyectos y exportación)
 
 SharkCut abre ahora en la pestaña **1 · Editor**: visor arriba, biblioteca de medios a
@@ -124,7 +147,7 @@ Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
   encuentra solo. Si falta un video, la barra de estado dice cuál.
 - [ ] `Ctrl + Mayús + S` guarda con otro nombre.
 
-**Exportar** (`Ctrl + M` o el botón **Exportar…**):
+**Exportar** (`Ctrl + M` o el botón **Exportar** de abajo a la derecha):
 
 - [ ] Exporta la línea de tiempo entera a MP4. El panel derecho muestra el progreso, se
   puede cancelar y al final dice el tiempo y el códec (**h264_nvenc**).

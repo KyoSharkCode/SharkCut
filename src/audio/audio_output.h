@@ -51,6 +51,14 @@ public:
 
     Clock clock() const;
 
+    // Picos (valor absoluto, 0–1 o más si satura) de cada canal desde la última llamada,
+    // medidos antes del volumen: el medidor de la mezcla se ve aunque esté silenciado.
+    struct Levels {
+        float left = 0.0f;
+        float right = 0.0f;
+    };
+    Levels takePeakLevels();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> d;

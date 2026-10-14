@@ -17,13 +17,17 @@
 #include <QMetaObject>
 #include <QOffscreenSurface>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QThreadPool>
 #include <QVariantMap>
 #include <rhi/qrhi.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <exception>
 #include <filesystem>
+#include <numeric>
 
 using sharkcut::Clip;
 using sharkcut::DecodeWorker;
@@ -62,9 +66,13 @@ void adoptSettings(Project& project, ObjectId media) {
     if (project.length() > 0 || !item || !item->hasVideo || item->width <= 0 || item->height <= 0) {
         return;
     }
-    project.settings.frameRate = item->frameRate;
-    project.settings.width = item->width;
-    project.settings.height = item->height;
+    if (project.settings.adoptFrameRate) {
+        project.settings.frameRate = item->frameRate;
+    }
+    if (project.settings.adoptCanvas) {
+        project.settings.width = item->width;
+        project.settings.height = item->height;
+    }
 }
 
 ObjectId findMediaByPath(const Project& project, const std::string& path) {
@@ -103,6 +111,11 @@ QVariantList Editor::mediaItems() const {
         entry[QStringLiteral("duration")] = durationText(item.durationUs);
         entry[QStringLiteral("video")] = item.hasVideo;
         entry[QStringLiteral("audio")] = item.hasAudio;
+        entry[QStringLiteral("thumbnail")] =
+            item.hasVideo ? QString(QStringLiteral("image://miniaturas/") +
+                                    QString::fromLatin1(
+                                        QUrl::toPercentEncoding(QString::fromStdString(item.path))))
+                          : QString();
         entry[QStringLiteral("details")] = item.hasVideo ? QStringLiteral("%1×%2 · %3 fps")
                                                                .arg(item.width)
                                                                .arg(item.height)
@@ -220,8 +233,33 @@ sharkcut::CompositorInput Editor::composition() const {
 // --- Archivo del proyecto -------------------------------------------------------------
 
 QString Editor::projectName() const {
-    return m_projectPath.isEmpty() ? QStringLiteral("Sin título")
-                                   : QFileInfo(m_projectPath).completeBaseName();
+    if (!m_projectPath.isEmpty()) {
+        return QFileInfo(m_projectPath).completeBaseName();
+    }
+    return m_newName.isEmpty() ? QStringLiteral("Sin título") : m_newName;
+}
+
+QString Editor::canvasLabel() const {
+    const int w = project().settings.width;
+    const int h = project().settings.height;
+    const int g = std::gcd(w, h);
+    if (g <= 0) {
+        return {};
+    }
+    const int rw = w / g;
+    const int rh = h / g;
+    if ((rw == 16 && rh == 9) || (rw == 9 && rh == 16) || (rw == 1 && rh == 1) ||
+        (rw == 4 && rh == 3)) {
+        return QStringLiteral("%1:%2").arg(rw).arg(rh);
+    }
+    return QStringLiteral("%1×%2").arg(w).arg(h);
+}
+
+QUrl Editor::defaultExportFolder() const {
+    if (!m_projectPath.isEmpty()) {
+        return QUrl::fromLocalFile(QFileInfo(m_projectPath).absolutePath());
+    }
+    return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::MoviesLocation));
 }
 
 void Editor::setFileBusy(bool busy) {
@@ -231,13 +269,24 @@ void Editor::setFileBusy(bool busy) {
     }
 }
 
-void Editor::newProject() {
+void Editor::newProject(const QString& name, int width, int height, int fps) {
     if (m_fileBusy) {
         return;
     }
     pause();
-    m_history.reset(Project{});
+    Project project;
+    if (width > 0 && height > 0) {
+        project.settings.width = width;
+        project.settings.height = height;
+        project.settings.adoptCanvas = false;
+    }
+    if (fps > 0) {
+        project.settings.frameRate = {fps, 1};
+        project.settings.adoptFrameRate = false;
+    }
+    m_history.reset(std::move(project));
     m_projectPath.clear();
+    m_newName = name.trimmed();
     m_selection.clear();
     setCurrentFrame(0);
     setError({});
@@ -368,7 +417,16 @@ void Editor::finishSave(const std::shared_ptr<const Project>& written, const QSt
 
 // --- Exportación ----------------------------------------------------------------------
 
-void Editor::exportTo(const QUrl& file) {
+void Editor::exportToFolder(const QUrl& folder, const QString& name, int quality) {
+    const QString directory = folder.isLocalFile() ? folder.toLocalFile() : folder.toString();
+    const QString file = name.trimmed();
+    if (directory.isEmpty() || file.isEmpty()) {
+        return;
+    }
+    exportTo(QUrl::fromLocalFile(QDir(directory).filePath(file)), quality);
+}
+
+void Editor::exportTo(const QUrl& file, int quality) {
     if (frameCount() <= 0 || m_exporter) {
         return;
     }
@@ -386,6 +444,8 @@ void Editor::exportTo(const QUrl& file) {
     job.rate = project().settings.frameRate;
     job.canvasSize = canvasSize();
     job.outputPath = path.toStdString();
+    constexpr std::array<std::int64_t, 3> kBitrates{8'000'000, 16'000'000, 40'000'000};
+    job.videoBitrate = kBitrates[static_cast<std::size_t>(std::clamp(quality, 0, 2))];
 #ifndef Q_OS_WIN
     // OpenGL necesita una superficie creada en el hilo de la interfaz.
     if (!m_exportSurface) {
@@ -950,7 +1010,34 @@ void Editor::step(int frames) {
     seek(m_currentFrame + frames);
 }
 
+void Editor::updateMeters() {
+    // Caída suave como en un medidor de verdad: sube al instante, baja 24 dB por segundo.
+    const double elapsed = m_meterTimer.isValid() ? m_meterTimer.restart() / 1000.0 : 0.0;
+    if (!m_meterTimer.isValid()) {
+        m_meterTimer.start();
+    }
+    sharkcut::AudioOutput::Levels peaks;
+    if (m_audioOutput) {
+        peaks = m_audioOutput->takePeakLevels();
+    }
+    const std::array<float, 2> values{peaks.left, peaks.right};
+    bool changed = false;
+    for (std::size_t c = 0; c < 2; ++c) {
+        const double db = values[c] > 0.0f ? 20.0 * std::log10(values[c]) : -60.0;
+        const double fallen = m_meter[c] - 24.0 * elapsed;
+        const double next = std::clamp(std::max(db, fallen), -60.0, 6.0);
+        if (std::abs(next - m_meter[c]) > 0.05) {
+            m_meter[c] = next;
+            changed = true;
+        }
+    }
+    if (changed) {
+        emit metersChanged();
+    }
+}
+
 void Editor::advance() {
+    updateMeters();
     if (!m_playing) {
         return;
     }

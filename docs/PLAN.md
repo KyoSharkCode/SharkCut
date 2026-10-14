@@ -384,7 +384,8 @@ sin salir de la pestaña Editor.
 
 ### Fase 4 — VODs y uso diario
 - Textos, títulos y overlays con la marca.
-- Presets de exportación 16:9, 9:16 y 1:1 (con reencuadre).
+- "Duplicar como vertical": copia de un proyecto horizontal en un lienzo 9:16 para
+  reencuadrarlo (el lienzo es del proyecto: se edita y se exporta en él).
 - Visor sin copias: la textura D3D11 de NVDEC pasa directamente al compositor
   (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
 - Rendimiento con proyectos largos: caché de fotogramas, miniaturas en segundo
@@ -525,8 +526,17 @@ ctest --preset windows-debug
      por el rediseño de la interfaz, sigue con varias pistas y ondas, y termina con las
      transiciones en la línea de tiempo.
 7. Fase 3: interfaz definitiva y montaje real.
-   - [ ] Etapa 1: rediseño de la interfaz (maqueta aprobada por Kyo → implementación).
-   - [ ] Etapa 2: varias pistas de video y audio, onda del audio.
+   - [x] Etapa 1: rediseño de la interfaz, según la maqueta aprobada por Kyo. Panel
+     izquierdo con pestañas (Medios con lista o cuadrícula de miniaturas y buscador,
+     Transiciones, Efectos, Propiedades), visor de Programa a la derecha con el lienzo,
+     línea de tiempo alta (V2, V1, A1, A2; V2 y A2 llegan en la etapa 2) con las
+     herramientas en vertical a su izquierda y el medidor de la mezcla (L/R en dB) a su
+     derecha, iconos vectoriales propios, Exportar en la esquina inferior derecha con
+     su ventana (nombre, ubicación, calidad) y "Nuevo proyecto" con el lienzo (16:9,
+     9:16, 1:1) y los fps: el lienzo es del proyecto y se exporta tal cual se edita.
+     Pendiente de validar en el PC de Kyo.
+   - [ ] Etapa 2: varias pistas de video y audio, onda del audio, y posición y escala
+     de cada clip (facecam en V2, reencuadrar un video 16:9 en un lienzo vertical).
    - [ ] Etapa 3: transiciones y efectos de sonido en la línea de tiempo.
 
 ### Decisiones tomadas

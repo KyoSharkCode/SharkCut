@@ -7,10 +7,10 @@ import SharkCut
 Window {
     id: ventana
 
-    width: 1360
-    height: 820
-    minimumWidth: 1000
-    minimumHeight: 620
+    width: 1600
+    height: 940
+    minimumWidth: 1180
+    minimumHeight: 760
     visible: true
     title: (modo === "origen" && reproductor.fileName.length > 0
             ? reproductor.fileName
@@ -116,13 +116,13 @@ Window {
         onAccepted: editor.saveAs(selectedFile)
         onRejected: ventana.accionPendiente = ""
     }
-    FileDialog {
+    DialogoExportar {
         id: dialogoExportarLinea
-        title: "Exportar la línea de tiempo"
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: "mp4"
-        nameFilters: ["Video MP4 (*.mp4)"]
-        onAccepted: editor.exportTo(selectedFile)
+        editor: editor
+    }
+    DialogoNuevoProyecto {
+        id: dialogoNuevo
+        onCrear: (nombre, ancho, alto, fps) => editor.newProject(nombre, ancho, alto, fps)
     }
 
     // --- Proyecto: guardar, abrir y cambios sin guardar ---
@@ -146,7 +146,7 @@ Window {
     function ejecutar(accion) {
         accionPendiente = ""
         if (accion === "nuevo") {
-            editor.newProject()
+            dialogoNuevo.open()
         } else if (accion === "abrir") {
             dialogoAbrirProyecto.open()
         } else if (accion === "cerrar") {
@@ -185,7 +185,7 @@ Window {
             radius: Theme.radio
             border.color: Theme.borde
         }
-        Overlay.modal: Rectangle { color: "#99000000" }
+        Overlay.modal: Rectangle { color: Theme.velo }
 
         contentItem: ColumnLayout {
             spacing: 12
@@ -304,18 +304,30 @@ Window {
         anchors.margins: Theme.margen
         spacing: Theme.margen
 
-        // Barra superior
+        // Barra superior: marca, pestañas de trabajo y proyecto
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
 
+            Rectangle {
+                implicitWidth: 26
+                implicitHeight: 26
+                radius: 7
+                color: Theme.marca.abisal
+                border.color: Theme.marca.aleta
+                Icono {
+                    anchors.centerIn: parent
+                    nombre: "aleta"
+                    tam: 16
+                    color: Theme.cabezal
+                }
+            }
             Text {
                 text: "SharkCut"
                 color: Theme.texto
                 font.pixelSize: Theme.tamTitulo
                 font.bold: true
             }
-            Chip { texto: "FASE 2 · EDITOR" }
 
             Item { implicitWidth: 12 }
             Pestana {
@@ -337,45 +349,49 @@ Window {
             Item { Layout.fillWidth: true }
             Text {
                 visible: ventana.enEditor
-                text: editor.projectName + (editor.modified ? " •" : "")
-                color: editor.modified ? Theme.texto : Theme.textoSecundario
+                text: editor.projectName
+                color: Theme.texto
                 font.pixelSize: Theme.tamTexto
                 elide: Text.ElideMiddle
-                Layout.maximumWidth: 260
+                Layout.maximumWidth: 280
             }
-            Boton {
+            Rectangle {
+                visible: ventana.enEditor && editor.modified
+                implicitWidth: 7
+                implicitHeight: 7
+                radius: 4
+                color: Theme.acento
+                Layout.rightMargin: 4
+            }
+            BotonIcono {
                 visible: ventana.enEditor
+                icono: "nuevo"
                 texto: "Nuevo"
+                ayuda: "Nuevo proyecto (Ctrl+N)"
                 onPulsado: ventana.siGuardado("nuevo")
             }
-            Boton {
+            BotonIcono {
                 visible: ventana.enEditor
-                texto: "Abrir…"
+                icono: "abrir"
+                texto: "Abrir"
+                ayuda: "Abrir proyecto (Ctrl+O)"
                 onPulsado: ventana.siGuardado("abrir")
             }
-            Boton {
+            BotonIcono {
                 visible: ventana.enEditor
+                icono: "guardar"
                 texto: "Guardar"
+                ayuda: "Guardar (Ctrl+S) · Guardar como: Ctrl+Mayús+S"
                 acentuado: editor.modified
                 enabled: !editor.fileBusy
                 onPulsado: ventana.guardar()
             }
-            Boton {
-                visible: ventana.enEditor
-                texto: "Exportar…"
-                acentuado: true
-                enabled: editor.frameCount > 0 && !editor.exporting
-                onPulsado: dialogoExportarLinea.open()
-            }
-            Boton {
+            BotonIcono {
                 visible: !ventana.enEditor
+                icono: "abrir"
                 texto: "Abrir video…"
+                ayuda: "Abrir un video en Origen (Ctrl+O)"
                 onPulsado: dialogoAbrir.open()
-            }
-            Text {
-                text: "v" + AppInfo.appVersion
-                color: Theme.textoSecundario
-                font.pixelSize: Theme.tamTexto
             }
         }
 
@@ -383,6 +399,21 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: Theme.margen
+
+            // Editor: medios, transiciones, efectos y propiedades a la izquierda
+            PanelMedios {
+                visible: ventana.enEditor
+                Layout.preferredWidth: 430
+                Layout.fillHeight: true
+                editor: editor
+                fantasma: fantasma
+                transiciones: laboratorio.transitionNames
+                onImportar: dialogoImportar.open()
+                onAbrirEnOrigen: (ruta) => {
+                    ventana.cambiarModo("origen")
+                    reproductor.openPath(ruta)
+                }
+            }
 
             // Visor + controles
             Rectangle {
@@ -397,6 +428,29 @@ Window {
                     anchors.fill: parent
                     anchors.margins: Theme.margen
                     spacing: Theme.margen
+
+                    RowLayout {
+                        visible: ventana.enEditor
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        spacing: 8
+                        Text {
+                            text: "Programa"
+                            color: Theme.texto
+                            font.pixelSize: Theme.tamTexto
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Chip {
+                            texto: "LIENZO " + editor.canvasLabel
+                            colorTexto: Theme.texto
+                        }
+                        Text {
+                            text: editor.projectDescription
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                        }
+                    }
 
                     VideoViewer {
                         id: visor
@@ -445,22 +499,25 @@ Window {
                         opacity: enabled ? 1 : 0.4
                         spacing: 6
 
-                        Boton { texto: "|◀"; onPulsado: { editor.pause(); editor.seek(0) } }
-                        Boton { texto: "◀"; onPulsado: editor.step(-1) }
-                        Boton {
-                            texto: editor.playing ? "❚❚" : "▶"
+                        BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { editor.pause(); editor.seek(0) } }
+                        BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: editor.step(-1) }
+                        BotonIcono {
+                            icono: editor.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
                             acentuado: true
-                            implicitWidth: 56
+                            implicitWidth: 52
                             onPulsado: editor.togglePlay()
                         }
-                        Boton { texto: "▶"; onPulsado: editor.step(1) }
-                        Boton {
-                            texto: "▶|"
+                        BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: editor.step(1) }
+                        BotonIcono {
+                            icono: "final"
+                            ayuda: "Al final (Fin)"
                             onPulsado: { editor.pause(); editor.seek(editor.frameCount - 1) }
                         }
                         Item { implicitWidth: 8 }
-                        Boton {
-                            texto: editor.muted ? "Sin sonido" : "Sonido"
+                        BotonIcono {
+                            icono: editor.muted ? "silencio" : "sonido"
+                            ayuda: editor.muted ? "Activar el sonido (M)" : "Silenciar (M)"
                             onPulsado: editor.muted = !editor.muted
                         }
                         Item { Layout.fillWidth: true }
@@ -490,19 +547,21 @@ Window {
                             Layout.fillWidth: true
                             spacing: 6
 
-                            Boton { texto: "|◀"; onPulsado: { reproductor.pause(); reproductor.seek(0) } }
-                            Boton { texto: "◀"; onPulsado: reproductor.step(-1) }
-                            Boton {
-                                texto: reproductor.playing ? "❚❚" : "▶"
-                                acentuado: true
-                                implicitWidth: 56
-                                onPulsado: reproductor.togglePlay()
-                            }
-                            Boton { texto: "▶"; onPulsado: reproductor.step(1) }
-                            Boton {
-                                texto: "▶|"
-                                onPulsado: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
-                            }
+                            BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { reproductor.pause(); reproductor.seek(0) } }
+                            BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: reproductor.step(-1) }
+                            BotonIcono {
+                            icono: reproductor.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
+                            acentuado: true
+                            implicitWidth: 52
+                            onPulsado: reproductor.togglePlay()
+                        }
+                            BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: reproductor.step(1) }
+                            BotonIcono {
+                            icono: "final"
+                            ayuda: "Al final (Fin)"
+                            onPulsado: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
+                        }
                             Item { implicitWidth: 8 }
                             Boton { texto: "Entrada (I)"; onPulsado: reproductor.setMarkIn() }
                             Boton { texto: "Salida (O)"; onPulsado: reproductor.setMarkOut() }
@@ -545,15 +604,16 @@ Window {
                             Layout.fillWidth: true
                             spacing: 6
 
-                            Boton { texto: "|◀"; onPulsado: { laboratorio.pause(); laboratorio.seek(0) } }
-                            Boton { texto: "◀"; onPulsado: laboratorio.step(-1) }
-                            Boton {
-                                texto: laboratorio.playing ? "❚❚" : "▶"
-                                acentuado: true
-                                implicitWidth: 56
-                                onPulsado: laboratorio.togglePlay()
-                            }
-                            Boton { texto: "▶"; onPulsado: laboratorio.step(1) }
+                            BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { laboratorio.pause(); laboratorio.seek(0) } }
+                            BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: laboratorio.step(-1) }
+                            BotonIcono {
+                            icono: laboratorio.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
+                            acentuado: true
+                            implicitWidth: 52
+                            onPulsado: laboratorio.togglePlay()
+                        }
+                            BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: laboratorio.step(1) }
                             Item { implicitWidth: 8 }
                             Boton {
                                 texto: "Ver transición (T)"
@@ -591,20 +651,14 @@ Window {
                 }
             }
 
-            // Panel lateral
+            // Panel lateral (Origen y Transición)
             Rectangle {
+                visible: !ventana.enEditor
                 Layout.preferredWidth: 320
                 Layout.fillHeight: true
                 color: Theme.panel
                 radius: Theme.radio
                 border.color: Theme.borde
-
-                // --- Pestaña Editor: biblioteca de medios y proyecto ---
-                PanelEditor {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    visible: ventana.enEditor
-                }
 
                 Flickable {
                     anchors.fill: parent
@@ -864,26 +918,82 @@ Window {
             }
         }
 
-        LineaTiempo {
-            id: lineaTiempo
-            editor: editor
+        RowLayout {
             visible: ventana.enEditor
             Layout.fillWidth: true
-            Layout.preferredHeight: 250
+            Layout.fillHeight: false // su altura es la de la línea de tiempo, no se estira
+            Layout.preferredHeight: lineaTiempo.implicitHeight
+            spacing: Theme.margen
+            LineaTiempo {
+                id: lineaTiempo
+                editor: editor
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+            Medidor {
+                Layout.fillHeight: true
+                izquierdo: editor.meterLeft
+                derecho: editor.meterRight
+            }
         }
 
-        // Barra de estado
-        Text {
+        // Pie: estado y, en el editor, exportar en la esquina inferior derecha
+        RowLayout {
             Layout.fillWidth: true
-            readonly property string error: ventana.activo.errorString
-            readonly property bool ocupado: ventana.activo.busy || (ventana.enEditor && editor.importing)
-            text: error.length > 0 ? "Aviso: " + error
-                  : ventana.enEditor && editor.fileBusy ? "Leyendo o guardando el proyecto…"
-                  : ventana.enEditor && editor.importing ? "Importando…"
-                  : ocupado ? "Cargando…" : "Listo"
-            color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
-            font.pixelSize: Theme.tamTextoPequeno
-            elide: Text.ElideRight
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                readonly property string error: ventana.activo.errorString
+                readonly property bool ocupado: ventana.activo.busy || (ventana.enEditor && editor.importing)
+                text: error.length > 0 ? "Aviso: " + error
+                      : ventana.enEditor && editor.fileBusy ? "Leyendo o guardando el proyecto…"
+                      : ventana.enEditor && editor.importing ? "Importando…"
+                      : ocupado ? "Cargando…" : "Listo"
+                color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+                elide: Text.ElideRight
+            }
+
+            // Exportación en curso o terminada
+            Text {
+                visible: ventana.enEditor && editor.exportMessage.length > 0
+                Layout.maximumWidth: 520
+                text: editor.exportMessage
+                color: editor.exportMessage.startsWith("No se") ? Theme.aviso : Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+                elide: Text.ElideMiddle
+            }
+            Rectangle {
+                visible: ventana.enEditor && editor.exporting
+                implicitWidth: 160
+                implicitHeight: 6
+                radius: 3
+                color: Theme.panelElevado
+                Rectangle {
+                    width: parent.width * editor.exportProgress
+                    height: parent.height
+                    radius: 3
+                    color: Theme.acento
+                }
+            }
+            BotonIcono {
+                visible: ventana.enEditor && editor.exporting
+                icono: "cerrar"
+                texto: "Cancelar"
+                onPulsado: editor.cancelExport()
+            }
+            BotonIcono {
+                visible: ventana.enEditor
+                icono: "exportar"
+                texto: "Exportar"
+                ayuda: "Exportar la línea de tiempo (Ctrl+M)"
+                acentuado: true
+                implicitHeight: 36
+                implicitWidth: 132
+                enabled: editor.frameCount > 0 && !editor.exporting
+                onPulsado: dialogoExportarLinea.open()
+            }
         }
     }
 
@@ -974,184 +1084,6 @@ Window {
             color: Theme.texto
             font.pixelSize: Theme.tamTextoPequeno
             elide: Text.ElideRight
-        }
-    }
-
-    // Panel lateral del editor: biblioteca de medios, selección y proyecto.
-    component PanelEditor: ColumnLayout {
-        spacing: 10
-
-        RowLayout {
-            Layout.fillWidth: true
-            Titulo { texto: "Medios" }
-            Item { Layout.fillWidth: true }
-            Boton {
-                texto: "Importar…"
-                acentuado: true
-                onPulsado: dialogoImportar.open()
-            }
-        }
-
-        ListView {
-            id: listaMedios
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            spacing: 4
-            model: editor.mediaItems
-
-            delegate: Rectangle {
-                id: medio
-                required property var modelData
-                width: ListView.view.width
-                height: 50
-                radius: Theme.radio
-                color: zonaMedio.containsMouse ? Theme.panelElevado : Theme.fondo
-                border.color: Theme.borde
-
-                ColumnLayout {
-                    anchors.left: parent.left
-                    anchors.right: botonAnadir.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 6
-                    spacing: 2
-                    Text {
-                        Layout.fillWidth: true
-                        text: medio.modelData.name
-                        color: Theme.texto
-                        font.pixelSize: Theme.tamTexto
-                        elide: Text.ElideMiddle
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: medio.modelData.duration + " · " + medio.modelData.details
-                              + (medio.modelData.video && !medio.modelData.audio ? " · sin audio" : "")
-                        color: Theme.textoSecundario
-                        font.pixelSize: Theme.tamTextoPequeno
-                        elide: Text.ElideRight
-                    }
-                }
-                MouseArea {
-                    id: zonaMedio
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    drag.target: fantasma
-                    drag.threshold: 6
-                    onPressed: (m) => {
-                        const p = mapToItem(fantasma.parent, m.x, m.y)
-                        fantasma.x = p.x - 10
-                        fantasma.y = p.y - 14
-                        fantasma.mediaId = medio.modelData.id
-                        fantasma.nombre = medio.modelData.name
-                    }
-                    onPositionChanged: {
-                        if (drag.active && !fantasma.Drag.active)
-                            fantasma.Drag.active = true
-                    }
-                    onReleased: {
-                        if (fantasma.Drag.active) {
-                            fantasma.Drag.drop()
-                            fantasma.Drag.active = false
-                        }
-                    }
-                    // Doble clic: abrirlo en Origen para marcar un tramo.
-                    onDoubleClicked: {
-                        ventana.cambiarModo("origen")
-                        reproductor.openPath(medio.modelData.path)
-                    }
-                }
-                Boton {
-                    id: botonAnadir
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    texto: "+"
-                    onPulsado: editor.addMedia(medio.modelData.id, -1)
-                }
-            }
-
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 20
-                visible: listaMedios.count === 0
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                text: "Pulsa «Importar…» o arrastra videos aquí.\n\nArrástralos después a la "
-                      + "línea de tiempo, o pulsa + para añadirlos al final. Doble clic: "
-                      + "abrir en Origen para marcar un tramo."
-                color: Theme.textoSecundario
-                font.pixelSize: Theme.tamTextoPequeno
-            }
-
-            DropArea {
-                anchors.fill: parent
-                keys: ["text/uri-list"]
-                onDropped: (drop) => {
-                    if (drop.hasUrls) {
-                        editor.importFiles(drop.urls)
-                        drop.acceptProposedAction()
-                    }
-                }
-            }
-        }
-
-        Separador {}
-        Titulo { texto: "Selección" }
-        Text {
-            Layout.fillWidth: true
-            text: editor.selectionDescription.length > 0 ? editor.selectionDescription
-                                                         : "Ningún clip seleccionado"
-            color: editor.selectionDescription.length > 0 ? Theme.texto : Theme.textoDesactivado
-            font.pixelSize: Theme.tamTextoPequeno
-            wrapMode: Text.WrapAnywhere
-        }
-        Separador {}
-        Titulo { texto: "Proyecto" }
-        FilaDato { etiqueta: "Formato"; valor: editor.projectDescription }
-        FilaDato { etiqueta: "Duración"; valor: editor.durationTimecode }
-        Text {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textoSecundario
-            font.pixelSize: Theme.tamTextoPequeno
-            text: "El primer clip con video fija la resolución y los fps del proyecto."
-        }
-
-        // Exportación en curso o terminada
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: editor.exporting || editor.exportMessage.length > 0
-            spacing: 6
-            Separador {}
-            Titulo { texto: "Exportar" }
-            Rectangle {
-                Layout.fillWidth: true
-                visible: editor.exporting
-                implicitHeight: 6
-                radius: 3
-                color: Theme.panelElevado
-                Rectangle {
-                    width: parent.width * editor.exportProgress
-                    height: parent.height
-                    radius: 3
-                    color: Theme.acento
-                }
-            }
-            Boton {
-                Layout.fillWidth: true
-                visible: editor.exporting
-                texto: "Cancelar exportación"
-                onPulsado: editor.cancelExport()
-            }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WrapAnywhere
-                color: editor.exportMessage.startsWith("No se") ? Theme.aviso
-                                                               : Theme.textoSecundario
-                font.pixelSize: Theme.tamTextoPequeno
-                text: editor.exportMessage
-            }
         }
     }
 }

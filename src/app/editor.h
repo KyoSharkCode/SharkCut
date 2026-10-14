@@ -7,6 +7,7 @@
 #include "playbackclock.h"
 #include "player.h"
 
+#include <QElapsedTimer>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -57,6 +58,13 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
+    // Lienzo del proyecto: "16:9", "9:16", "1:1"… y si lo fija el primer clip
+    Q_PROPERTY(QString canvasLabel READ canvasLabel NOTIFY projectChanged)
+    Q_PROPERTY(QSize canvas READ canvasSize NOTIFY projectChanged)
+    Q_PROPERTY(QUrl defaultExportFolder READ defaultExportFolder NOTIFY fileChanged)
+    // Medidor de la mezcla: nivel de cada canal en dB (−60 = silencio, 0 = máximo)
+    Q_PROPERTY(double meterLeft READ meterLeft NOTIFY metersChanged)
+    Q_PROPERTY(double meterRight READ meterRight NOTIFY metersChanged)
     // Exportación
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
     Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
@@ -90,6 +98,10 @@ public:
     QString selectionDescription() const;
 
     QString projectName() const;
+    QString canvasLabel() const;
+    QUrl defaultExportFolder() const;
+    double meterLeft() const { return m_meter[0]; }
+    double meterRight() const { return m_meter[1]; }
     QString projectPath() const { return m_projectPath; }
     bool modified() const { return m_history.modified(); }
     bool fileBusy() const { return m_fileBusy; }
@@ -110,7 +122,10 @@ public:
     QSize canvasSize() const override;
 
     // --- Archivo del proyecto (lectura y escritura en segundo plano) ---
-    Q_INVOKABLE void newProject();
+    // Proyecto vacío. `width`/`height` = 0: el lienzo lo fija el primer clip; `fps` = 0:
+    // también los fotogramas por segundo. `name` se propone al guardar.
+    Q_INVOKABLE void newProject(const QString& name = {}, int width = 0, int height = 0,
+                                int fps = 0);
     Q_INVOKABLE void openProject(const QUrl& file);
     Q_INVOKABLE void openProjectPath(const QString& path);
     // Guarda en el archivo actual; false si aún no tiene (hay que usar saveAs).
@@ -118,7 +133,9 @@ public:
     Q_INVOKABLE void saveAs(const QUrl& file);
 
     // Exporta la línea de tiempo a MP4 (mismo compositor que la vista previa).
-    Q_INVOKABLE void exportTo(const QUrl& file);
+    // `quality`: 0 ligera (8 Mbps), 1 alta (16 Mbps), 2 máxima (40 Mbps).
+    Q_INVOKABLE void exportTo(const QUrl& file, int quality = 1);
+    Q_INVOKABLE void exportToFolder(const QUrl& folder, const QString& name, int quality);
     Q_INVOKABLE void cancelExport();
 
     // --- Biblioteca ---
@@ -171,6 +188,7 @@ signals:
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
+    void metersChanged();
     void selectionChanged();
     void importingChanged();
     void playingChanged();
@@ -242,4 +260,9 @@ private:
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;
+
+    QString m_newName; // nombre propuesto de un proyecto aún sin guardar
+    std::array<double, 2> m_meter{-60.0, -60.0};
+    QElapsedTimer m_meterTimer;
+    void updateMeters();
 };

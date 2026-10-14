@@ -19,6 +19,13 @@ qt_add_qml_module(SharkCut
         qml/Selector.qml
         qml/BarraTiempo.qml
         qml/LineaTiempo.qml
+        qml/Icono.qml
+        qml/BotonIcono.qml
+        qml/Medidor.qml
+        qml/ArrastreMedio.qml
+        qml/PanelMedios.qml
+        qml/DialogoExportar.qml
+        qml/DialogoNuevoProyecto.qml
     SOURCES
         appinfo.h
         appinfo.cpp
@@ -33,6 +40,8 @@ qt_add_qml_module(SharkCut
         transitionlab.cpp
         editor.h
         editor.cpp
+        thumbnails.h
+        thumbnails.cpp
 )
 
 # El ejecutable va a bin/ para no chocar con la carpeta del módulo QML "SharkCut".

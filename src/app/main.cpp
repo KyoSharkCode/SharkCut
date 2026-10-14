@@ -1,3 +1,5 @@
+#include "thumbnails.h"
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
@@ -19,6 +21,7 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
+    engine.addImageProvider(QStringLiteral("miniaturas"), new ThumbnailProvider);
     engine.loadFromModule("SharkCut", "Main");
 
     return QGuiApplication::exec();

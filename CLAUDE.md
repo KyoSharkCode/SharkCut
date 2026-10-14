@@ -37,7 +37,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC) y
   TimelineAudioSource (audio de la línea de tiempo).
   src/app también: Editor (proyecto + historial, herramientas y reproducción de la línea
-  de tiempo); interfaz en qml/LineaTiempo.qml.
+  de tiempo); interfaz en qml/LineaTiempo.qml, qml/PanelMedios.qml y los diálogos
+  qml/Dialogo*.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  Iconos: qml/Icono.qml (trazos SVG dibujados con QtQuick.Shapes); añadir los nuevos ahí.
+  AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
   (útil para revisar cambios en transition.frag); con --export exporta como la app y

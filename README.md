@@ -7,6 +7,7 @@ clips, shorts, anuncios y contenido de stream.
 - Plan del proyecto: [docs/PLAN.md](docs/PLAN.md)
 - Instrucciones para sesiones de desarrollo: [CLAUDE.md](CLAUDE.md)
 
-Estado: fase 0 (cimientos), etapa 1 terminada.
+Estado: fase 0 (cimientos) terminada: reproductor con decodificación por GPU y audio
+sincronizado. Siguiente: fase 1 (transiciones).
 
 Preparar el PC: [docs/SETUP-WINDOWS.md](docs/SETUP-WINDOWS.md)

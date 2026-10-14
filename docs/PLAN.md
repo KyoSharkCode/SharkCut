@@ -342,8 +342,8 @@ Whoosh, Impacto / Hit, Riser, Pop / Click, Glitch, Swoosh, Transición musical.
 
 ## 11. Fases y criterios de "hecho"
 
-### Fase 0 — Cimientos
-- Proyecto CMake + vcpkg + Qt, que compila en Windows (y en Linux para CI).
+### Fase 0 — Cimientos ✅
+- Proyecto CMake + Qt, que compila en Windows (y en Linux para CI).
 - GitHub Actions: compilación, tests y ejecutable descargable.
 - Ventana Qt Quick con un visor QRhi.
 - Abrir un MP4 con FFmpeg, decodificar por hardware (NVDEC) y mostrarlo.
@@ -376,6 +376,8 @@ resultado exportado es idéntico a la vista previa.
 
 ### Fase 4 — VODs y uso diario
 - Varias pistas de video y audio.
+- Visor sin copias: la textura D3D11 de NVDEC pasa directamente al compositor
+  (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
 - Rendimiento con proyectos largos: caché de fotogramas, miniaturas y ondas
   en segundo plano, proxies, línea de tiempo virtualizada.
 - Edición rápida tipo Premiere: ripple delete, atajos (C, V, Q, W, J/K/L…),
@@ -446,14 +448,15 @@ ctest --preset windows-debug
      QRhi con conversión YUV→RGB en shader; reproducción de video, búsqueda precisa
      por fotograma, paso a paso. Validada en el PC de Kyo con un clip real de OBS
      (H.264 1920×1080 a 60 fps, 3:35): decodificación por GPU (d3d11va), Direct3D 11.
-   - [ ] Etapa 2b: sin copias: la textura D3D11 de NVDEC pasa directamente al visor
-     (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
    - [x] Etapa 3: audio sincronizado. FFmpeg decodifica y convierte a float estéreo
      48 kHz alineado con el primer fotograma (silencio o recorte si el audio empieza
      antes o después); miniaudio (WASAPI) reproduce desde un búfer en anillo sin
      bloqueos y su contador de muestras, descontando la latencia, es el reloj maestro.
-     Sin audio o sin tarjeta de sonido se usa un temporizador. Probada en Linux con el
-     dispositivo nulo; pendiente de validar a oído en el PC de Kyo.
+     Sin audio o sin tarjeta de sonido se usa un temporizador. Validada en el PC de Kyo
+     con dos grabaciones de OBS (la más larga, 22 min): audio sincronizado, silenciar
+     y parada al final correctos.
+   - **Fase 0 terminada.** La optimización "sin copias" (textura de NVDEC directa al
+     visor) pasa a la fase 4, donde importa (4K, varias pistas, VODs).
 5. Fase 1: transiciones.
 
 ### Decisiones tomadas

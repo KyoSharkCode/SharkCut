@@ -2,6 +2,11 @@
 
 // Archivo de proyecto .sharkp: JSON con un campo `version`.
 //
+// Versión 2: pistas en número variable (con ocultar, silenciar y bloquear), enlaces
+// entre clips guardados tal cual, y transformación (video) y volumen (audio) por clip.
+// Versión 3: transiciones en los cortes de las pistas de video, con su sonido.
+// Los archivos de versiones anteriores se siguen abriendo.
+//
 // Las rutas de los medios se guardan absolutas y, además, relativas a la carpeta
 // del proyecto: si se mueve la carpeta entera (proyecto + videos) a otro disco o
 // equipo, al abrirlo se encuentran por la ruta relativa.
@@ -17,7 +22,7 @@
 
 namespace sharkcut {
 
-inline constexpr int kProjectFileVersion = 1;
+inline constexpr int kProjectFileVersion = 3;
 inline constexpr std::string_view kProjectExtension = ".sharkp";
 
 class ProjectError : public std::runtime_error {

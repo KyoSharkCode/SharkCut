@@ -2,10 +2,13 @@
 #include "audio/audio_worker.h"
 #include "audio/ring_buffer.h"
 #include "core/edit.h"
+#include "core/sfx.h"
 #include "media/audio_decoder.h"
 #include "media/media_error.h"
+#include "media/media_info.h"
 #include "media/sequence_audio.h"
 #include "media/timeline_audio.h"
+#include "media/waveform.h"
 #include "test_clip.h"
 
 #include <catch2/catch_approx.hpp>
@@ -331,4 +334,89 @@ TEST_CASE("TimelineAudioSource does not fade inside a split clip", "[audio][time
 
     Project empty = audioProject(clip.path);
     CHECK_THROWS_AS(TimelineAudioSource(empty), MediaError);
+}
+
+TEST_CASE("TimelineAudioSource mixes tracks with clip volume", "[audio][timeline]") {
+    TempClip clip(pcmClip(), "timeline-mix.mkv");
+    Project p = audioProject(clip.path);
+    const ObjectId media = p.media[0].id;
+    // A1: medio 0–60; A2: el mismo medio desde 60, a −6 dB.
+    const ObjectId first = placeClip(p, media, 0, 0, 60);
+    const ObjectId second = placeClip(p, media, 0, 60, 60, {.video = 1, .audio = 1});
+    REQUIRE(first != 0);
+    REQUIRE(second != 0);
+    const ObjectId music = p.clip(second)->link;
+    REQUIRE(setClipVolume(p, music, -6.0));
+    const auto gain = static_cast<float>(gainFromDb(-6.0));
+
+    {
+        TimelineAudioSource source(p);
+        const std::vector<float> all = readAll(source);
+        const auto at = static_cast<std::size_t>(10 * kSamplesPerFrame + 400) * 2;
+        CHECK(all[at] == Catch::Approx(audioLevelFor(10) + gain * audioLevelFor(70)).margin(1e-4));
+    }
+
+    // A2 silenciada: solo suena A1.
+    REQUIRE(setTrackMuted(p, *p.trackIndex(TrackKind::Audio, 1), true));
+    {
+        TimelineAudioSource source(p);
+        const std::vector<float> all = readAll(source);
+        const auto at = static_cast<std::size_t>(10 * kSamplesPerFrame + 400) * 2;
+        CHECK(all[at] == Catch::Approx(audioLevelFor(10)).margin(1e-4));
+    }
+
+    // Todo silenciado: no hay audio.
+    REQUIRE(setTrackMuted(p, *p.trackIndex(TrackKind::Audio, 0), true));
+    CHECK_FALSE(p.hasAudibleAudio());
+    CHECK_THROWS_AS(TimelineAudioSource(p), MediaError);
+}
+
+TEST_CASE("Waveform peaks follow the audio and survive the disk cache", "[audio][waveform]") {
+    TempClip clip(pcmClip(), "waveform.mkv");
+    const Waveform waveform = computeWaveform(clip.path.string());
+    // 120 fotogramas a 60 fps = 2 s = 400 bloques de 5 ms.
+    REQUIRE(waveform.peaks.size() == 400);
+    // El bloque 10 (muestras 2400–2640) cae dentro del fotograma 3.
+    CHECK(waveform.peaks[10] == Waveform::encode(audioLevelFor(3)));
+    CHECK(waveform.peaks[399] == Waveform::encode(audioLevelFor(119)));
+    CHECK(Waveform::encode(1.0f) == 255);
+    CHECK(Waveform::encode(0.0f) == 0);
+    CHECK(Waveform::level(255) == 1.0);
+    CHECK(Waveform::level(255, -60.0) == 0.0);
+    CHECK(Waveform::level(0, 12.0) == 0.0);
+    CHECK(Waveform::level(255, -12.0) == Catch::Approx(0.5).margin(0.01));
+
+    const std::filesystem::path file = tempClipPath("ondas") / "prueba.onda";
+    REQUIRE(saveWaveform(waveform, file));
+    const auto loaded = loadWaveform(file);
+    REQUIRE(loaded.has_value());
+    CHECK(*loaded == waveform);
+    std::error_code ignored;
+    std::filesystem::remove_all(file.parent_path(), ignored);
+
+    CHECK_FALSE(waveformCacheName(clip.path.string()).empty());
+    CHECK(waveformCacheName("/no/existe.mp4").empty());
+
+    std::atomic<bool> cancel{true};
+    CHECK_THROWS_AS(computeWaveform(clip.path.string(), &cancel), MediaError);
+}
+
+TEST_CASE("Sound effects in the catalog exist and match their duration", "[audio][sfx]") {
+    const std::filesystem::path folder =
+        std::filesystem::path(SHARKCUT_SOURCE_DIR) / "presets" / "sfx";
+    for (const SoundEffect& effect : kSoundEffects) {
+        CAPTURE(effect.file);
+        const auto path = folder / std::string(effect.file);
+        REQUIRE(std::filesystem::exists(path));
+        const MediaInfo info = probeMedia(path.string());
+        REQUIRE(info.audio.size() == 1);
+        CHECK(std::abs(info.durationUs - effect.durationUs) < 2'000);
+        CHECK(effect.hitUs <= effect.durationUs);
+    }
+    // Cada transición tiene un sonido por defecto que existe (o ninguno).
+    for (const TransitionInfo& info : kTransitions) {
+        const std::string_view id = defaultSoundFor(info.type);
+        CHECK((id.empty() || soundEffect(id) != nullptr));
+    }
+    CHECK(soundEffect("no-existe") == nullptr);
 }

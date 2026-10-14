@@ -1,14 +1,15 @@
 #pragma once
 
+#include "core/project.h"
 #include "core/transition.h"
 #include "media/video_frame.h"
 
 #include <QColor>
 #include <QSize>
 
-#include <array>
 #include <memory>
 #include <optional>
+#include <vector>
 
 class QRhi;
 class QRhiBuffer;
@@ -24,20 +25,29 @@ class QRhiTextureRenderTarget;
 
 namespace sharkcut {
 
-// Lo que hay que dibujar en un fotograma: uno o dos clips y, si hay dos, la
-// transición entre ellos.
-struct CompositorInput {
+// Una capa del lienzo (una pista de video): un clip, o dos con una transición entre
+// ellos, colocados según `transform`.
+struct CompositorLayer {
     std::shared_ptr<const VideoFrame> a; // clip principal (o saliente)
     std::shared_ptr<const VideoFrame> b; // clip entrante (solo durante una transición)
     std::optional<TransitionParams> transition;
     TransitionState state;
+    ClipTransform transform;  // de `a`
+    ClipTransform transformB; // de `b`
+};
+
+// Lo que hay que dibujar en un fotograma: las capas, de abajo arriba, sobre negro.
+struct CompositorInput {
+    std::vector<CompositorLayer> layers;
 };
 
 // Motor de composición en la GPU (QRhi). Es el mismo para la vista previa y para la
 // exportación, así lo que se ve es lo que se exporta.
 //
-// Pasadas: cada clip NV12 → capa RGB del tamaño del lienzo (ajustada sin deformar);
-// las capas → lienzo, aplicando la transición; el lienzo → destino (visor).
+// Cada capa sin transición se dibuja directamente en el lienzo (NV12 → RGB con su
+// posición, escala, recorte y opacidad). Una capa con transición dibuja antes sus dos
+// clips en texturas del tamaño del lienzo y la transición las mezcla en el lienzo.
+// Al final, el lienzo se presenta en el destino (visor).
 class Compositor {
 public:
     Compositor();
@@ -62,13 +72,18 @@ public:
     QRhiTexture* canvas() const;
 
 private:
-    struct Layer;
+    struct Source;
+    struct TransitionTargets;
     void releaseAll();
-    void createSizeDependent();
+    void createCanvas();
+    void createTransitionTargets(TransitionTargets& targets);
     void ensurePipelines();
-    void updateLayer(Layer& layer, const std::shared_ptr<const VideoFrame>& frame,
-                     QRhiResourceUpdateBatch* updates);
-    void drawLayer(QRhiCommandBuffer* cb, Layer& layer, QRhiResourceUpdateBatch* updates);
+    Source& source(std::size_t index);
+    TransitionTargets& transitionTargets(std::size_t index);
+    // Sube el fotograma (si cambió) y prepara los uniformes para dibujarlo con `transform`.
+    void prepareSource(Source& source, const VideoFrame& frame, const ClipTransform& transform,
+                       double opacity, QRhiResourceUpdateBatch* updates);
+    void drawSource(QRhiCommandBuffer* cb, Source& source, QRhiGraphicsPipeline* pipeline);
 
     QRhi* m_rhi = nullptr;
     QSize m_canvasSize{1920, 1080};
@@ -77,15 +92,15 @@ private:
     bool m_quadUploaded = false;
     std::unique_ptr<QRhiSampler> m_sampler;
 
-    std::array<std::unique_ptr<Layer>, 2> m_layers;
-    std::unique_ptr<QRhiGraphicsPipeline> m_layerPipeline;
+    std::vector<std::unique_ptr<Source>> m_sources;
+    std::vector<std::unique_ptr<TransitionTargets>> m_transitions;
+    std::unique_ptr<QRhiGraphicsPipeline> m_layerPipeline;     // a una textura de transición
+    std::unique_ptr<QRhiGraphicsPipeline> m_blendPipeline;     // directo al lienzo, con mezcla
+    std::unique_ptr<QRhiGraphicsPipeline> m_compositePipeline; // transición → lienzo
 
     std::unique_ptr<QRhiTexture> m_canvas;
     std::unique_ptr<QRhiTextureRenderTarget> m_canvasTarget;
     std::unique_ptr<QRhiRenderPassDescriptor> m_canvasPass;
-    std::unique_ptr<QRhiBuffer> m_compositeUniforms;
-    std::unique_ptr<QRhiShaderResourceBindings> m_compositeBindings;
-    std::unique_ptr<QRhiGraphicsPipeline> m_compositePipeline;
 
     std::unique_ptr<QRhiBuffer> m_presentUniforms;
     std::unique_ptr<QRhiShaderResourceBindings> m_presentBindings;

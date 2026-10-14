@@ -369,17 +369,17 @@ resultado exportado es idéntico a la vista previa.
 - Interfaz con el tema Marea Profunda.
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
 
-### Fase 3 — Interfaz definitiva y montaje real
+### Fase 3 — Interfaz definitiva y montaje real ✅
 Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
 - ✅ Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
   (también para lo que llegará después: efectos, transiciones, propiedades del
   clip) e iconos de herramientas. Primero una maqueta aprobada; después, la
   implementación con el tema Marea Profunda. (El logo definitivo, los cursores y el
   icono de los .sharkp se diseñan con el instalador, en la fase 4.)
-- Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
+- ✅ Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
   onda del audio dibujada en la línea de tiempo, y posición y escala de cada clip
   (facecam encima, reencuadrar un video 16:9 en un lienzo vertical).
-- Transiciones integradas en la línea de tiempo (arrastrar entre clips y
+- ✅ Transiciones integradas en la línea de tiempo (arrastrar entre clips y
   ajustarlas ahí mismo) y efectos de sonido emparejados con cada transición.
 **Hecho cuando:** se monta un short con facecam o música encima y transiciones
 sin salir de la pestaña Editor.
@@ -539,29 +539,81 @@ ctest --preset windows-debug
      Validada en el PC de Kyo (proyecto vertical 1080×1920 con clips de OBS): "se ve
      de maravilla". Las pestañas Transiciones, Efectos y Propiedades muestran de
      momento lo que llegará; la onda del audio en los clips llega en la etapa 2.
-   - [ ] Etapa 2: varias pistas y reencuadre.
+   - [x] Etapa 2: varias pistas y reencuadre.
      - Modelo: pistas de video y audio en número variable (V1, V2… encima; A1, A2…),
-       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio.
-       Archivo `.sharkp` versión 2, que abre los de la versión 1.
+       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio
+       (con "Desvincular audio y video" para editarlos por separado, p. ej. quitar el
+       audio de la facecam). Ocultar (video), silenciar (audio) y bloquear cada pista,
+       también como pasos de deshacer. Archivo `.sharkp` versión 2 (pistas, enlaces,
+       transformación y volumen), que abre los de la versión 1.
      - Compositor con N capas apiladas (V2 sobre V1…) y transformación por clip:
-       posición, escala (y opacidad). Igual en vista previa y exportación.
-     - Propiedades del clip editables en su pestaña y arrastrando en el visor para
-       reencuadrar (un video 16:9 en un lienzo 9:16, la facecam en una esquina).
-     - Audio: mezcla de todas las pistas, volumen por clip; ocultar, silenciar y
-       bloquear pistas desde su cabecera (los iconos pasan a funcionar).
-     - Onda del audio de cada clip, calculada en segundo plano y guardada en la caché
-       del proyecto (nunca junto a los medios originales).
-     - Música: arrastrar un archivo de audio a A2 (o a cualquier pista de audio).
+       posición, escala, opacidad y recorte (necesario para sacar la facecam de la propia
+       grabación de OBS). Cada capa se dibuja directamente en el lienzo con alfa
+       premultiplicado; las transiciones del laboratorio siguen igual. Mismo motor en
+       vista previa y exportación; las pistas ocultas no se ven ni se exportan.
+     - Propiedades del clip editables (números que se arrastran o se escriben, con vista
+       previa en directo y un solo paso de deshacer al soltar; Ajustar, Rellenar y
+       Restablecer) y arrastrando en el visor: clic sobre un clip lo selecciona (el de más
+       arriba), arrastrar lo mueve con guías de bordes y centro (Mayús: sin ajuste) y las
+       esquinas lo escalan.
+     - Audio: mezcla de todas las pistas que no están silenciadas, volumen por clip (dB)
+       en Propiedades. Mover la facecam o cambiar un volumen no reinicia los hilos de
+       video (y lo primero tampoco el audio).
+     - Onda del audio de cada clip, calculada en segundo plano (dos a la vez) y guardada
+       en `<proyecto>.sharkp.cache/ondas/` (en memoria mientras el proyecto no tiene
+       archivo); escala logarítmica para que se vea también la voz.
+     - Línea de tiempo: arrastrar un medio a cualquier pista (la música a A2; un video
+       soltado en V2 lleva su audio a A2), mover clips a otra pista del mismo tipo
+       arrastrando en vertical (su enlazado del otro tipo se queda en su pista), menú con
+       clic derecho en cabeceras (añadir y quitar pistas) y clips (desvincular, ajustar,
+       rellenar, dividir, quitar), desplazamiento vertical con muchas pistas.
+     - Comprobado en Linux: un short vertical 1080×1920 con gameplay rellenando el lienzo
+       en V1, facecam recortada en V2 y música a −6 dB en A2 se ve en el visor igual que
+       en el MP4 exportado, y suena la mezcla.
+     - Primera prueba de Kyo (VODs reales): mover un clip a otra pista hacía saltar una
+       aserción de MSVC (se buscaba destino también para pistas sin clips que mover);
+       corregido con test, y en Linux Debug ahora se activa `_GLIBCXX_ASSERTIONS` para
+       ver estos fallos igual que en Windows. La onda se dibuja de abajo arriba (raíz de
+       la amplitud: −12 dB llega a la mitad) y muestra "Calculando la onda…" mientras se
+       calcula.
+     - Validada en el PC de Kyo con VODs reales de OBS (proyecto de 11 min con V1, V2, A1
+       y A2, cortes y clips movidos entre pistas): se ve, se oye y se exporta bien, y la
+       exportación sigue sin problemas aunque se abra otro proyecto mientras tanto.
      - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
        en V2 y música en A2 se ve, se oye y se exporta igual.
-   - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.
-     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips:
-       los clips se solapan lo que dura la transición (como en el laboratorio).
-     - Ajustarla ahí mismo: duración arrastrando sus bordes; tipo, intensidad,
-       desenfoque y curva en Propiedades. Se reproduce y exporta con el compositor.
-     - Biblioteca de efectos de sonido con licencia libre (registrados en
-       presets/sfx/LICENCIAS.md) y emparejamiento: al poner una transición se coloca
-       su sonido (whoosh, impacto…) en una pista de audio, ajustable o quitable.
+   - [x] Etapa 3: transiciones y sonido en la línea de tiempo.
+     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips
+       seguidos de una pista de video (se ilumina el corte más cercano). Cambio respecto a
+       lo previsto ("los clips se solapan"): la transición se centra en el corte y usa el
+       material que sobra del medio antes y después de cada clip, como en Premiere; si no
+       hay, repite el primer o el último fotograma. Así ningún clip se mueve y el audio y
+       las demás pistas siguen sincronizados.
+     - Ajustarla ahí mismo: duración arrastrando sus bordes (antes y después del corte, por
+       separado); tipo, duración, intensidad, desenfoque, curva y sonido en Propiedades
+       (se abre al soltarla). Supr o clic derecho para quitarla. Se reproduce (dos hilos de
+       decodificación por pista: saliente y entrante) y se exporta con el compositor. En
+       una pista superior (la facecam) la transición no tapa lo de debajo: las capas de la
+       transición son transparentes donde no hay clip.
+     - Las transiciones siguen a las ediciones: si se parte el clip saliente pasan a su
+       parte derecha; si los clips dejan de estar seguidos, desaparecen; su duración se
+       limita a lo que cabe. Archivo `.sharkp` versión 3 (abre la 1 y la 2).
+     - Biblioteca de efectos de sonido sintetizados por código (tools/sfx/generar_sfx.py),
+       propios y CC0, registrados en presets/sfx/LICENCIAS.md: whoosh, whoosh que sube,
+       whoosh que baja, swoosh, giro, impacto, glitch y riser. Cada transición lleva uno por
+       defecto (Fade to Black, ninguno) que se coloca con su golpe en el corte, en la
+       primera pista de audio libre y a −6 dB; es un clip normal (se puede mover, cambiar
+       de volumen o quitar) y se cambia o se quita desde Propiedades.
+     - Comprobado en Linux: arrastrar, ajustar, quitar y deshacer en la app; reproducir a
+       través de la transición; exportar (V1 con Zoom In y V2 con un fundido que deja ver
+       V1).
+     - Validada en el PC de Kyo con VODs reales: las transiciones se añaden, se ajustan y
+       se exportan en orden, con su efecto de sonido.
+     - Comentario de Kyo: los efectos de sonido cumplen, pero suenan distintos a los que
+       usa (sintetizados); hay cosas que mejorar → pendiente para una etapa posterior
+       (retocar el generador o añadir sonidos CC0 de Freesound/Pixabay, registrados en
+       presets/sfx/LICENCIAS.md).
+   - **Fase 3 terminada.** Se monta un short con facecam, música y transiciones sin salir
+     de la pestaña Editor.
      - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
        transiciones sin salir de la pestaña Editor).
 

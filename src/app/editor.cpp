@@ -4,6 +4,7 @@
 #include "audio/audio_worker.h"
 #include "core/edit.h"
 #include "core/project_file.h"
+#include "core/sfx.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
 #include "media/timeline_audio.h"
@@ -84,19 +85,127 @@ ObjectId findMediaByPath(const Project& project, const std::string& path) {
     return 0;
 }
 
+QString fromView(std::string_view text) {
+    return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+}
+
+// Carpeta de los efectos de sonido, junto al ejecutable.
+QString soundFolder() {
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
+}
+
+// Medio de la biblioteca para un efecto de sonido (se añade si no está).
+ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
+    const std::string path = QDir(soundFolder()).filePath(fromView(effect.file)).toStdString();
+    if (const ObjectId id = findMediaByPath(project, path)) {
+        return id;
+    }
+    MediaItem item;
+    item.path = path;
+    item.name = std::string(effect.file);
+    item.durationUs = effect.durationUs;
+    item.frameRate = project.settings.frameRate;
+    item.hasAudio = true;
+    return sharkcut::addMedia(project, item);
+}
+
+// Volumen al que entra un efecto de sonido (por debajo de la voz y el juego).
+constexpr double kSoundVolumeDb = -6.0;
+
+// Proyecto nuevo: V1 y V2 encima, A1 y A2 debajo (gameplay, facecam y música).
+Project newTimeline() {
+    Project project;
+    sharkcut::addTrack(project, sharkcut::TrackKind::Video);
+    sharkcut::addTrack(project, sharkcut::TrackKind::Audio);
+    return project;
+}
+
+bool sameTiming(const Clip& a, const Clip& b) {
+    return a.id == b.id && a.media == b.media && a.start == b.start && a.in == b.in &&
+           a.length == b.length;
+}
+
+// ¿Cambia lo que deben decodificar los hilos de video? (No: posición, escala, audio…)
+bool sameVideo(const Project& a, const Project& b) {
+    if (a.settings.frameRate != b.settings.frameRate || a.media != b.media ||
+        a.tracks.size() != b.tracks.size() || a.length() != b.length()) {
+        return false;
+    }
+    for (std::size_t t = 0; t < a.tracks.size(); ++t) {
+        const sharkcut::Track& ta = a.tracks[t];
+        const sharkcut::Track& tb = b.tracks[t];
+        if (ta.kind != tb.kind || ta.hidden != tb.hidden) {
+            return false;
+        }
+        if (ta.kind == sharkcut::TrackKind::Video &&
+            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
+                        sameTiming)) {
+            return false;
+        }
+        // Lo que dura cada transición cambia qué fotogramas hacen falta (su tipo, no).
+        if (!std::equal(ta.transitions.begin(), ta.transitions.end(), tb.transitions.begin(),
+                        tb.transitions.end(),
+                        [](const sharkcut::Transition& x, const sharkcut::Transition& y) {
+                            return x.from == y.from && x.to == y.to && x.before == y.before &&
+                                   x.after == y.after;
+                        })) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ¿Cambia lo que suena?
+bool sameAudio(const Project& a, const Project& b) {
+    if (a.settings.frameRate != b.settings.frameRate || a.media != b.media ||
+        a.tracks.size() != b.tracks.size() || a.length() != b.length()) {
+        return false;
+    }
+    for (std::size_t t = 0; t < a.tracks.size(); ++t) {
+        const sharkcut::Track& ta = a.tracks[t];
+        const sharkcut::Track& tb = b.tracks[t];
+        if (ta.kind != tb.kind || ta.muted != tb.muted) {
+            return false;
+        }
+        if (ta.kind == sharkcut::TrackKind::Audio &&
+            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
+                        [](const Clip& x, const Clip& y) {
+                            return sameTiming(x, y) && x.volumeDb == y.volumeDb;
+                        })) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
+    return {
+        {QStringLiteral("x"), t.x},
+        {QStringLiteral("y"), t.y},
+        {QStringLiteral("scale"), t.scale},
+        {QStringLiteral("opacity"), t.opacity},
+        {QStringLiteral("cropLeft"), t.cropLeft},
+        {QStringLiteral("cropTop"), t.cropTop},
+        {QStringLiteral("cropRight"), t.cropRight},
+        {QStringLiteral("cropBottom"), t.cropBottom},
+    };
+}
+
 } // namespace
 
-Editor::Editor(QObject* parent) : CompositionSource(parent) {
+Editor::Editor(QObject* parent) : CompositionSource(parent), m_history(newTimeline()) {
     m_audioOutput = createAudioOutput(nullptr);
+    resetVideoSlots();
+    connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
+    connect(this, &Editor::selectionChanged, this, &Editor::selectedClipChanged);
+    connect(this, &Editor::projectChanged, this, &Editor::selectedClipChanged);
 }
 
 Editor::~Editor() {
     m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
-    for (VideoSlot& slot : m_slots) {
-        slot.worker.reset();
-    }
+    m_video.clear();
 }
 
 // --- Propiedades ------------------------------------------------------------------
@@ -136,15 +245,143 @@ QVariantList Editor::clips() const {
             entry[QStringLiteral("id")] = static_cast<qint64>(clip.id);
             entry[QStringLiteral("link")] = static_cast<qint64>(clip.link);
             entry[QStringLiteral("track")] = static_cast<int>(t);
+            entry[QStringLiteral("video")] = p.tracks[t].kind == sharkcut::TrackKind::Video;
+            entry[QStringLiteral("media")] = static_cast<qint64>(clip.media);
             entry[QStringLiteral("start")] = static_cast<qint64>(clip.start);
             entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
             entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
+            entry[QStringLiteral("volumeDb")] = clip.volumeDb;
+            entry[QStringLiteral("transformed")] = clip.transform != sharkcut::ClipTransform{};
             entry[QStringLiteral("name")] =
                 item ? QString::fromStdString(item->name) : QStringLiteral("?");
             list.append(entry);
         }
     }
     return list;
+}
+
+QVariantList Editor::tracks() const {
+    QVariantList list;
+    const Project& p = project();
+    for (std::size_t t = 0; t < p.tracks.size(); ++t) {
+        const sharkcut::Track& track = p.tracks[t];
+        QVariantMap entry;
+        entry[QStringLiteral("index")] = static_cast<int>(t);
+        entry[QStringLiteral("name")] = QString::fromStdString(p.trackName(t));
+        entry[QStringLiteral("video")] = track.kind == sharkcut::TrackKind::Video;
+        entry[QStringLiteral("number")] = static_cast<int>(p.trackNumber(t));
+        entry[QStringLiteral("hidden")] = track.hidden;
+        entry[QStringLiteral("muted")] = track.muted;
+        entry[QStringLiteral("locked")] = track.locked;
+        entry[QStringLiteral("empty")] = track.clips.empty();
+        list.append(entry);
+    }
+    return list;
+}
+
+QVariantMap Editor::selectedClip() const {
+    const Project& p = project();
+    const std::vector<ObjectId> group = sharkcut::withLinked(p, m_selection);
+    if (group.empty()) {
+        return {};
+    }
+    const Clip* first = p.clip(group.front());
+    const bool single = group.size() == 1 || (group.size() == 2 && first->link == group[1]);
+    if (!single) {
+        return {{QStringLiteral("count"), static_cast<int>(group.size())}};
+    }
+    QVariantMap result;
+    result[QStringLiteral("count")] = 1;
+    result[QStringLiteral("linked")] = group.size() == 2;
+    result[QStringLiteral("start")] = static_cast<qint64>(first->start);
+    result[QStringLiteral("end")] = static_cast<qint64>(first->end());
+    const MediaItem* item = p.findMedia(first->media);
+    result[QStringLiteral("name")] =
+        item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    result[QStringLiteral("video")] = qint64{0};
+    result[QStringLiteral("audio")] = qint64{0};
+    for (ObjectId id : group) {
+        const auto ref = p.findClip(id);
+        const sharkcut::Track& track = p.tracks[ref->track];
+        const Clip& clip = track.clips[ref->index];
+        const QString trackName = QString::fromStdString(p.trackName(ref->track));
+        if (track.kind == sharkcut::TrackKind::Video) {
+            const sharkcut::ClipTransform t = transformOf(id);
+            const CanvasBox box = canvasBox(clip, t);
+            result[QStringLiteral("video")] = static_cast<qint64>(id);
+            result[QStringLiteral("videoTrack")] = trackName;
+            result[QStringLiteral("videoLocked")] = track.locked;
+            result[QStringLiteral("videoHidden")] = track.hidden;
+            result[QStringLiteral("transform")] = transformToMap(t);
+            result[QStringLiteral("box")] = QVariantMap{
+                {QStringLiteral("left"), box.left},
+                {QStringLiteral("top"), box.top},
+                {QStringLiteral("width"), box.width},
+                {QStringLiteral("height"), box.height},
+                {QStringLiteral("fullWidth"), box.fullWidth},
+                {QStringLiteral("fullHeight"), box.fullHeight},
+            };
+        } else {
+            result[QStringLiteral("audio")] = static_cast<qint64>(id);
+            result[QStringLiteral("audioTrack")] = trackName;
+            result[QStringLiteral("audioLocked")] = track.locked;
+            result[QStringLiteral("volumeDb")] = clip.volumeDb;
+        }
+    }
+    return result;
+}
+
+std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId) {
+    const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
+    if (!item || !item->hasAudio) {
+        return nullptr;
+    }
+    return m_waveforms.get(QString::fromStdString(item->path));
+}
+
+bool Editor::waveformLoading(qint64 mediaId) const {
+    const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
+    return item && m_waveforms.pending(QString::fromStdString(item->path));
+}
+
+void Editor::updateWaveformDirectory() {
+    m_waveforms.setDirectory(
+        m_projectPath.isEmpty() ? QString() : m_projectPath + QStringLiteral(".cache/ondas"));
+}
+
+sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
+    if (clip == m_previewClip && clip != 0) {
+        return m_previewTransform;
+    }
+    const Clip* c = project().clip(clip);
+    return c ? c->transform : sharkcut::ClipTransform{};
+}
+
+Editor::CanvasBox Editor::canvasBox(const Clip& clip, const sharkcut::ClipTransform& t) const {
+    CanvasBox box;
+    const MediaItem* item = project().findMedia(clip.media);
+    const double canvasW = project().settings.width;
+    const double canvasH = project().settings.height;
+    if (!item || item->width <= 0 || item->height <= 0) {
+        return box;
+    }
+    // Ajuste al lienzo sin deformar (como el compositor) y después la escala.
+    const double aspect = static_cast<double>(item->width) / item->height;
+    double fitW = canvasW;
+    double fitH = canvasW / aspect;
+    if (aspect < canvasW / canvasH) {
+        fitH = canvasH;
+        fitW = canvasH * aspect;
+    }
+    box.fullWidth = fitW * t.scale;
+    box.fullHeight = fitH * t.scale;
+    const double left = canvasW / 2 + t.x - box.fullWidth / 2;
+    const double top = canvasH / 2 + t.y - box.fullHeight / 2;
+    box.left = left + t.cropLeft * box.fullWidth;
+    box.top = top + t.cropTop * box.fullHeight;
+    box.width = box.fullWidth * (1.0 - t.cropLeft - t.cropRight);
+    box.height = box.fullHeight * (1.0 - t.cropTop - t.cropBottom);
+    return box;
 }
 
 double Editor::fps() const {
@@ -224,8 +461,36 @@ QSize Editor::canvasSize() const {
 
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
-    if (project().clipAt(sharkcut::kVideoTrack, m_currentFrame)) {
-        input.a = m_frame;
+    for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
+        if (layer.track >= m_video.size()) {
+            continue;
+        }
+        const TrackVideo& track = m_video[layer.track];
+        auto a = track.frameOf(layer.clip->id);
+        auto b = layer.transition ? track.frameOf(layer.clipB->id) : nullptr;
+        if (!a && !b) {
+            a = track.last; // mientras llega el fotograma de este clip
+        }
+        if (!a && !b) {
+            continue;
+        }
+        sharkcut::CompositorLayer& out = input.layers.emplace_back();
+        if (layer.transition && a && b) {
+            out.a = a;
+            out.b = b;
+            out.transform = transformOf(layer.clip->id);
+            out.transformB = transformOf(layer.clipB->id);
+            out.transition = layer.transition->params;
+            out.state =
+                sharkcut::evaluateTransition(layer.transition->params, layer.transitionFrame);
+        } else {
+            // Solo ha llegado uno de los dos: se muestra el que corresponde a ese lado
+            // del corte, como si no hubiera transición.
+            const bool showB =
+                !a || (b && layer.transition && m_currentFrame >= layer.clipB->start);
+            out.a = showB ? b : a;
+            out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
+        }
     }
     return input;
 }
@@ -274,7 +539,7 @@ void Editor::newProject(const QString& name, int width, int height, int fps) {
         return;
     }
     pause();
-    Project project;
+    Project project = newTimeline();
     if (width > 0 && height > 0) {
         project.settings.width = width;
         project.settings.height = height;
@@ -290,6 +555,7 @@ void Editor::newProject(const QString& name, int width, int height, int fps) {
     m_selection.clear();
     setCurrentFrame(0);
     setError({});
+    updateWaveformDirectory();
     onProjectChanged();
     emit fileChanged();
 }
@@ -311,6 +577,24 @@ void Editor::openProjectPath(const QString& path) {
         QStringList missing;
         try {
             *project = sharkcut::loadProject(sharkcut::pathFromUtf8(path.toStdString()));
+            // Los efectos de sonido van con SharkCut: si se instaló en otra carpeta (u
+            // otro equipo), se buscan en la de ahora.
+            for (MediaItem& item : project->media) {
+                std::error_code ignored;
+                const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
+                if (std::filesystem::exists(current, ignored)) {
+                    continue;
+                }
+                const QString file =
+                    QString::fromStdString(sharkcut::utf8FromPath(current.filename()));
+                const bool isEffect = std::any_of(
+                    sharkcut::kSoundEffects.begin(), sharkcut::kSoundEffects.end(),
+                    [&file](const sharkcut::SoundEffect& e) { return fromView(e.file) == file; });
+                const QString candidate = QDir(soundFolder()).filePath(file);
+                if (isEffect && QFileInfo::exists(candidate)) {
+                    item.path = candidate.toStdString();
+                }
+            }
             for (const MediaItem& item : project->media) {
                 std::error_code ignored;
                 if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
@@ -341,6 +625,7 @@ void Editor::finishOpen(const std::shared_ptr<Project>& project, const QString& 
     }
     m_history.reset(std::move(*project));
     m_projectPath = path;
+    updateWaveformDirectory();
     m_selection.clear();
     setCurrentFrame(0);
     setError(missing.isEmpty() ? QString()
@@ -409,6 +694,7 @@ void Editor::finishSave(const std::shared_ptr<const Project>& written, const QSt
     m_history.markSaved(written);
     if (m_projectPath != path) {
         m_projectPath = path;
+        updateWaveformDirectory();
         emit fileChanged();
     }
     emit modifiedChanged();
@@ -508,7 +794,7 @@ void Editor::cancelExport() {
 
 // --- Biblioteca ---------------------------------------------------------------------
 
-void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt) {
+void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt, int track) {
     QStringList paths;
     for (const QUrl& url : urls) {
         const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
@@ -516,10 +802,10 @@ void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt) {
             paths << path;
         }
     }
-    importPaths(paths, placeAt);
+    importPaths(paths, placeAt, track);
 }
 
-void Editor::importPaths(const QStringList& paths, qint64 placeAt) {
+void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track) {
     if (paths.isEmpty()) {
         return;
     }
@@ -528,7 +814,7 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt) {
 
     // El análisis abre los archivos: fuera del hilo de la interfaz.
     QPointer<Editor> self(this);
-    QThreadPool::globalInstance()->start([self, paths, placeAt] {
+    QThreadPool::globalInstance()->start([self, paths, placeAt, track] {
         auto items = std::make_shared<std::vector<MediaItem>>();
         QStringList errors;
         for (const QString& path : paths) {
@@ -560,16 +846,17 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt) {
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, items, errors, placeAt] {
+            [self, items, errors, placeAt, track] {
                 if (self) {
-                    self->finishImport(std::move(*items), errors, placeAt);
+                    self->finishImport(std::move(*items), errors, placeAt, track);
                 }
             },
             Qt::QueuedConnection);
     });
 }
 
-void Editor::finishImport(std::vector<MediaItem> items, QStringList errors, qint64 placeAt) {
+void Editor::finishImport(std::vector<MediaItem> items, QStringList errors, qint64 placeAt,
+                          int track) {
     --m_importing;
     emit importingChanged();
     if (!errors.isEmpty()) {
@@ -581,6 +868,7 @@ void Editor::finishImport(std::vector<MediaItem> items, QStringList errors, qint
     std::int64_t end = -1;
     const QString label =
         placeAt >= 0 ? QStringLiteral("Añadir a la línea de tiempo") : QStringLiteral("Importar");
+    const sharkcut::PlaceTarget target = placeTarget(track);
     edit(label, [&](Project& p) {
         bool changed = false;
         std::int64_t at = placeAt;
@@ -592,7 +880,7 @@ void Editor::finishImport(std::vector<MediaItem> items, QStringList errors, qint
             }
             if (placeAt >= 0) {
                 adoptSettings(p, id);
-                if (const ObjectId clip = sharkcut::placeClip(p, id, at)) {
+                if (const ObjectId clip = sharkcut::placeClip(p, id, at, target)) {
                     at = p.clip(clip)->end();
                     end = at;
                     changed = true;
@@ -627,12 +915,68 @@ bool Editor::edit(const QString& label, const std::function<bool(Project&)>& cha
     return true;
 }
 
-void Editor::addMedia(qint64 mediaId, qint64 frame) {
+sharkcut::PlaceTarget Editor::placeTarget(int track) const {
+    const Project& p = project();
+    if (track < 0 || static_cast<std::size_t>(track) >= p.tracks.size()) {
+        return {};
+    }
+    // La pista donde se suelta y su pareja del otro tipo (V2 ↔ A2).
+    const std::size_t number = p.trackNumber(static_cast<std::size_t>(track));
+    return {number, number};
+}
+
+// --- Pistas -------------------------------------------------------------------------
+
+void Editor::addTrack(const QString& kind) {
+    const bool video = kind == QLatin1String("video");
+    edit(video ? QStringLiteral("Añadir pista de video") : QStringLiteral("Añadir pista de audio"),
+         [video](Project& p) {
+             sharkcut::addTrack(p, video ? sharkcut::TrackKind::Video : sharkcut::TrackKind::Audio);
+             return true;
+         });
+}
+
+void Editor::removeTrack(int track) {
+    const QString name =
+        QString::fromStdString(project().trackName(static_cast<std::size_t>(track)));
+    edit(QStringLiteral("Quitar la pista %1").arg(name), [track](Project& p) {
+        return track >= 0 && sharkcut::removeTrack(p, static_cast<std::size_t>(track));
+    });
+}
+
+void Editor::setTrackHidden(int track, bool hidden) {
+    edit(hidden ? QStringLiteral("Ocultar pista") : QStringLiteral("Mostrar pista"),
+         [track, hidden](Project& p) {
+             return track >= 0 &&
+                    sharkcut::setTrackHidden(p, static_cast<std::size_t>(track), hidden);
+         });
+}
+
+void Editor::setTrackMuted(int track, bool muted) {
+    edit(muted ? QStringLiteral("Silenciar pista") : QStringLiteral("Activar sonido de la pista"),
+         [track, muted](Project& p) {
+             return track >= 0 &&
+                    sharkcut::setTrackMuted(p, static_cast<std::size_t>(track), muted);
+         });
+}
+
+void Editor::setTrackLocked(int track, bool locked) {
+    edit(locked ? QStringLiteral("Bloquear pista") : QStringLiteral("Desbloquear pista"),
+         [track, locked](Project& p) {
+             return track >= 0 &&
+                    sharkcut::setTrackLocked(p, static_cast<std::size_t>(track), locked);
+         });
+}
+
+// --- Clips --------------------------------------------------------------------------
+
+void Editor::addMedia(qint64 mediaId, qint64 frame, int track) {
     std::int64_t end = -1;
+    const sharkcut::PlaceTarget target = placeTarget(track);
     const bool placed = edit(QStringLiteral("Añadir clip"), [&](Project& p) {
         const auto id = static_cast<ObjectId>(mediaId);
         adoptSettings(p, id);
-        const ObjectId clip = sharkcut::placeClip(p, id, frame < 0 ? p.length() : frame);
+        const ObjectId clip = sharkcut::placeClip(p, id, frame < 0 ? p.length() : frame, target);
         if (clip != 0) {
             end = p.clip(clip)->end();
         }
@@ -697,6 +1041,10 @@ void Editor::splitClip(qint64 clipId, qint64 frame) {
 }
 
 void Editor::removeSelection() {
+    if (m_selectedTransition != 0) {
+        removeTransition(static_cast<qint64>(m_selectedTransition));
+        return;
+    }
     const std::vector<ObjectId> selected = m_selection;
     edit(QStringLiteral("Quitar"),
          [&selected](Project& p) { return sharkcut::removeClips(p, selected); });
@@ -722,17 +1070,149 @@ qint64 Editor::limitTrimEnd(qint64 clipId, qint64 frame) const {
     return sharkcut::limitTrimEnd(project(), static_cast<ObjectId>(clipId), frame);
 }
 
-void Editor::moveClips(qint64 clipId, qint64 delta) {
+void Editor::moveClips(qint64 clipId, qint64 delta, int trackShift) {
     const auto id = static_cast<ObjectId>(clipId);
+    const auto ref = project().findClip(id);
+    if (!ref) {
+        return;
+    }
+    const sharkcut::TrackKind kind = project().tracks[ref->track].kind;
     const std::vector<ObjectId> ids = isSelected(clipId) ? m_selection : std::vector<ObjectId>{id};
-    edit(QStringLiteral("Mover"),
-         [&ids, delta](Project& p) { return sharkcut::moveClips(p, ids, delta); });
+    edit(trackShift != 0 ? QStringLiteral("Mover a otra pista") : QStringLiteral("Mover"),
+         [&ids, delta, trackShift, kind](Project& p) {
+             return sharkcut::moveClips(p, ids, delta, trackShift, kind);
+         });
 }
 
 qint64 Editor::limitMove(qint64 clipId, qint64 delta) const {
     const auto id = static_cast<ObjectId>(clipId);
     const std::vector<ObjectId> ids = isSelected(clipId) ? m_selection : std::vector<ObjectId>{id};
     return sharkcut::limitMove(project(), ids, delta);
+}
+
+int Editor::limitTrackShift(qint64 clipId, int trackShift) const {
+    const auto id = static_cast<ObjectId>(clipId);
+    const auto ref = project().findClip(id);
+    if (!ref) {
+        return 0;
+    }
+    const std::vector<ObjectId> ids = isSelected(clipId) ? m_selection : std::vector<ObjectId>{id};
+    return sharkcut::limitTrackShift(project(), ids, project().tracks[ref->track].kind, trackShift);
+}
+
+sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVariantMap& values) {
+    auto take = [&values](const char* key, double& member) {
+        const auto it = values.find(QLatin1String(key));
+        if (it != values.end()) {
+            member = it->toDouble();
+        }
+    };
+    take("x", t.x);
+    take("y", t.y);
+    take("scale", t.scale);
+    take("opacity", t.opacity);
+    take("cropLeft", t.cropLeft);
+    take("cropTop", t.cropTop);
+    take("cropRight", t.cropRight);
+    take("cropBottom", t.cropBottom);
+    return sharkcut::clampTransform(t);
+}
+
+void Editor::previewTransform(qint64 clipId, const QVariantMap& values) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const auto ref = project().findClip(id);
+    if (!ref || project().tracks[ref->track].kind != sharkcut::TrackKind::Video ||
+        project().tracks[ref->track].locked) {
+        return;
+    }
+    const sharkcut::ClipTransform base =
+        m_previewClip == id ? m_previewTransform : project().clip(id)->transform;
+    m_previewClip = id;
+    m_previewTransform = withValues(base, values);
+    emit selectedClipChanged();
+    emit compositionChanged();
+}
+
+void Editor::endPreview() {
+    if (m_previewClip != 0) {
+        m_previewClip = 0;
+        emit selectedClipChanged();
+        emit compositionChanged();
+    }
+}
+
+void Editor::setClipTransform(qint64 clipId, const QVariantMap& values, const QString& label) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    if (!clip) {
+        return;
+    }
+    // Lo que se previsualizaba es la base: así un arrastre termina donde se soltó.
+    const sharkcut::ClipTransform t =
+        withValues(m_previewClip == id ? m_previewTransform : clip->transform, values);
+    m_previewClip = 0;
+    if (!edit(label.isEmpty() ? QStringLiteral("Transformar") : label,
+              [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); })) {
+        emit selectedClipChanged();
+        emit compositionChanged();
+    }
+}
+
+void Editor::fitClip(qint64 clipId, bool fill) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    if (!clip) {
+        return;
+    }
+    sharkcut::ClipTransform t = clip->transform;
+    t.scale = 1.0;
+    const CanvasBox base = canvasBox(*clip, t); // a escala 1, con su recorte
+    if (base.width <= 0 || base.height <= 0) {
+        return;
+    }
+    const double canvasW = project().settings.width;
+    const double canvasH = project().settings.height;
+    const double sx = canvasW / base.width;
+    const double sy = canvasH / base.height;
+    t.scale = fill ? std::max(sx, sy) : std::min(sx, sy);
+    // Centrar la parte visible (no el video entero, si está recortado).
+    t.x = -(t.cropLeft - t.cropRight) / 2.0 * base.fullWidth * t.scale;
+    t.y = -(t.cropTop - t.cropBottom) / 2.0 * base.fullHeight * t.scale;
+    m_previewClip = 0;
+    edit(fill ? QStringLiteral("Rellenar el lienzo") : QStringLiteral("Ajustar al lienzo"),
+         [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); });
+}
+
+void Editor::resetTransform(qint64 clipId) {
+    const auto id = static_cast<ObjectId>(clipId);
+    m_previewClip = 0;
+    edit(QStringLiteral("Restablecer transformación"),
+         [id](Project& p) { return sharkcut::setClipTransform(p, id, {}); });
+}
+
+qint64 Editor::clipAtCanvas(double x, double y) const {
+    const auto layers = project().videoLayersAt(m_currentFrame);
+    for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+        const sharkcut::ClipTransform t = transformOf(it->clip->id);
+        const CanvasBox box = canvasBox(*it->clip, t);
+        if (t.opacity > 0.0 && x >= box.left && x < box.left + box.width && y >= box.top &&
+            y < box.top + box.height) {
+            return static_cast<qint64>(it->clip->id);
+        }
+    }
+    return 0;
+}
+
+void Editor::setClipVolume(qint64 clipId, double volumeDb) {
+    const auto id = static_cast<ObjectId>(clipId);
+    edit(QStringLiteral("Volumen"),
+         [id, volumeDb](Project& p) { return sharkcut::setClipVolume(p, id, volumeDb); });
+}
+
+void Editor::unlinkSelection() {
+    const std::vector<ObjectId> selected = m_selection;
+    edit(QStringLiteral("Desvincular audio y video"),
+         [&selected](Project& p) { return sharkcut::unlinkClips(p, selected); });
 }
 
 void Editor::undo() {
@@ -752,6 +1232,7 @@ void Editor::select(qint64 clipId, bool add) {
     if (!project().clip(id)) {
         return;
     }
+    m_selectedTransition = 0;
     if (!add) {
         m_selection = {id};
     } else if (isSelected(clipId)) {
@@ -766,10 +1247,268 @@ void Editor::select(qint64 clipId, bool add) {
 }
 
 void Editor::clearSelection() {
-    if (!m_selection.empty()) {
+    if (!m_selection.empty() || m_selectedTransition != 0) {
         m_selection.clear();
+        m_selectedTransition = 0;
         emit selectionChanged();
     }
+}
+
+// --- Transiciones -------------------------------------------------------------------
+
+QVariantList Editor::transitions() const {
+    QVariantList list;
+    const Project& p = project();
+    for (std::size_t t = 0; t < p.tracks.size(); ++t) {
+        for (const sharkcut::Transition& tr : p.tracks[t].transitions) {
+            QVariantMap entry;
+            entry[QStringLiteral("id")] = static_cast<qint64>(tr.id);
+            entry[QStringLiteral("track")] = static_cast<int>(t);
+            entry[QStringLiteral("cut")] = static_cast<qint64>(p.cutOf(tr));
+            entry[QStringLiteral("before")] = static_cast<qint64>(tr.before);
+            entry[QStringLiteral("after")] = static_cast<qint64>(tr.after);
+            entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(tr.params.type).name);
+            entry[QStringLiteral("sound")] = tr.sound != 0;
+            entry[QStringLiteral("locked")] = p.tracks[t].locked;
+            const sharkcut::TransitionLimits limits = sharkcut::transitionLimits(p, tr.id);
+            entry[QStringLiteral("maxBefore")] = static_cast<qint64>(limits.maxBefore);
+            entry[QStringLiteral("maxAfter")] = static_cast<qint64>(limits.maxAfter);
+            list.append(entry);
+        }
+    }
+    return list;
+}
+
+QStringList Editor::transitionNames() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kTransitions) {
+        names << fromView(info.name);
+    }
+    return names;
+}
+
+QStringList Editor::easingNames() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kEasings) {
+        names << fromView(info.name);
+    }
+    return names;
+}
+
+QStringList Editor::soundNames() const {
+    QStringList names{QStringLiteral("Ninguno")};
+    for (const auto& effect : sharkcut::kSoundEffects) {
+        names << fromView(effect.name);
+    }
+    return names;
+}
+
+QStringList Editor::transitionSounds() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kTransitions) {
+        const sharkcut::SoundEffect* effect =
+            sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type));
+        names << (effect ? fromView(effect->name) : QString());
+    }
+    return names;
+}
+
+QVariantMap Editor::selectedTransition() const {
+    const Project& p = project();
+    const sharkcut::Transition* t = p.transition(m_selectedTransition);
+    if (!t) {
+        return {};
+    }
+    const auto ref = p.findTransition(t->id);
+    QVariantMap result;
+    result[QStringLiteral("id")] = static_cast<qint64>(t->id);
+    result[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(t->params.type).name);
+    result[QStringLiteral("track")] = QString::fromStdString(p.trackName(ref->track));
+    result[QStringLiteral("locked")] = p.tracks[ref->track].locked;
+    result[QStringLiteral("typeIndex")] = static_cast<int>(t->params.type);
+    result[QStringLiteral("before")] = static_cast<qint64>(t->before);
+    result[QStringLiteral("after")] = static_cast<qint64>(t->after);
+    result[QStringLiteral("length")] = static_cast<qint64>(t->length());
+    result[QStringLiteral("intensity")] = t->params.intensity;
+    result[QStringLiteral("blur")] = t->params.blur;
+    result[QStringLiteral("easingIndex")] = static_cast<int>(t->params.easing);
+    const sharkcut::TransitionLimits limits = sharkcut::transitionLimits(p, t->id);
+    result[QStringLiteral("maxBefore")] = static_cast<qint64>(limits.maxBefore);
+    result[QStringLiteral("maxAfter")] = static_cast<qint64>(limits.maxAfter);
+    // Qué sonido lleva: por el archivo de su clip.
+    int soundIndex = 0;
+    if (const Clip* sound = p.clip(t->sound)) {
+        if (const MediaItem* item = p.findMedia(sound->media)) {
+            const QString file = QFileInfo(QString::fromStdString(item->path)).fileName();
+            for (std::size_t i = 0; i < sharkcut::kSoundEffects.size(); ++i) {
+                if (fromView(sharkcut::kSoundEffects[i].file) == file) {
+                    soundIndex = static_cast<int>(i) + 1;
+                }
+            }
+        }
+        result[QStringLiteral("soundClip")] = static_cast<qint64>(sound->id);
+        result[QStringLiteral("soundVolumeDb")] = sound->volumeDb;
+    }
+    result[QStringLiteral("soundIndex")] = soundIndex;
+    result[QStringLiteral("hasSound")] = t->sound != 0;
+    return result;
+}
+
+bool Editor::placeSound(Project& p, ObjectId transition, std::string_view soundId) {
+    const sharkcut::SoundEffect* effect = sharkcut::soundEffect(soundId);
+    if (!effect) {
+        return false;
+    }
+    const ObjectId media = soundMedia(p, *effect);
+    const std::int64_t hit = sharkcut::rescale(effect->hitUs, sharkcut::kMicroseconds,
+                                               p.settings.frameRate.frameDuration());
+    return sharkcut::placeTransitionSound(p, transition, media, hit, kSoundVolumeDb) != 0;
+}
+
+void Editor::addTransition(int track, qint64 cut, int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size()) ||
+        track < 0) {
+        return;
+    }
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    const bool added = edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        sharkcut::TransitionParams params = info.defaults;
+        // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+        const sharkcut::FrameRate rate = p.settings.frameRate;
+        params.durationFrames = std::max<std::int64_t>(
+            2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+        const sharkcut::Transition* before = nullptr;
+        for (const sharkcut::Transition& t :
+             p.tracks[static_cast<std::size_t>(track)].transitions) {
+            if (p.cutOf(t) == cut) {
+                before = &t;
+            }
+        }
+        const ObjectId previousSound = before ? before->sound : 0;
+        created = sharkcut::addTransition(p, static_cast<std::size_t>(track), cut, params);
+        if (created == 0) {
+            return false;
+        }
+        // El sonido del tipo nuevo sustituye al que hubiera.
+        const std::string_view sound = sharkcut::defaultSoundFor(info.type);
+        if (!sound.empty()) {
+            placeSound(p, created, sound);
+        } else if (previousSound != 0) {
+            sharkcut::removeClips(p, {previousSound});
+        }
+        return true;
+    });
+    if (added) {
+        m_selection.clear();
+        m_selectedTransition = created;
+        emit selectionChanged();
+    } else if (created == 0) {
+        setError(QStringLiteral("Las transiciones van en el corte entre dos clips seguidos de una "
+                                "pista de video"));
+    }
+}
+
+void Editor::removeTransition(qint64 id) {
+    const auto transition = static_cast<ObjectId>(id);
+    if (edit(QStringLiteral("Quitar transición"),
+             [transition](Project& p) { return sharkcut::removeTransition(p, transition); })) {
+        if (m_selectedTransition == transition) {
+            m_selectedTransition = 0;
+            emit selectionChanged();
+        }
+    }
+}
+
+void Editor::selectTransition(qint64 id) {
+    const auto transition = static_cast<ObjectId>(id);
+    if (!project().transition(transition)) {
+        return;
+    }
+    m_selection.clear();
+    m_selectedTransition = transition;
+    emit selectionChanged();
+}
+
+void Editor::setTransitionType(qint64 id, int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const auto transition = static_cast<ObjectId>(id);
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    edit(QStringLiteral("Tipo de transición"), [&](Project& p) {
+        const sharkcut::Transition* t = p.transition(transition);
+        if (!t || t->params.type == info.type) {
+            return false;
+        }
+        const ObjectId oldSound = t->sound;
+        if (!sharkcut::setTransitionParams(p, transition, info.defaults)) {
+            return false;
+        }
+        const std::string_view sound = sharkcut::defaultSoundFor(info.type);
+        if (!sound.empty()) {
+            placeSound(p, transition, sound);
+        } else if (oldSound != 0) {
+            sharkcut::removeClips(p, {oldSound});
+        }
+        return true;
+    });
+}
+
+void Editor::setTransitionValue(qint64 id, const QString& key, double value) {
+    const auto transition = static_cast<ObjectId>(id);
+    const sharkcut::Transition* t = project().transition(transition);
+    if (!t) {
+        return;
+    }
+    sharkcut::TransitionParams params = t->params;
+    QString label;
+    if (key == QLatin1String("intensity")) {
+        params.intensity = value;
+        label = QStringLiteral("Intensidad de la transición");
+    } else if (key == QLatin1String("blur")) {
+        params.blur = value;
+        label = QStringLiteral("Desenfoque de la transición");
+    } else if (key == QLatin1String("easing")) {
+        const auto index = static_cast<std::size_t>(std::max(0.0, value));
+        if (index >= sharkcut::kEasings.size()) {
+            return;
+        }
+        params.easing = sharkcut::kEasings[index].easing;
+        label = QStringLiteral("Curva de la transición");
+    } else {
+        return;
+    }
+    edit(label, [transition, params](Project& p) {
+        return sharkcut::setTransitionParams(p, transition, params);
+    });
+}
+
+void Editor::setTransitionLength(qint64 id, qint64 before, qint64 after) {
+    const auto transition = static_cast<ObjectId>(id);
+    edit(QStringLiteral("Duración de la transición"), [transition, before, after](Project& p) {
+        return sharkcut::setTransitionLength(p, transition, before, after);
+    });
+}
+
+void Editor::setTransitionSound(qint64 id, int soundIndex) {
+    const auto transition = static_cast<ObjectId>(id);
+    edit(QStringLiteral("Sonido de la transición"), [&](Project& p) {
+        const sharkcut::Transition* t = p.transition(transition);
+        if (!t) {
+            return false;
+        }
+        if (soundIndex <= 0) {
+            return t->sound != 0 && sharkcut::removeClips(p, {t->sound});
+        }
+        if (static_cast<std::size_t>(soundIndex) > sharkcut::kSoundEffects.size()) {
+            return false;
+        }
+        return placeSound(p, transition,
+                          sharkcut::kSoundEffects[static_cast<std::size_t>(soundIndex) - 1].id);
+    });
 }
 
 bool Editor::isSelected(qint64 clipId) const {
@@ -782,12 +1521,34 @@ void Editor::onProjectChanged() {
     // La selección solo conserva los clips que siguen existiendo; su descripción
     // puede cambiar aunque sigan (recortes, movimientos).
     std::erase_if(m_selection, [this](ObjectId id) { return project().clip(id) == nullptr; });
+    if (m_previewClip != 0 && !project().clip(m_previewClip)) {
+        m_previewClip = 0;
+    }
+    if (m_selectedTransition != 0 && !project().transition(m_selectedTransition)) {
+        m_selectedTransition = 0;
+    }
     emit selectionChanged();
 
+    // Solo se recolocan los hilos de video o se reinicia el audio si cambia lo que
+    // tienen que leer: mover la facecam o cambiar un volumen no corta la reproducción.
+    const std::shared_ptr<const Project> now = m_history.snapshot();
+    const bool videoChanged = !m_prepared || !sameVideo(*m_prepared, *now);
+    const bool audioChanged = !m_prepared || !sameAudio(*m_prepared, *now);
+    m_prepared = now;
+    if (!videoChanged && !audioChanged) {
+        emit projectChanged();
+        emit modifiedChanged();
+        emit compositionChanged();
+        return;
+    }
     const bool wasPlaying = m_playing;
     pause();
-    resetVideoSlots();
-    restartAudio();
+    if (videoChanged) {
+        resetVideoSlots();
+    }
+    if (audioChanged) {
+        restartAudio();
+    }
     emit projectChanged();
     emit modifiedChanged();
     seek(m_currentFrame);
@@ -801,7 +1562,7 @@ void Editor::onProjectChanged() {
 void Editor::restartAudio() {
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
-    if (!m_audioOutput || project().tracks[sharkcut::kAudioTrack].clips.empty()) {
+    if (!m_audioOutput || !project().hasAudibleAudio()) {
         return; // sin audio: el reloj usa un temporizador
     }
     const Project copy = project();
@@ -822,35 +1583,99 @@ void Editor::restartAudio() {
 
 void Editor::resetVideoSlots() {
     // Los hilos se conservan (se reutilizan si el medio sigue en uso), pero se recolocan.
-    for (VideoSlot& slot : m_slots) {
-        if (slot.worker && !project().findMedia(slot.media)) {
-            slot.worker.reset();
-            slot.media = 0;
+    const Project& p = project();
+    m_video.resize(p.tracks.size());
+    for (std::size_t t = 0; t < m_video.size(); ++t) {
+        TrackVideo& track = m_video[t];
+        const bool video = p.tracks[t].kind == sharkcut::TrackKind::Video && !p.tracks[t].hidden;
+        for (VideoSlot& slot : track.decoders) {
+            if (slot.worker && (!video || !p.findMedia(slot.media))) {
+                slot.worker.reset();
+                slot.media = 0;
+            }
+            slot.clip = 0;
+            slot.seekIndex = -1;
         }
-        slot.clip = 0;
-        slot.seekIndex = -1;
+        // Lo último que se veía se conserva mientras llega lo nuevo, si sigue en la pista.
+        for (TrackVideo::Shown& shown : track.shown) {
+            const auto ref = p.findClip(shown.clip);
+            if (!video || !ref || ref->track != t) {
+                shown = {};
+            }
+        }
+        if (!video) {
+            track.last.reset();
+        }
     }
-    m_current = -1;
 }
 
-std::int64_t Editor::sourceIndex(const Clip& clip, std::int64_t frame) const {
-    const MediaItem* item = project().findMedia(clip.media);
-    if (!item) {
-        return 0;
+std::vector<std::size_t> Editor::playedVideoTracks() const {
+    std::vector<std::size_t> result;
+    const Project& p = project();
+    for (std::size_t t = 0; t < p.tracks.size() && t < m_video.size(); ++t) {
+        if (p.tracks[t].kind == sharkcut::TrackKind::Video && !p.tracks[t].hidden) {
+            result.push_back(t);
+        }
     }
-    return sharkcut::microsecondsToFrame(project().mediaTimeUs(clip, frame), item->frameRate);
+    return result;
 }
 
-int Editor::slotFor(const Clip& clip, int avoid) {
-    for (int i = 0; i < static_cast<int>(m_slots.size()); ++i) {
-        if (i != avoid && m_slots[i].worker && m_slots[i].clip == clip.id) {
+std::vector<Editor::Need> Editor::needsAt(std::size_t track, std::int64_t frame) const {
+    const Project& p = project();
+    if (const sharkcut::Transition* t = p.transitionAt(track, frame)) {
+        const Clip* a = p.clip(t->from);
+        const Clip* b = p.clip(t->to);
+        if (a && b) {
+            return {{a, p.mediaFrameIndex(*a, frame)}, {b, p.mediaFrameIndex(*b, frame)}};
+        }
+    }
+    if (const Clip* clip = p.clipAt(track, frame)) {
+        return {{clip, p.mediaFrameIndex(*clip, frame)}};
+    }
+    return {};
+}
+
+std::optional<Editor::Need> Editor::upcoming(std::size_t track, std::int64_t frame) const {
+    const Project& p = project();
+    const std::vector<Need> now = needsAt(track, frame);
+    for (const Clip& clip : p.tracks[track].clips) {
+        if (clip.start <= frame || std::any_of(now.begin(), now.end(), [&clip](const Need& n) {
+                return n.clip->id == clip.id;
+            })) {
+            continue;
+        }
+        // Si entra con una transición, se ve desde antes de su inicio.
+        const sharkcut::Transition* into = p.transitionInto(clip.id);
+        const std::int64_t first = clip.start - (into ? into->before : 0);
+        return Need{&clip, p.mediaFrameIndex(clip, std::max(first, frame + 1))};
+    }
+    return std::nullopt;
+}
+
+int Editor::slotWith(std::size_t track, ObjectId clip) const {
+    const auto& decoders = m_video[track].decoders;
+    for (int i = 0; i < static_cast<int>(decoders.size()); ++i) {
+        if (decoders[static_cast<std::size_t>(i)].worker &&
+            decoders[static_cast<std::size_t>(i)].clip == clip) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
+    auto& decoders = m_video[track].decoders;
+    for (int i = 0; i < static_cast<int>(decoders.size()); ++i) {
+        if (i != avoid && decoders[static_cast<std::size_t>(i)].worker &&
+            decoders[static_cast<std::size_t>(i)].clip == clip.id) {
             return i;
         }
     }
     // Uno libre, mejor si ya tiene abierto el mismo medio.
     int choice = -1;
-    for (int i = 0; i < static_cast<int>(m_slots.size()); ++i) {
-        if (i != avoid && m_slots[i].worker && m_slots[i].media == clip.media) {
+    for (int i = 0; i < static_cast<int>(decoders.size()); ++i) {
+        if (i != avoid && decoders[static_cast<std::size_t>(i)].worker &&
+            decoders[static_cast<std::size_t>(i)].media == clip.media) {
             choice = i;
             break;
         }
@@ -858,7 +1683,7 @@ int Editor::slotFor(const Clip& clip, int avoid) {
     if (choice < 0) {
         choice = avoid == 0 ? 1 : 0;
     }
-    VideoSlot& slot = m_slots[static_cast<std::size_t>(choice)];
+    VideoSlot& slot = decoders[static_cast<std::size_t>(choice)];
     if (!slot.worker || slot.media != clip.media) {
         slot.worker.reset();
         const MediaItem* item = project().findMedia(clip.media);
@@ -879,68 +1704,91 @@ int Editor::slotFor(const Clip& clip, int avoid) {
     return choice;
 }
 
-void Editor::placeSlot(int slot, const Clip& clip, std::int64_t frame, bool always) {
-    VideoSlot& s = m_slots[static_cast<std::size_t>(slot)];
-    const std::int64_t index = sourceIndex(clip, frame);
-    if (always || !s.worker->hasFrame(index)) {
+void Editor::placeSlot(std::size_t track, int slot, std::int64_t index, bool force) {
+    VideoSlot& s = m_video[track].decoders[static_cast<std::size_t>(slot)];
+    if (force || !s.worker->hasFrame(index)) {
         s.worker->seek(index);
     }
     s.seekIndex = index;
 }
 
-const Clip* Editor::nextVideoClip(std::int64_t frame) const {
-    const auto& clips = project().tracks[sharkcut::kVideoTrack].clips;
-    const auto it = std::upper_bound(clips.begin(), clips.end(), frame,
-                                     [](std::int64_t f, const Clip& c) { return f < c.start; });
-    return it != clips.end() ? &*it : nullptr;
-}
-
-void Editor::prepareNext(std::int64_t frame) {
-    const Clip* next = nextVideoClip(frame);
-    if (!next) {
-        return;
+void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
+    const std::vector<Need> needs = needsAt(t, frame);
+    int used = -1; // hilo ya ocupado por otro clip que se ve
+    for (const Need& need : needs) {
+        int slot = slotWith(t, need.clip->id);
+        if (slot >= 0 && slot != used) {
+            // Ya estaba preparado (o reproduciéndose): tras un salto, se recoloca.
+            if (seeking) {
+                placeSlot(t, slot, need.index, m_playing);
+            }
+        } else {
+            slot = slotFor(t, *need.clip, used);
+            placeSlot(t, slot, need.index, true);
+        }
+        used = slot;
     }
-    const int slot = slotFor(*next, m_current);
-    VideoSlot& s = m_slots[static_cast<std::size_t>(slot)];
-    const std::int64_t index = sourceIndex(*next, next->start);
-    if (s.seekIndex != index) {
-        s.worker->seek(index); // su primer fotograma, preparado de antemano
-        s.seekIndex = index;
+    // Con un hilo libre, se prepara lo siguiente en su primer fotograma.
+    if (needs.size() < 2) {
+        if (const std::optional<Need> next = upcoming(t, frame)) {
+            int slot = slotWith(t, next->clip->id);
+            if (slot < 0 || slot == used) {
+                slot = slotFor(t, *next->clip, used);
+            }
+            VideoSlot& s = m_video[t].decoders[static_cast<std::size_t>(slot)];
+            if (s.seekIndex != next->index) {
+                s.worker->seek(next->index);
+                s.seekIndex = next->index;
+            }
+        }
     }
 }
 
 void Editor::requestFrames(qint64 frame) {
-    const Clip* current = project().clipAt(sharkcut::kVideoTrack, frame);
-    if (current) {
-        const bool assigned =
-            m_current >= 0 && m_slots[static_cast<std::size_t>(m_current)].clip == current->id;
-        const int slot = assigned ? m_current : slotFor(*current, -1);
-        m_current = slot;
-        placeSlot(slot, *current, frame, m_playing || !assigned);
-    } else {
-        m_current = -1;
+    for (std::size_t t : playedVideoTracks()) {
+        assignTrack(t, frame, true);
     }
-    prepareNext(frame);
+}
+
+bool Editor::takeTrackFrame(std::size_t t, qint64 frame) {
+    TrackVideo& track = m_video[t];
+    const std::vector<Need> needs = needsAt(t, frame);
+    if (needs.empty()) {
+        track.shown = {}; // hueco: transparente
+        track.last.reset();
+        return true;
+    }
+    bool all = true;
+    std::array<TrackVideo::Shown, 2> shown;
+    for (std::size_t k = 0; k < needs.size() && k < shown.size(); ++k) {
+        const Need& need = needs[k];
+        shown[k].clip = need.clip->id;
+        shown[k].frame = track.frameOf(need.clip->id);
+        const int slot = slotWith(t, need.clip->id);
+        if (slot < 0) {
+            all = false;
+            continue;
+        }
+        DecodeWorker& worker = *track.decoders[static_cast<std::size_t>(slot)].worker;
+        if (auto f = worker.takeUpTo(need.index)) {
+            shown[k].frame = std::move(f);
+        }
+        if (shown[k].frame) {
+            track.last = shown[k].frame;
+        }
+        const bool exact = shown[k].frame && shown[k].frame->index == need.index;
+        all = all && (exact || worker.finished());
+    }
+    track.shown = shown;
+    return all;
 }
 
 bool Editor::takeFrames(qint64 frame) {
-    const Clip* current = project().clipAt(sharkcut::kVideoTrack, frame);
-    if (!current) {
-        m_frame.reset(); // hueco: negro
-        m_frameClip = 0;
-        return true;
+    bool all = true;
+    for (std::size_t t : playedVideoTracks()) {
+        all = takeTrackFrame(t, frame) && all;
     }
-    if (m_current < 0 || m_slots[static_cast<std::size_t>(m_current)].clip != current->id) {
-        return false;
-    }
-    DecodeWorker& worker = *m_slots[static_cast<std::size_t>(m_current)].worker;
-    const std::int64_t index = sourceIndex(*current, frame);
-    if (auto f = worker.takeUpTo(index)) {
-        m_frame = std::move(f);
-        m_frameClip = current->id;
-    }
-    const bool exact = m_frame && m_frameClip == current->id && m_frame->index == index;
-    return exact || worker.finished();
+    return all;
 }
 
 void Editor::onFramesAvailable() {
@@ -980,8 +1828,10 @@ void Editor::seek(qint64 frame) {
     const qint64 total = frameCount();
     if (total <= 0) {
         setCurrentFrame(0);
-        m_frame.reset();
-        m_frameClip = 0;
+        for (TrackVideo& track : m_video) {
+            track.shown = {};
+            track.last.reset();
+        }
         m_pendingFrame = -1;
         setBusy(false);
         emit compositionChanged();
@@ -994,7 +1844,7 @@ void Editor::seek(qint64 frame) {
         m_clock.start(sharkcut::frameToMicroseconds(frame, project().settings.frameRate));
         return;
     }
-    // En pausa: se muestra en cuanto llegue el fotograma de ese instante.
+    // En pausa: se muestra en cuanto lleguen los fotogramas de ese instante.
     if (takeFrames(frame)) {
         m_pendingFrame = -1;
         setBusy(false);
@@ -1047,25 +1897,11 @@ void Editor::advance() {
     const bool reachedEnd = target >= last;
     target = std::min(target, last);
 
-    // Al entrar en otro clip se usa el hilo que ya estaba preparado.
-    if (const Clip* current = project().clipAt(sharkcut::kVideoTrack, target)) {
-        if (m_current < 0 || m_slots[static_cast<std::size_t>(m_current)].clip != current->id) {
-            int slot = -1;
-            for (int i = 0; i < static_cast<int>(m_slots.size()); ++i) {
-                if (m_slots[static_cast<std::size_t>(i)].worker &&
-                    m_slots[static_cast<std::size_t>(i)].clip == current->id) {
-                    slot = i;
-                }
-            }
-            if (slot < 0) {
-                slot = slotFor(*current, -1);
-                placeSlot(slot, *current, target, true);
-            }
-            m_current = slot;
-        }
+    // Al entrar en otro clip (o en una transición) se usa el hilo que ya estaba preparado.
+    for (std::size_t t : playedVideoTracks()) {
+        assignTrack(t, target, false);
+        takeTrackFrame(t, target);
     }
-    prepareNext(target);
-    takeFrames(target);
     setCurrentFrame(target);
     emit compositionChanged();
     if (reachedEnd) {

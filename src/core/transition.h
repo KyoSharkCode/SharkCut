@@ -27,6 +27,8 @@ struct TransitionParams {
     double intensity = 0.6;           // 0–1: cuánto zoom, giro, desplazamiento o temblor
     double blur = 0.6;                // 0–1: desenfoque de movimiento
     Easing easing = Easing::EaseInOutExpo;
+
+    friend bool operator==(const TransitionParams&, const TransitionParams&) = default;
 };
 
 struct TransitionInfo {

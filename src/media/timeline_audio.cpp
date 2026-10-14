@@ -10,8 +10,7 @@
 namespace sharkcut {
 
 TimelineAudioSource::TimelineAudioSource(Project project) : m_project(std::move(project)) {
-    const auto& clips = m_project.tracks.at(kAudioTrack).clips;
-    if (clips.empty()) {
+    if (!m_project.hasAudibleAudio()) {
         throw MediaError("La línea de tiempo no tiene audio");
     }
     m_info.streamIndex = 0;
@@ -19,30 +18,40 @@ TimelineAudioSource::TimelineAudioSource(Project project) : m_project(std::move(
     m_info.sampleRate = kAudioSampleRate;
     m_info.channels = kAudioChannels;
 
-    for (const Clip& clip : clips) {
-        Segment segment;
-        segment.start = samplesOf(clip.start);
-        segment.end = samplesOf(clip.end());
-        segment.sourceFirst = samplesOf(clip.in);
-        segment.media = clip.media;
-        if (segment.end > segment.start) {
-            m_segments.push_back(segment);
+    m_tracks.resize(m_project.tracks.size());
+    for (std::size_t t = 0; t < m_project.tracks.size(); ++t) {
+        const Track& track = m_project.tracks[t];
+        if (track.kind != TrackKind::Audio || track.muted) {
+            continue;
         }
-    }
-    // Fundidos en los cortes, salvo donde el audio continúa sin interrupción.
-    for (std::size_t i = 0; i < m_segments.size(); ++i) {
-        Segment& s = m_segments[i];
-        const bool continuesPrevious =
-            i > 0 && m_segments[i - 1].end == s.start && m_segments[i - 1].media == s.media &&
-            m_segments[i - 1].sourceFirst + (m_segments[i - 1].end - m_segments[i - 1].start) ==
-                s.sourceFirst;
-        s.fadeIn = !continuesPrevious;
-        if (i > 0) {
-            m_segments[i - 1].fadeOut = !continuesPrevious;
+        std::vector<Segment>& segments = m_tracks[t];
+        for (const Clip& clip : track.clips) {
+            Segment segment;
+            segment.start = samplesOf(clip.start);
+            segment.end = samplesOf(clip.end());
+            segment.sourceFirst = samplesOf(clip.in);
+            segment.media = clip.media;
+            segment.gain = static_cast<float>(gainFromDb(clip.volumeDb));
+            if (segment.end > segment.start) {
+                segments.push_back(segment);
+            }
         }
-    }
-    if (!m_segments.empty()) {
-        m_segments.back().fadeOut = true;
+        // Fundidos en los cortes, salvo donde el audio continúa sin interrupción.
+        for (std::size_t i = 0; i < segments.size(); ++i) {
+            Segment& s = segments[i];
+            const bool continuesPrevious =
+                i > 0 && segments[i - 1].end == s.start && segments[i - 1].media == s.media &&
+                segments[i - 1].gain == s.gain &&
+                segments[i - 1].sourceFirst + (segments[i - 1].end - segments[i - 1].start) ==
+                    s.sourceFirst;
+            s.fadeIn = !continuesPrevious;
+            if (i > 0) {
+                segments[i - 1].fadeOut = !continuesPrevious;
+            }
+        }
+        if (!segments.empty()) {
+            segments.back().fadeOut = true;
+        }
     }
     m_total = samplesOf(m_project.length());
 }
@@ -53,8 +62,9 @@ std::int64_t TimelineAudioSource::samplesOf(std::int64_t frames) const {
     return rescale(frames, m_project.settings.frameRate.frameDuration(), kAudioSampleDuration);
 }
 
-AudioDecoder* TimelineAudioSource::decoder(ObjectId media) {
-    if (const auto it = m_decoders.find(media); it != m_decoders.end()) {
+AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media) {
+    const DecoderKey key{track, media};
+    if (const auto it = m_decoders.find(key); it != m_decoders.end()) {
         return it->second.get();
     }
     if (m_unavailable.contains(media)) {
@@ -65,7 +75,7 @@ AudioDecoder* TimelineAudioSource::decoder(ObjectId media) {
         if (item) {
             auto opened = std::make_unique<AudioDecoder>(item->path);
             AudioDecoder* result = opened.get();
-            m_decoders.emplace(media, std::move(opened));
+            m_decoders.emplace(key, std::move(opened));
             return result;
         }
     } catch (const std::exception&) {
@@ -79,18 +89,20 @@ void TimelineAudioSource::seekToSample(std::int64_t sample) {
     m_position = std::clamp<std::int64_t>(sample, 0, m_total);
 }
 
-void TimelineAudioSource::readSegment(const Segment& segment, std::int64_t from, std::int64_t to,
-                                      float* out) {
-    AudioDecoder* source = decoder(segment.media);
-    if (!source) {
-        return; // ya está en silencio
+void TimelineAudioSource::mixSegment(std::size_t track, const Segment& segment, std::int64_t from,
+                                     std::int64_t to, float* out) {
+    AudioDecoder* source = decoder(track, segment.media);
+    if (!source || segment.gain <= 0.0f) {
+        return; // silencio: no suma nada
     }
     const std::int64_t wanted = segment.sourceFirst + (from - segment.start);
     if (source->position() != wanted) {
         source->seekToSample(wanted);
     }
-    auto remaining = static_cast<std::size_t>(to - from);
-    float* cursor = out;
+    const auto count = static_cast<std::size_t>(to - from);
+    m_scratch.assign(count * kAudioChannels, 0.0f);
+    std::size_t remaining = count;
+    float* cursor = m_scratch.data();
     while (remaining > 0) {
         const std::size_t got = source->read(cursor, remaining);
         if (got == 0) {
@@ -100,20 +112,19 @@ void TimelineAudioSource::readSegment(const Segment& segment, std::int64_t from,
         cursor += got * kAudioChannels;
     }
 
-    // Fundidos de los cortes.
+    // Volumen del clip y fundidos de los cortes.
     for (std::int64_t t = from; t < to; ++t) {
-        float gain = 1.0f;
+        float gain = segment.gain;
         if (segment.fadeIn && t - segment.start < kCutFade) {
             gain *= (static_cast<float>(t - segment.start) + 0.5f) / static_cast<float>(kCutFade);
         }
         if (segment.fadeOut && segment.end - t <= kCutFade) {
             gain *= (static_cast<float>(segment.end - t) - 0.5f) / static_cast<float>(kCutFade);
         }
-        if (gain < 1.0f) {
-            float* sample = out + static_cast<std::size_t>(t - from) * kAudioChannels;
-            for (int c = 0; c < kAudioChannels; ++c) {
-                sample[c] *= gain;
-            }
+        const auto offset = static_cast<std::size_t>(t - from) * kAudioChannels;
+        for (int c = 0; c < kAudioChannels; ++c) {
+            out[offset + static_cast<std::size_t>(c)] +=
+                m_scratch[offset + static_cast<std::size_t>(c)] * gain;
         }
     }
 }
@@ -128,13 +139,17 @@ std::size_t TimelineAudioSource::read(float* out, std::size_t frames) {
     const std::int64_t end = start + static_cast<std::int64_t>(n);
     std::memset(out, 0, n * kAudioChannels * sizeof(float));
 
-    // Primer segmento que termina después de `start`.
-    auto it = std::upper_bound(m_segments.begin(), m_segments.end(), start,
-                               [](std::int64_t t, const Segment& s) { return t < s.end; });
-    for (; it != m_segments.end() && it->start < end; ++it) {
-        const std::int64_t from = std::max(start, it->start);
-        const std::int64_t to = std::min(end, it->end);
-        readSegment(*it, from, to, out + static_cast<std::size_t>(from - start) * kAudioChannels);
+    for (std::size_t track = 0; track < m_tracks.size(); ++track) {
+        const std::vector<Segment>& segments = m_tracks[track];
+        // Primer segmento que termina después de `start`.
+        auto it = std::upper_bound(segments.begin(), segments.end(), start,
+                                   [](std::int64_t t, const Segment& s) { return t < s.end; });
+        for (; it != segments.end() && it->start < end; ++it) {
+            const std::int64_t from = std::max(start, it->start);
+            const std::int64_t to = std::min(end, it->end);
+            mixSegment(track, *it, from, to,
+                       out + static_cast<std::size_t>(from - start) * kAudioChannels);
+        }
     }
     m_position = end;
     return n;

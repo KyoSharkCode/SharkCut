@@ -407,7 +407,6 @@ Window {
                 Layout.fillHeight: true
                 editor: editor
                 fantasma: fantasma
-                transiciones: laboratorio.transitionNames
                 onImportar: dialogoImportar.open()
                 onAbrirEnOrigen: (ruta) => {
                     ventana.cambiarModo("origen")
@@ -488,6 +487,11 @@ Window {
                                 color: Theme.textoSecundario
                                 font.pixelSize: Theme.tamTexto
                             }
+                        }
+
+                        MarcoReencuadre {
+                            anchors.fill: parent
+                            visible: ventana.enEditor && editor.frameCount > 0
                         }
                     }
 
@@ -997,6 +1001,214 @@ Window {
         }
     }
 
+    // Reencuadre en el visor (pestaña Editor): clic sobre un clip visible para
+    // seleccionarlo (el de más arriba), arrastrarlo para moverlo y arrastrar sus esquinas
+    // para escalarlo. Se ajusta a los bordes y al centro del lienzo (Mayús: sin ajuste).
+    // Mientras se arrastra solo es una vista previa; al soltar se aplica (un paso de
+    // deshacer).
+    component MarcoReencuadre: Item {
+        id: marco
+        clip: true // la caja de un clip que se sale del lienzo no tapa el resto de la ventana
+
+        readonly property var sel: editor.selectedClip
+        readonly property size lienzo: editor.canvas
+        readonly property real escalaVista: Math.min(width / Math.max(1, lienzo.width),
+                                                     height / Math.max(1, lienzo.height))
+        readonly property real x0: (width - lienzo.width * escalaVista) / 2
+        readonly property real y0: (height - lienzo.height * escalaVista) / 2
+        readonly property bool hayCaja: sel.count === 1 && sel.video !== undefined
+            && sel.video !== 0 && !sel.videoHidden
+            && editor.currentFrame >= sel.start && editor.currentFrame < sel.end
+        readonly property var caja: hayCaja ? sel.box : null
+        readonly property bool editable: hayCaja && !sel.videoLocked
+
+        // Arrastre en curso: "" | "mover" | "escalar"
+        property string modo: ""
+        property real guiaX: -1 // guías de ajuste en píxeles del lienzo (-1 = ninguna)
+        property real guiaY: -1
+
+        function aLienzo(px, py) {
+            return Qt.point((px - x0) / escalaVista, (py - y0) / escalaVista)
+        }
+        function contiene(p) {
+            return caja !== null && p.x >= caja.left && p.x < caja.left + caja.width
+                   && p.y >= caja.top && p.y < caja.top + caja.height
+        }
+        // Desplazamiento que lleva el borde o centro más cercano a una guía del lienzo.
+        function ajuste(inicio, tam, total, libre) {
+            if (libre)
+                return { d: 0, guia: -1 }
+            const umbral = 8 / escalaVista
+            let mejor = { d: 0, guia: -1 }
+            let distancia = umbral
+            for (const borde of [inicio, inicio + tam / 2, inicio + tam]) {
+                for (const guia of [0, total / 2, total]) {
+                    const d = guia - borde
+                    if (Math.abs(d) < distancia) {
+                        distancia = Math.abs(d)
+                        mejor = { d: d, guia: guia }
+                    }
+                }
+            }
+            return mejor
+        }
+
+        MouseArea {
+            id: zonaMarco
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: marco.modo === "mover" ? Qt.ClosedHandCursor
+                         : marco.editable && marco.contiene(marco.aLienzo(mouseX, mouseY))
+                           ? Qt.OpenHandCursor : Qt.ArrowCursor
+            property point inicio
+            property var transformInicial: null
+            property var cajaInicial: null
+            property bool movido: false
+
+            onPressed: (m) => {
+                const p = marco.aLienzo(m.x, m.y)
+                // Manda el clip de más arriba bajo el ratón (la facecam sobre el gameplay),
+                // aunque haya otro seleccionado debajo.
+                const id = editor.clipAtCanvas(p.x, p.y)
+                if (id !== 0 && id !== marco.sel.video)
+                    editor.select(id, false)
+                else if (id === 0 && !marco.contiene(p))
+                    editor.clearSelection()
+                if (!marco.editable || !marco.contiene(p))
+                    return
+                inicio = p
+                transformInicial = marco.sel.transform
+                cajaInicial = marco.caja
+                movido = false
+                marco.modo = "mover"
+            }
+            onPositionChanged: (m) => {
+                if (marco.modo !== "mover" || !pressed)
+                    return
+                const p = marco.aLienzo(m.x, m.y)
+                let dx = p.x - inicio.x
+                let dy = p.y - inicio.y
+                if (!movido && Math.hypot(dx, dy) * marco.escalaVista < 3)
+                    return
+                movido = true
+                const libre = (m.modifiers & Qt.ShiftModifier) !== 0
+                const ax = marco.ajuste(cajaInicial.left + dx, cajaInicial.width, marco.lienzo.width, libre)
+                const ay = marco.ajuste(cajaInicial.top + dy, cajaInicial.height, marco.lienzo.height, libre)
+                dx += ax.d
+                dy += ay.d
+                marco.guiaX = ax.guia
+                marco.guiaY = ay.guia
+                editor.previewTransform(marco.sel.video, { x: transformInicial.x + dx,
+                                                           y: transformInicial.y + dy })
+            }
+            onReleased: {
+                if (marco.modo === "mover") {
+                    if (movido)
+                        editor.setClipTransform(marco.sel.video, {}, "Mover en el visor")
+                    else
+                        editor.endPreview()
+                }
+                marco.modo = ""
+                marco.guiaX = -1
+                marco.guiaY = -1
+            }
+            onCanceled: {
+                editor.endPreview()
+                marco.modo = ""
+                marco.guiaX = -1
+                marco.guiaY = -1
+            }
+        }
+
+        // Guías de ajuste
+        Rectangle {
+            visible: marco.guiaX >= 0
+            x: marco.x0 + marco.guiaX * marco.escalaVista
+            y: marco.y0
+            width: 1
+            height: marco.lienzo.height * marco.escalaVista
+            color: Theme.acento
+        }
+        Rectangle {
+            visible: marco.guiaY >= 0
+            x: marco.x0
+            y: marco.y0 + marco.guiaY * marco.escalaVista
+            width: marco.lienzo.width * marco.escalaVista
+            height: 1
+            color: Theme.acento
+        }
+
+        // Caja del clip seleccionado y sus esquinas
+        Rectangle {
+            id: cajaVista
+            visible: marco.hayCaja
+            x: marco.caja ? marco.x0 + marco.caja.left * marco.escalaVista : 0
+            y: marco.caja ? marco.y0 + marco.caja.top * marco.escalaVista : 0
+            width: marco.caja ? marco.caja.width * marco.escalaVista : 0
+            height: marco.caja ? marco.caja.height * marco.escalaVista : 0
+            color: "transparent"
+            border.color: marco.editable ? Theme.acento : Theme.textoDesactivado
+            border.width: 1
+
+            Repeater {
+                model: marco.editable ? [[0, 0], [1, 0], [0, 1], [1, 1]] : []
+                delegate: Rectangle {
+                    required property var modelData
+                    x: modelData[0] * cajaVista.width - width / 2
+                    y: modelData[1] * cajaVista.height - height / 2
+                    width: 10
+                    height: 10
+                    radius: 2
+                    color: Theme.visorFondo
+                    border.color: Theme.acento
+                    border.width: 2
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -5
+                        preventStealing: true
+                        cursorShape: (parent.modelData[0] === parent.modelData[1])
+                                     ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
+                        property point centro
+                        property real distanciaInicial: 1
+                        property real escalaInicial: 1
+                        property bool movido: false
+                        onPressed: (m) => {
+                            const t = marco.sel.transform
+                            centro = Qt.point(marco.lienzo.width / 2 + t.x, marco.lienzo.height / 2 + t.y)
+                            const p = marco.aLienzo(mapToItem(marco, m.x, m.y).x, mapToItem(marco, m.x, m.y).y)
+                            distanciaInicial = Math.max(1, Math.hypot(p.x - centro.x, p.y - centro.y))
+                            escalaInicial = t.scale
+                            movido = false
+                            marco.modo = "escalar"
+                        }
+                        onPositionChanged: (m) => {
+                            if (!pressed)
+                                return
+                            const q = mapToItem(marco, m.x, m.y)
+                            const p = marco.aLienzo(q.x, q.y)
+                            const d = Math.hypot(p.x - centro.x, p.y - centro.y)
+                            movido = true
+                            editor.previewTransform(marco.sel.video,
+                                                    { scale: escalaInicial * d / distanciaInicial })
+                        }
+                        onReleased: {
+                            if (movido)
+                                editor.setClipTransform(marco.sel.video, {}, "Escalar en el visor")
+                            else
+                                editor.endPreview()
+                            marco.modo = ""
+                        }
+                        onCanceled: {
+                            editor.endPreview()
+                            marco.modo = ""
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Resumen de los clips A y B del laboratorio.
     component ResumenClips: ColumnLayout {
         Layout.fillWidth: true
@@ -1059,10 +1271,12 @@ Window {
         }
     }
 
-    // Lo que se ve al arrastrar un medio de la biblioteca a la línea de tiempo.
+    // Lo que se ve al arrastrar un medio de la biblioteca (o una transición) a la línea
+    // de tiempo.
     Rectangle {
         id: fantasma
         property var mediaId: undefined
+        property int transicion: -1 // índice del catálogo si se arrastra una transición
         property string nombre
         visible: Drag.active
         z: 100
@@ -1070,7 +1284,8 @@ Window {
         height: 28
         radius: Theme.radio
         color: Theme.panelElevado
-        border.color: Theme.acento
+        border.color: transicion >= 0 ? Theme.clipTransicion : Theme.acento
+        border.width: 2
         opacity: 0.9
         Drag.keys: ["sharkcut/medio"]
         Drag.hotSpot.x: 10

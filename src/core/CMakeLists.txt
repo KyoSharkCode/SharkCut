@@ -6,6 +6,8 @@ add_library(sharkcut_core STATIC
     easing.cpp
     transition.h
     transition.cpp
+    sfx.h
+    sfx.cpp
     sequence.h
     sequence.cpp
     project.h

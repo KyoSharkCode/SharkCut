@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <set>
@@ -60,7 +61,7 @@ bool fileExists(const std::filesystem::path& path) {
 }
 
 // Comprueba que el proyecto leído es coherente; corrige lo que es seguro corregir.
-void validate(Project& project) {
+void validate(Project& project, int version) {
     const ProjectSettings& s = project.settings;
     if (s.width <= 0 || s.height <= 0 || s.width > kMaxCanvas || s.height > kMaxCanvas) {
         throw ProjectError("Resolución no válida en el proyecto");
@@ -79,10 +80,12 @@ void validate(Project& project) {
         }
     }
 
-    if (project.tracks.size() != 2 || project.tracks[kVideoTrack].kind != TrackKind::Video ||
-        project.tracks[kAudioTrack].kind != TrackKind::Audio) {
-        throw ProjectError("El proyecto debe tener una pista de video y una de audio");
+    if (project.trackCount(TrackKind::Video) == 0 || project.trackCount(TrackKind::Audio) == 0) {
+        throw ProjectError("El proyecto debe tener al menos una pista de video y una de audio");
     }
+    // Primero las de video (de V1 hacia arriba) y después las de audio.
+    std::stable_partition(project.tracks.begin(), project.tracks.end(),
+                          [](const Track& t) { return t.kind == TrackKind::Video; });
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
             claim(clip.id);
@@ -93,6 +96,13 @@ void validate(Project& project) {
                 throw ProjectError("Clip con posición o duración no válida en el proyecto");
             }
         }
+        for (Clip& clip : track.clips) {
+            clip.transform = clampTransform(clip.transform);
+            if (!std::isfinite(clip.volumeDb)) {
+                clip.volumeDb = 0.0;
+            }
+            clip.volumeDb = std::clamp(clip.volumeDb, kMinVolumeDb, kMaxVolumeDb);
+        }
         std::sort(track.clips.begin(), track.clips.end(),
                   [](const Clip& a, const Clip& b) { return a.start < b.start; });
         for (std::size_t i = 1; i < track.clips.size(); ++i) {
@@ -100,11 +110,95 @@ void validate(Project& project) {
                 throw ProjectError("Hay clips solapados en una pista del proyecto");
             }
         }
+        for (Transition& t : track.transitions) {
+            claim(t.id);
+            t.before = std::max<std::int64_t>(0, t.before);
+            t.after = std::max<std::int64_t>(0, t.after);
+            t.params.intensity =
+                std::clamp(std::isfinite(t.params.intensity) ? t.params.intensity : 0.6, 0.0, 1.0);
+            t.params.blur =
+                std::clamp(std::isfinite(t.params.blur) ? t.params.blur : 0.6, 0.0, 1.0);
+        }
     }
 
     const ObjectId maxId = ids.empty() ? 0 : *ids.rbegin();
     project.nextId = std::max(project.nextId, maxId + 1);
-    relinkClips(project);
+    if (version < 2) {
+        linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
+    } else {
+        repairLinks(project); // también quita las transiciones que no están en un corte
+    }
+}
+
+std::string toString(std::string_view text) {
+    return std::string(text.begin(), text.end());
+}
+
+json transitionToJson(const Transition& t) {
+    return {
+        {"id", t.id},
+        {"from", t.from},
+        {"to", t.to},
+        {"before", t.before},
+        {"after", t.after},
+        {"type", toString(transitionInfo(t.params.type).id)},
+        {"intensity", t.params.intensity},
+        {"blur", t.params.blur},
+        {"easing", toString(kEasings[static_cast<std::size_t>(t.params.easing)].id)},
+        {"sound", t.sound},
+    };
+}
+
+Transition transitionFromJson(const json& value) {
+    Transition t;
+    t.id = value.at("id").get<ObjectId>();
+    t.from = value.at("from").get<ObjectId>();
+    t.to = value.at("to").get<ObjectId>();
+    t.before = value.at("before").get<std::int64_t>();
+    t.after = value.at("after").get<std::int64_t>();
+    const std::string type = value.at("type").get<std::string>();
+    const auto info = std::find_if(kTransitions.begin(), kTransitions.end(),
+                                   [&type](const TransitionInfo& i) { return i.id == type; });
+    if (info == kTransitions.end()) {
+        throw ProjectError("Transición desconocida en el proyecto: " + type);
+    }
+    t.params = info->defaults;
+    t.params.intensity = value.value("intensity", t.params.intensity);
+    t.params.blur = value.value("blur", t.params.blur);
+    const std::string easing = value.value("easing", std::string());
+    for (const EasingInfo& e : kEasings) {
+        if (e.id == easing) {
+            t.params.easing = e.easing;
+        }
+    }
+    t.params.durationFrames = t.before + t.after;
+    t.sound = value.value("sound", ObjectId{0});
+    return t;
+}
+
+json transformToJson(const ClipTransform& t) {
+    return {
+        {"x", t.x},
+        {"y", t.y},
+        {"scale", t.scale},
+        {"opacity", t.opacity},
+        {"crop", json::array({t.cropLeft, t.cropTop, t.cropRight, t.cropBottom})},
+    };
+}
+
+ClipTransform transformFromJson(const json& value) {
+    ClipTransform t;
+    t.x = value.value("x", 0.0);
+    t.y = value.value("y", 0.0);
+    t.scale = value.value("scale", 1.0);
+    t.opacity = value.value("opacity", 1.0);
+    if (const auto crop = value.find("crop"); crop != value.end()) {
+        t.cropLeft = crop->at(0).get<double>();
+        t.cropTop = crop->at(1).get<double>();
+        t.cropRight = crop->at(2).get<double>();
+        t.cropBottom = crop->at(3).get<double>();
+    }
+    return t;
 }
 
 } // namespace
@@ -153,18 +247,39 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
 
     json tracks = json::array();
     for (const Track& track : project.tracks) {
+        const bool video = track.kind == TrackKind::Video;
         json clips = json::array();
         for (const Clip& clip : track.clips) {
-            clips.push_back({
-                {"id", clip.id},
-                {"media", clip.media},
-                {"link", clip.link},
-                {"start", clip.start},
-                {"in", clip.in},
-                {"length", clip.length},
-            });
+            json entry = {
+                {"id", clip.id},       {"media", clip.media}, {"link", clip.link},
+                {"start", clip.start}, {"in", clip.in},       {"length", clip.length},
+            };
+            if (video && clip.transform != ClipTransform{}) {
+                entry["transform"] = transformToJson(clip.transform);
+            }
+            if (!video && clip.volumeDb != 0.0) {
+                entry["volumeDb"] = clip.volumeDb;
+            }
+            clips.push_back(std::move(entry));
         }
-        tracks.push_back({{"kind", kindName(track.kind)}, {"clips", std::move(clips)}});
+        json entry = {{"kind", kindName(track.kind)}, {"clips", std::move(clips)}};
+        if (track.hidden) {
+            entry["hidden"] = true;
+        }
+        if (track.muted) {
+            entry["muted"] = true;
+        }
+        if (track.locked) {
+            entry["locked"] = true;
+        }
+        if (!track.transitions.empty()) {
+            json transitions = json::array();
+            for (const Transition& t : track.transitions) {
+                transitions.push_back(transitionToJson(t));
+            }
+            entry["transitions"] = std::move(transitions);
+        }
+        tracks.push_back(std::move(entry));
     }
     root["tracks"] = std::move(tracks);
     root["nextId"] = project.nextId;
@@ -178,9 +293,10 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
 
 Project projectFromJson(std::string_view text, const std::filesystem::path& projectFile) {
     Project project;
+    int version = 0;
     try {
         const json root = json::parse(text.begin(), text.end());
-        const int version = root.at("version").get<int>();
+        version = root.at("version").get<int>();
         if (version > kProjectFileVersion) {
             throw ProjectError("Este proyecto se guardó con una versión más nueva de SharkCut");
         }
@@ -230,14 +346,27 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
             } else {
                 throw ProjectError("Tipo de pista desconocido: " + kind);
             }
+            track.hidden = track.kind == TrackKind::Video && entry.value("hidden", false);
+            track.muted = track.kind == TrackKind::Audio && entry.value("muted", false);
+            track.locked = entry.value("locked", false);
             for (const json& c : entry.at("clips")) {
                 Clip clip;
                 clip.id = c.at("id").get<ObjectId>();
                 clip.media = c.at("media").get<ObjectId>();
+                clip.link = c.value("link", ObjectId{0});
                 clip.start = c.at("start").get<std::int64_t>();
                 clip.in = c.at("in").get<std::int64_t>();
                 clip.length = c.at("length").get<std::int64_t>();
+                if (const auto t = c.find("transform"); t != c.end()) {
+                    clip.transform = transformFromJson(*t);
+                }
+                clip.volumeDb = c.value("volumeDb", 0.0);
                 track.clips.push_back(clip);
+            }
+            if (const auto list = entry.find("transitions"); list != entry.end()) {
+                for (const json& t : *list) {
+                    track.transitions.push_back(transitionFromJson(t));
+                }
             }
             project.tracks.push_back(std::move(track));
         }
@@ -245,7 +374,7 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
     } catch (const json::exception& e) {
         throw ProjectError(std::string("El archivo de proyecto está dañado (") + e.what() + ")");
     }
-    validate(project);
+    validate(project, version);
     return project;
 }
 

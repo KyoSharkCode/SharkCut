@@ -2,6 +2,8 @@
 
 // Transiciones entre la capa A (clip saliente) y la capa B (clip entrante).
 // Técnicas propias, genéricas: transformaciones animadas, desenfoques y deformaciones.
+// Las capas llegan con alfa premultiplicado (transparentes donde no hay clip) y el
+// resultado también: en una pista superior, la transición no tapa lo de debajo.
 
 layout(location = 0) in vec2 v_uv; // (0, 0) arriba a la izquierda
 layout(location = 0) out vec4 fragColor;
@@ -113,13 +115,15 @@ void main()
         float hold = 0.25 * intensity;
         float outEnd = 0.5 - hold;
         float inStart = 0.5 + hold;
-        vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+        // En V1 se funde a negro (el fondo del lienzo); en una pista superior, a lo que
+        // haya debajo.
+        vec4 color = vec4(0.0);
         if (e < outEnd) {
             color = sampleLayer(0, uv) * (1.0 - e / max(outEnd, 1e-4));
         } else if (e > inStart) {
             color = sampleLayer(1, uv) * ((e - inStart) / max(1.0 - inStart, 1e-4));
         }
-        fragColor = vec4(color.rgb, 1.0);
+        fragColor = color;
     } else if (mode == PAN_LEFT) {
         // A sale por la izquierda y B entra por la derecha, con estela horizontal y un
         // ligero alejamiento a mitad del recorrido (más con más intensidad). Cada muestra
@@ -170,7 +174,7 @@ void main()
         vec4 r = transformed(layer, distorted + vec2(split, 0.0), 1.0, angle, shake, 0.0, 0.0, dir);
         vec4 g = transformed(layer, distorted, 1.0, angle, shake, 0.0, 0.0, dir);
         vec4 b = transformed(layer, distorted - vec2(split, 0.0), 1.0, angle, shake, 0.0, 0.0, dir);
-        fragColor = vec4(r.r, g.g, b.b, 1.0);
+        fragColor = vec4(r.r, g.g, b.b, g.a);
     } else if (mode == ZOOM_IN || mode == ZOOM_OUT || mode == ZOOM_ROTATE_OUT) {
         float maxZoom = 1.0 + 3.0 * intensity; // con intensidad 0,6 → ×2,8
         float zoomBlur = motion * 0.7;
@@ -191,5 +195,4 @@ void main()
     } else {
         fragColor = sampleLayer(0, uv);
     }
-    fragColor.a = 1.0;
 }

@@ -13,7 +13,9 @@ ColumnLayout {
     property alias to: control.to
     property alias stepSize: control.stepSize
     property real valor
+    readonly property alias valorActual: control.value // también mientras se arrastra
     signal cambiado(real valor)
+    signal soltado(real valor) // al terminar de arrastrar
 
     Layout.fillWidth: true
     spacing: 2
@@ -39,6 +41,10 @@ ColumnLayout {
         Layout.fillWidth: true
         value: raiz.valor
         onMoved: raiz.cambiado(value)
+        onPressedChanged: {
+            if (!pressed)
+                raiz.soltado(value)
+        }
 
         background: Rectangle {
             x: control.leftPadding

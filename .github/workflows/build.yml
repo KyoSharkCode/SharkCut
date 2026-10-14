@@ -38,7 +38,7 @@ jobs:
         run: ctest --preset windows-release
 
       - name: Empaquetar
-        run: cmake --install build/windows-release --prefix dist/SharkCut
+        run: cmake --install build/windows-release --prefix "${{ github.workspace }}/dist/SharkCut"
 
       - name: Subir ejecutable
         uses: actions/upload-artifact@v4

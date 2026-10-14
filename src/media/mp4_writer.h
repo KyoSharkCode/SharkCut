@@ -1,0 +1,53 @@
+#pragma once
+
+#include "core/time.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace sharkcut {
+
+struct EncoderSettings {
+    int width = 1920;
+    int height = 1080;
+    FrameRate rate{60, 1};
+    bool audio = true;                      // pista AAC estéreo a 48 kHz
+    std::int64_t videoBitrate = 16'000'000; // bits por segundo (objetivo)
+    // Codificadores de video a probar, en orden; vacío = los predeterminados
+    // (h264_nvenc, h264_amf, h264_qsv, libx264).
+    std::vector<std::string> videoEncoders;
+};
+
+// Escribe un MP4 (H.264 + AAC) a partir de fotogramas RGBA y audio float estéreo.
+// Prueba los codificadores por hardware y usa el primero que funcione.
+//
+// Color: el RGB se convierte a YUV BT.709 de rango limitado, lo estándar en video.
+class Mp4Writer {
+public:
+    // Lanza MediaError si no se puede crear el archivo o ningún codificador funciona.
+    Mp4Writer(const std::string& path, const EncoderSettings& settings);
+    ~Mp4Writer();
+
+    Mp4Writer(const Mp4Writer&) = delete;
+    Mp4Writer& operator=(const Mp4Writer&) = delete;
+
+    std::string videoEncoderName() const;
+
+    // Añade el siguiente fotograma (RGBA de 8 bits, width × height, filas de `stride` bytes).
+    void writeVideo(const std::uint8_t* rgba, int stride);
+
+    // Añade audio (float estéreo intercalado a 48 kHz).
+    void writeAudio(const float* samples, std::size_t frames);
+
+    // Vacía los codificadores y cierra el archivo. Obligatorio para un MP4 válido.
+    void finish();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> d;
+};
+
+} // namespace sharkcut

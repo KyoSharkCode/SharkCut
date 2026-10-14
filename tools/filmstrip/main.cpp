@@ -5,10 +5,15 @@
 // las guarda en una imagen PNG. Sirve para revisar la calidad sin abrir la interfaz.
 //
 // Uso: sharkcut_filmstrip <clipA> <clipB> <salida.png> [fotogramaA] [fotogramaB]
+//      sharkcut_filmstrip --export <clipA> <clipB> <salida.mp4> [transición 0–6]
+//        (exporta los clips enteros con SequenceExporter, como el botón de la app)
 
+#include "core/sequence.h"
 #include "core/transition.h"
+#include "media/media_info.h"
 #include "media/video_decoder.h"
 #include "render/compositor.h"
+#include "render/sequence_exporter.h"
 
 #include <QGuiApplication>
 #include <QImage>
@@ -16,8 +21,12 @@
 #include <QPainter>
 #include <rhi/qrhi.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <memory>
+#include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -68,8 +77,60 @@ QImage renderOnce(QRhi* rhi, sharkcut::Compositor& compositor,
 
 } // namespace
 
+int exportMode(int argc, char* argv[]) {
+    if (argc < 5) {
+        std::fprintf(stderr, "Uso: %s --export <clipA> <clipB> <salida.mp4> [transición]\n",
+                     argv[0]);
+        return 2;
+    }
+    const auto infoA = sharkcut::probeMedia(argv[2]);
+    const auto infoB = sharkcut::probeMedia(argv[3]);
+    const int type = argc > 5 ? std::atoi(argv[5]) : 4;
+
+    sharkcut::ExportJob job;
+    job.params = sharkcut::kTransitions[static_cast<std::size_t>(type)].defaults;
+    job.layout = sharkcut::makeLayout({0, infoA.video->frameCount}, {0, infoB.video->frameCount},
+                                      job.params.durationFrames);
+    job.rate = infoA.video->frameRate;
+    job.pathA = argv[2];
+    job.pathB = argv[3];
+    job.canvasSize = QSize(infoA.video->width, infoA.video->height);
+    job.outputPath = argv[4];
+#ifndef Q_OS_WIN
+    job.fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
+#endif
+
+    std::atomic<bool> done = false;
+    std::atomic<bool> ok = false;
+    const auto start = std::chrono::steady_clock::now();
+    sharkcut::SequenceExporter::Callbacks callbacks;
+    callbacks.progress = [](std::int64_t d, std::int64_t t) {
+        std::printf("\r%lld / %lld", static_cast<long long>(d), static_cast<long long>(t));
+        std::fflush(stdout);
+    };
+    callbacks.finished = [&](bool success, const std::string& message, const std::string& encoder) {
+        std::printf("\n%s (%s) %s\n", success ? "OK" : "ERROR", encoder.c_str(), message.c_str());
+        ok = success;
+        done = true;
+    };
+    {
+        sharkcut::SequenceExporter exporter(job, callbacks);
+        while (!done) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+    const double seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    std::printf("%lld fotogramas en %.1f s\n", static_cast<long long>(job.layout.length()),
+                seconds);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    if (argc > 1 && std::string(argv[1]) == "--export") {
+        return exportMode(argc, argv);
+    }
     if (argc < 4) {
         std::fprintf(stderr, "Uso: %s <clipA> <clipB> <salida.png> [fotogramaA] [fotogramaB]\n",
                      argv[0]);

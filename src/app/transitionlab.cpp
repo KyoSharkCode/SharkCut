@@ -4,10 +4,15 @@
 #include "audio/audio_worker.h"
 #include "media/sequence_audio.h"
 #include "player.h"
+#include "render/sequence_exporter.h"
 
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QOffscreenSurface>
 #include <QPointer>
+#include <rhi/qrhi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -19,6 +24,7 @@ TransitionLab::TransitionLab(QObject* parent) : CompositionSource(parent) {
 }
 
 TransitionLab::~TransitionLab() {
+    m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
     m_workerA.reset();
@@ -452,5 +458,92 @@ void TransitionLab::setError(const QString& message) {
     if (m_errorString != message) {
         m_errorString = message;
         emit errorStringChanged();
+    }
+}
+
+// --- Exportación ----------------------------------------------------------------------
+
+void TransitionLab::exportTo(const QUrl& file) {
+    if (!ready() || m_exporter) {
+        return;
+    }
+    QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(QLatin1String(".mp4"), Qt::CaseInsensitive)) {
+        path += QLatin1String(".mp4");
+    }
+    pause();
+
+    sharkcut::ExportJob job;
+    job.layout = m_layout;
+    job.rate = m_rate;
+    job.pathA = m_a.path.toStdString();
+    job.pathB = m_b.path.toStdString();
+    job.params = m_params;
+    job.canvasSize = m_canvasSize;
+    job.outputPath = path.toStdString();
+#ifndef Q_OS_WIN
+    // OpenGL necesita una superficie creada en el hilo de la interfaz.
+    if (!m_exportSurface) {
+        m_exportSurface.reset(QRhiGles2InitParams::newFallbackSurface());
+    }
+    job.fallbackSurface = m_exportSurface.get();
+#endif
+
+    const quint64 session = ++m_exportSession;
+    QPointer<TransitionLab> self(this);
+    auto post = [self, session](auto fn) {
+        if (!self) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            self.data(),
+            [self, session, fn = std::move(fn)]() {
+                if (self && self->m_exportSession == session) {
+                    fn(*self);
+                }
+            },
+            Qt::QueuedConnection);
+    };
+
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    sharkcut::SequenceExporter::Callbacks callbacks;
+    callbacks.progress = [post](std::int64_t done, std::int64_t total) {
+        post([done, total](TransitionLab& lab) {
+            lab.m_exportProgress = static_cast<double>(done) / static_cast<double>(total);
+            lab.m_exportMessage =
+                QStringLiteral("Exportando… %1 / %2 fotogramas").arg(done).arg(total);
+            emit lab.exportChanged();
+        });
+    };
+    callbacks.finished = [post, path, timer](bool ok, const std::string& message,
+                                             const std::string& encoder) {
+        const QString text = QString::fromStdString(message);
+        const QString codec = QString::fromStdString(encoder);
+        const double seconds = static_cast<double>(timer->elapsed()) / 1000.0;
+        post([ok, text, codec, path, seconds](TransitionLab& lab) {
+            // El hilo ya terminó: se puede destruir el exportador.
+            lab.m_exporter.reset();
+            lab.m_exportProgress = ok ? 1.0 : 0.0;
+            lab.m_exportMessage = ok ? QStringLiteral("Exportado en %1 s con %2: %3")
+                                           .arg(seconds, 0, 'f', 1)
+                                           .arg(codec, QDir::toNativeSeparators(path))
+                                     : QStringLiteral("No se exportó: %1").arg(text);
+            emit lab.exportChanged();
+        });
+    };
+
+    m_exportProgress = 0.0;
+    m_exportMessage = QStringLiteral("Preparando la exportación…");
+    m_exporter = std::make_unique<sharkcut::SequenceExporter>(std::move(job), std::move(callbacks));
+    emit exportChanged();
+}
+
+void TransitionLab::cancelExport() {
+    if (m_exporter) {
+        m_exporter->cancel(); // el aviso de "terminado" llega después
     }
 }

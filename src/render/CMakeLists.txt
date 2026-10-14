@@ -3,6 +3,8 @@
 add_library(sharkcut_render STATIC
     compositor.h
     compositor.cpp
+    sequence_exporter.h
+    sequence_exporter.cpp
 )
 
 # Shaders GLSL 440 compilados con qsb para cada API gráfica (D3D11, Vulkan, OpenGL…).

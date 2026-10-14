@@ -468,7 +468,12 @@ ctest --preset windows-debug
      potencia constante, pestañas Origen (marcas I/O) y Transición (parámetros en
      directo, "Ver transición"). Herramienta `sharkcut_filmstrip` para revisar las
      transiciones fuera de la interfaz. Pendiente de validar en el PC de Kyo.
-   - [ ] Etapa 2: exportar la secuencia de prueba a MP4 con NVENC (mismo compositor).
+   - [x] Etapa 2: exportar la secuencia de prueba a MP4. SequenceExporter compone cada
+     fotograma fuera de pantalla con el mismo Compositor (instancia QRhi propia en un
+     hilo: D3D11 en Windows), lo lee de la GPU y Mp4Writer lo codifica en H.264 (NVENC,
+     AMF, QuickSync o x264, el primero que funcione; BT.709 rango limitado) con audio
+     AAC de la mezcla A/B. Comprobado en Linux que el fotograma exportado coincide con
+     la vista previa. Pendiente de validar en el PC de Kyo (velocidad con NVENC).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

@@ -17,6 +17,7 @@ add_executable(sharkcut_tests
     test_color.cpp
     test_audio.cpp
     test_transition.cpp
+    test_export.cpp
     test_clip.h
     test_clip.cpp
 )

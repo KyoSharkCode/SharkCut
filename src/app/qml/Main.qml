@@ -75,6 +75,15 @@ Window {
 
     // Archivos al abrir: uno se abre en Origen; con dos, se cargan como clips A y B.
     property int cargaInicial: AppInfo.initialFiles.length >= 2 ? 0 : -1
+    FileDialog {
+        id: dialogoExportar
+        title: "Exportar prueba de transición"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "mp4"
+        nameFilters: ["Video MP4 (*.mp4)"]
+        onAccepted: laboratorio.exportTo(selectedFile)
+    }
+
     Component.onCompleted: {
         if (AppInfo.initialFiles.length > 0)
             reproductor.openPath(AppInfo.initialFiles[0])
@@ -517,6 +526,49 @@ Window {
                             texto: "Restablecer valores de esta transición"
                             onPulsado: laboratorio.resetParams()
                         }
+                        Separador {}
+                        Titulo { texto: "Exportar" }
+                        Boton {
+                            Layout.fillWidth: true
+                            visible: !laboratorio.exporting
+                            enabled: laboratorio.ready
+                            acentuado: true
+                            texto: "Exportar prueba a MP4…"
+                            onPulsado: dialogoExportar.open()
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: laboratorio.exporting
+                            spacing: 6
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 6
+                                radius: 3
+                                color: Theme.panelElevado
+                                Rectangle {
+                                    width: parent.width * laboratorio.exportProgress
+                                    height: parent.height
+                                    radius: 3
+                                    color: Theme.acento
+                                }
+                            }
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Cancelar exportación"
+                                onPulsado: laboratorio.cancelExport()
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: laboratorio.exportMessage.length > 0
+                            wrapMode: Text.WrapAnywhere
+                            color: laboratorio.exportMessage.startsWith("No se") ? Theme.aviso
+                                                                                 : Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                            text: laboratorio.exportMessage
+                        }
+
+                        Separador {}
                         Text {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap

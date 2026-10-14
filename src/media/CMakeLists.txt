@@ -17,6 +17,8 @@ add_library(sharkcut_media STATIC
     audio_decoder.cpp
     sequence_audio.h
     sequence_audio.cpp
+    mp4_writer.h
+    mp4_writer.cpp
     decode_worker.h
     decode_worker.cpp
 )

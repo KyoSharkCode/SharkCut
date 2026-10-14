@@ -101,6 +101,9 @@ Atajo: `SharkCut.exe clipA.mp4 clipB.mp4` carga los dos videos enteros como A y 
   instante (también en pausa: avanza fotograma a fotograma con ← y →).
 - [ ] El audio hace un fundido cruzado suave durante la transición.
 - [ ] **Intercambiar A ↔ B** funciona.
+- [ ] **Exportar prueba a MP4…** guarda la secuencia. El mensaje final indica el tiempo y
+  el códec: debe ser **h264_nvenc** (tu RTX 3060). Ábrelo en otro reproductor y comprueba
+  que se ve igual que en SharkCut, con el audio.
 - [ ] Compara con Composer: anota qué transiciones se parecen y cuáles no, y qué cambiarías
   (más rápida, más desenfoque, otra curva…). ¡Capturas o videos del móvil ayudan mucho!
 

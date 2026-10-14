@@ -7,6 +7,8 @@
 #include "media/decode_worker.h"
 #include "playbackclock.h"
 
+#include <QUrl>
+
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -15,10 +17,12 @@
 #include <memory>
 
 class Player;
+class QOffscreenSurface;
 
 namespace sharkcut {
 class AudioOutput;
 class AudioWorker;
+class SequenceExporter;
 } // namespace sharkcut
 
 // Laboratorio de transiciones (fase 1): reproduce la secuencia
@@ -57,6 +61,9 @@ class TransitionLab : public CompositionSource {
     Q_PROPERTY(QString durationTimecode READ durationTimecode NOTIFY layoutChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
+    Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
+    Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
+    Q_PROPERTY(QString exportMessage READ exportMessage NOTIFY exportChanged)
 
 public:
     explicit TransitionLab(QObject* parent = nullptr);
@@ -95,6 +102,9 @@ public:
     bool muted() const { return m_muted; }
     void setMuted(bool muted);
     QString errorString() const { return m_errorString; }
+    bool exporting() const { return m_exporter != nullptr; }
+    double exportProgress() const { return m_exportProgress; }
+    QString exportMessage() const { return m_exportMessage; }
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override { return m_canvasSize; }
@@ -113,6 +123,10 @@ public:
     // Reproduce desde un segundo antes de la transición hasta un segundo después.
     Q_INVOKABLE void playTransition();
 
+    // Exporta la secuencia a MP4 (mismo compositor que la vista previa).
+    Q_INVOKABLE void exportTo(const QUrl& file);
+    Q_INVOKABLE void cancelExport();
+
     // Avanza la reproducción según el reloj; se llama una vez por refresco de pantalla.
     Q_INVOKABLE void advance();
 
@@ -125,6 +139,7 @@ signals:
     void currentFrameChanged();
     void mutedChanged();
     void errorStringChanged();
+    void exportChanged();
 
 private:
     struct Clip {
@@ -170,4 +185,10 @@ private:
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
+
+    std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
+    std::unique_ptr<sharkcut::SequenceExporter> m_exporter;
+    quint64 m_exportSession = 0;
+    double m_exportProgress = 0.0;
+    QString m_exportMessage;
 };

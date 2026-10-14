@@ -43,15 +43,19 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/render (Qt Gui, sin Quick): Compositor QRhi (capas de abajo arriba, cada una con
   posición, escala, opacidad y recorte, o dos clips con transición → lienzo →
   presentación) y sus shaders; lo usan el visor y la exportación (mismo motor).
-  src/app: Player (origen, marcas I/O), TransitionLab (secuencia de prueba),
-  PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem + Compositor).
-  src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC),
+  src/app: PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem +
+  Compositor).
+  src/core también: export_settings.h (tramo y fps de la exportación, resoluciones y
+  tasas recomendadas) y parseTimecode en time.h.
+  src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
   TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
   caché en disco).
   src/app también: Editor (proyectos abiertos con su historial, pestañas de secuencias,
-  herramientas y reproducción de la secuencia activa); interfaz en qml/LineaTiempo.qml,
-  qml/PanelMedios.qml (con qml/PanelBiblioteca.qml: proyectos, carpetas, secuencias y
-  medios) y los diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  herramientas, reproducción de la secuencia activa, exportación y recientes; los
+  ajustes de la app van en QSettings). Interfaz: pestañas superiores Proyectos
+  (qml/PaginaProyectos.qml), Editor (qml/PanelMedios.qml con qml/PanelBiblioteca.qml ·
+  qml/PanelPropiedades.qml · Programa, y qml/LineaTiempo.qml) y Exportar
+  (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
   Iconos: qml/Icono.qml (trazos SVG dibujados con QtQuick.Shapes); añadir los nuevos ahí.
@@ -59,7 +63,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
   (útil para revisar cambios en transition.frag); con --export exporta como la app y
-  con --export-project exporta la línea de tiempo de un .sharkp.
+  con --export-project exporta la secuencia activa de un .sharkp (con --escala, --fps,
+  --desde/--hasta, --h265, --sin-audio, --mbps).
   En Linux sin pantalla, ejecutar con xvfb-run.
 - Formato de audio interno: float estéreo intercalado a 48 kHz; la muestra 0 es el
   primer fotograma del video. El reloj de reproducción lo marca el audio.

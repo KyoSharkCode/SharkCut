@@ -19,6 +19,8 @@ add_library(sharkcut_core STATIC
     document.cpp
     project_file.h
     project_file.cpp
+    export_settings.h
+    export_settings.cpp
 )
 
 target_include_directories(sharkcut_core PUBLIC ${PROJECT_SOURCE_DIR}/src)

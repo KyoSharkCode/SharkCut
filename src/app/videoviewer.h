@@ -13,7 +13,7 @@ class VideoViewer : public QQuickRhiItem {
     Q_OBJECT
     QML_ELEMENT
 
-    // Player o TransitionLab (cualquier CompositionSource).
+    // El editor (cualquier CompositionSource).
     Q_PROPERTY(QObject* source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY
                    backgroundColorChanged)

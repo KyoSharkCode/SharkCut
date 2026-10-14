@@ -8,7 +8,6 @@
 #include "core/project_file.h"
 #include "media/decode_worker.h"
 #include "playbackclock.h"
-#include "player.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -103,6 +102,14 @@ class Editor : public CompositionSource {
     Q_PROPERTY(double meterLeft READ meterLeft NOTIFY metersChanged)
     Q_PROPERTY(double meterRight READ meterRight NOTIFY metersChanged)
     // Exportación
+    // Últimos ajustes usados (los usa "Exportar rápido"): {codec: "h264"|"h265", scale,
+    // fps (0 = los de la secuencia), quality (0 Ligera, 1 Alta, 2 Máxima, 3 a medida),
+    // mbps (a medida), audio, audioKbps, folder (url)}
+    Q_PROPERTY(QVariantMap exportSettings READ exportSettings NOTIFY exportSettingsChanged)
+    // Archivo de la última exportación terminada ("" si no hay)
+    Q_PROPERTY(QString lastExportPath READ lastExportPath NOTIFY exportChanged)
+    // Proyectos abiertos hace poco: {path, name, folder, exists, date}
+    Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
     Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
     Q_PROPERTY(QString exportMessage READ exportMessage NOTIFY exportChanged)
@@ -165,6 +172,9 @@ public:
     bool modified() const { return current().history.modified(); }
     bool fileBusy() const { return m_fileBusy; }
     bool exporting() const { return m_exporter != nullptr; }
+    QVariantMap exportSettings() const { return m_exportSettings; }
+    QString lastExportPath() const { return m_lastExportPath; }
+    QVariantList recentProjects() const { return m_recentProjects; }
     double exportProgress() const { return m_exportProgress; }
     QString exportMessage() const { return m_exportMessage; }
 
@@ -217,11 +227,29 @@ public:
     // Mueve medios y secuencias (ids) a una carpeta (0 = raíz).
     Q_INVOKABLE void moveToFolder(const QVariantList& items, qint64 folderId);
 
-    // Exporta la línea de tiempo a MP4 (mismo compositor que la vista previa).
-    // `quality`: 0 ligera (8 Mbps), 1 alta (16 Mbps), 2 máxima (40 Mbps).
-    Q_INVOKABLE void exportTo(const QUrl& file, int quality = 1);
-    Q_INVOKABLE void exportToFolder(const QUrl& folder, const QString& name, int quality);
+    // --- Exportación (mismo compositor que la vista previa) ---
+    // Exporta una secuencia del proyecto activo. `options`: los de exportSettings y además
+    // sequence (id; 0 = la activa), name (sin ".mp4"), rangeStart y rangeEnd (fotogramas
+    // de la secuencia; -1 = desde el principio / hasta el final). Los ajustes quedan como
+    // los últimos usados. Nunca reemplaza un archivo: si existe, "nombre (2).mp4".
+    Q_INVOKABLE void exportSequence(const QVariantMap& options);
+    // La secuencia activa entera, con los últimos ajustes, a la última carpeta y con el
+    // nombre de la secuencia.
+    Q_INVOKABLE void quickExport();
     Q_INVOKABLE void cancelExport();
+    // Abre en el explorador la carpeta del último archivo exportado.
+    Q_INVOKABLE void showLastExport() const;
+    // Resoluciones que se ofrecen para una secuencia: {width, height, scale, label}
+    Q_INVOKABLE QVariantList exportSizes(qint64 sequenceId) const;
+    // Tasa de video recomendada (Mbps) para una calidad (0–2) y códec ("h264"/"h265").
+    Q_INVOKABLE double recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
+                                       const QString& codec) const;
+    // Códigos de tiempo de una secuencia (con sus fps). parseTimecode: -1 si no vale.
+    Q_INVOKABLE QString sequenceTimecode(qint64 sequenceId, qint64 frame) const;
+    Q_INVOKABLE qint64 parseTimecode(qint64 sequenceId, const QString& text) const;
+
+    // --- Proyectos recientes ---
+    Q_INVOKABLE void forgetRecentProject(const QString& path);
 
     // --- Biblioteca ---
     // Analiza los archivos en segundo plano y los añade a la biblioteca. Con
@@ -246,8 +274,6 @@ public:
     // Coloca el medio entero en `frame` (sobrescribiendo); `frame` < 0: al final.
     // `track`: pista donde se suelta (índice; -1 = V1 y A1), como en importFiles.
     Q_INVOKABLE void addMedia(qint64 mediaId, qint64 frame = -1, int track = -1);
-    // Coloca el tramo marcado del reproductor de origen: al final o en el cabezal.
-    Q_INVOKABLE void addFromSource(Player* source, bool atPlayhead);
     Q_INVOKABLE void splitAtPlayhead();                      // divide lo que hay bajo el cabezal
     Q_INVOKABLE void splitClip(qint64 clipId, qint64 frame); // cuchilla
     Q_INVOKABLE void removeSelection();
@@ -321,6 +347,8 @@ signals:
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
+    void exportSettingsChanged();
+    void recentProjectsChanged();
     void metersChanged();
     void selectionChanged();
     void selectedClipChanged();
@@ -439,6 +467,14 @@ private:
     // Cierra las pestañas cuya secuencia ya no existe (tras deshacer o quitarla).
     void pruneTabs();
     void saveToPath(quint64 uid, const QString& path);
+    // Ajustes de exportación con los valores por defecto donde falten.
+    static QVariantMap completeExportSettings(QVariantMap settings);
+    void startExport(const sharkcut::Project& sequence, const QVariantMap& settings,
+                     const QString& folder, const QString& name, qint64 rangeStart,
+                     qint64 rangeEnd);
+    // Pone `path` el primero de los recientes y vuelve a leer la lista (en segundo plano).
+    void addRecentProject(const QString& path);
+    void refreshRecentProjects();
     void finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Document>& written,
                     const QString& path, const QString& error);
     void finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded, const QString& path,
@@ -477,6 +513,9 @@ private:
 
     std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
     std::unique_ptr<sharkcut::SequenceExporter> m_exporter;
+    QVariantMap m_exportSettings;
+    QString m_lastExportPath;
+    QVariantList m_recentProjects;
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;

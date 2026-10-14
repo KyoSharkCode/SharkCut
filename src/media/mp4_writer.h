@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/export_settings.h"
 #include "core/time.h"
 
 #include <cstddef>
@@ -14,14 +15,16 @@ struct EncoderSettings {
     int width = 1920;
     int height = 1080;
     FrameRate rate{60, 1};
-    bool audio = true;                      // pista AAC estéreo a 48 kHz
+    bool audio = true;          // pista AAC estéreo a 48 kHz
+    int audioBitrate = 192'000; // bits por segundo
+    VideoCodec codec = VideoCodec::H264;
     std::int64_t videoBitrate = 16'000'000; // bits por segundo (objetivo)
-    // Codificadores de video a probar, en orden; vacío = los predeterminados
-    // (h264_nvenc, h264_amf, h264_qsv, libx264).
+    // Codificadores de video a probar, en orden; vacío = los predeterminados del códec
+    // (por hardware NVIDIA, AMD, Intel y, de respaldo, x264 o x265 por software).
     std::vector<std::string> videoEncoders;
 };
 
-// Escribe un MP4 (H.264 + AAC) a partir de fotogramas RGBA y audio float estéreo.
+// Escribe un MP4 (H.264 o H.265 + AAC) a partir de fotogramas RGBA y audio float estéreo.
 // Prueba los codificadores por hardware y usa el primero que funcione.
 //
 // Color: el RGB se convierte a YUV BT.709 de rango limitado, lo estándar en video.

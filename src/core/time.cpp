@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace sharkcut {
 
@@ -153,6 +154,58 @@ std::string formatTimecode(std::int64_t frame, FrameRate rate) {
                   static_cast<unsigned long long>(hh), static_cast<unsigned long long>(mm),
                   static_cast<unsigned long long>(ss), static_cast<unsigned long long>(ff));
     return buffer;
+}
+
+std::optional<std::int64_t> parseTimecode(std::string_view text, FrameRate rate) {
+    const std::int64_t fps = rate.nominal();
+    if (fps <= 0) {
+        return std::nullopt;
+    }
+    // Campos de derecha a izquierda: fotogramas, segundos, minutos, horas.
+    std::vector<std::int64_t> fields;
+    std::int64_t value = 0;
+    int digits = 0;
+    auto close = [&]() -> bool {
+        if (digits == 0) {
+            return false;
+        }
+        fields.push_back(value);
+        value = 0;
+        digits = 0;
+        return true;
+    };
+    std::size_t begin = 0;
+    std::size_t end = text.size();
+    while (begin < end && text[begin] == ' ') {
+        ++begin;
+    }
+    while (end > begin && text[end - 1] == ' ') {
+        --end;
+    }
+    for (std::size_t i = begin; i < end; ++i) {
+        const char c = text[i];
+        if (c >= '0' && c <= '9') {
+            if (++digits > 9) {
+                return std::nullopt; // demasiado largo para ser un tiempo razonable
+            }
+            value = value * 10 + (c - '0');
+        } else if (c == ':' || c == '.') {
+            if (!close()) {
+                return std::nullopt;
+            }
+        } else {
+            return std::nullopt;
+        }
+    }
+    if (!close() || fields.size() > 4) {
+        return std::nullopt;
+    }
+    static constexpr std::int64_t kSeconds[] = {0, 1, 60, 3600};
+    std::int64_t frame = fields.back(); // el último campo escrito son los fotogramas
+    for (std::size_t i = 1; i < fields.size(); ++i) {
+        frame += fields[fields.size() - 1 - i] * kSeconds[i] * fps;
+    }
+    return frame;
 }
 
 } // namespace sharkcut

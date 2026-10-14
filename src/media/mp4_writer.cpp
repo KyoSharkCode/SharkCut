@@ -16,8 +16,11 @@ namespace sharkcut {
 
 namespace {
 
-std::vector<std::string> defaultVideoEncoders() {
-    // Por hardware primero (NVIDIA, AMD, Intel); x264 por software como respaldo.
+std::vector<std::string> defaultVideoEncoders(VideoCodec codec) {
+    // Por hardware primero (NVIDIA, AMD, Intel); x264/x265 por software como respaldo.
+    if (codec == VideoCodec::H265) {
+        return {"hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"};
+    }
     return {"h264_nvenc", "h264_amf", "h264_qsv", "libx264"};
 }
 
@@ -25,18 +28,22 @@ void configureEncoder(AVCodecContext* enc, const std::string& name, std::int64_t
     enc->bit_rate = bitrate;
     enc->rc_max_rate = bitrate * 3 / 2;
     enc->rc_buffer_size = static_cast<int>(std::min<std::int64_t>(bitrate * 2, INT32_MAX));
-    if (name == "h264_nvenc") {
+    if (name == "h264_nvenc" || name == "hevc_nvenc") {
         av_opt_set(enc->priv_data, "preset", "p5", 0); // calidad alta, aún muy rápido
         av_opt_set(enc->priv_data, "rc", "vbr", 0);
         av_opt_set(enc->priv_data, "cq", "19", 0);
         av_opt_set(enc->priv_data, "spatial-aq", "1", 0);
-    } else if (name == "h264_amf") {
+    } else if (name == "h264_amf" || name == "hevc_amf") {
         av_opt_set(enc->priv_data, "quality", "quality", 0);
-    } else if (name == "h264_qsv") {
+    } else if (name == "h264_qsv" || name == "hevc_qsv") {
         av_opt_set(enc->priv_data, "preset", "slow", 0);
     } else if (name == "libx264") {
         av_opt_set(enc->priv_data, "preset", "medium", 0);
         av_opt_set(enc->priv_data, "crf", "18", 0);
+    } else if (name == "libx265") {
+        av_opt_set(enc->priv_data, "preset", "medium", 0);
+        av_opt_set(enc->priv_data, "crf", "20", 0);
+        av_opt_set(enc->priv_data, "x265-params", "log-level=error", 0);
     }
 }
 
@@ -94,7 +101,8 @@ struct Mp4Writer::Impl {
         enc->height = settings.height;
         enc->time_base = {static_cast<int>(settings.rate.den), static_cast<int>(settings.rate.num)};
         enc->framerate = {static_cast<int>(settings.rate.num), static_cast<int>(settings.rate.den)};
-        enc->pix_fmt = name == "h264_qsv" ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
+        enc->pix_fmt =
+            name == "h264_qsv" || name == "hevc_qsv" ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
         enc->gop_size = static_cast<int>(settings.rate.nominal() * 2); // clave cada 2 s
         enc->max_b_frames = 2;
         enc->colorspace = AVCOL_SPC_BT709;
@@ -123,7 +131,7 @@ struct Mp4Writer::Impl {
         audio->sample_fmt = AV_SAMPLE_FMT_FLTP;
         av_channel_layout_default(&audio->ch_layout, kAudioChannels);
         audio->time_base = {1, kAudioSampleRate};
-        audio->bit_rate = 192'000;
+        audio->bit_rate = settings.audioBitrate;
         if (out->oformat->flags & AVFMT_GLOBALHEADER) {
             audio->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
@@ -141,19 +149,26 @@ struct Mp4Writer::Impl {
                   "No se pudo crear el MP4");
         out.reset(raw);
 
-        const std::vector<std::string> candidates =
-            settings.videoEncoders.empty() ? defaultVideoEncoders() : settings.videoEncoders;
+        const std::vector<std::string> candidates = settings.videoEncoders.empty()
+                                                        ? defaultVideoEncoders(settings.codec)
+                                                        : settings.videoEncoders;
         for (const std::string& name : candidates) {
             if (openVideo(name)) {
                 break;
             }
         }
         if (!video) {
-            throw MediaError("No hay ningún codificador de video H.264 disponible");
+            throw MediaError(settings.codec == VideoCodec::H265
+                                 ? "No hay ningún codificador de video H.265 disponible"
+                                 : "No hay ningún codificador de video H.264 disponible");
         }
         videoStream = avformat_new_stream(out.get(), nullptr);
         ff::check(avcodec_parameters_from_context(videoStream->codecpar, video.get()),
                   "No se pudo configurar el video");
+        if (video->codec_id == AV_CODEC_ID_HEVC) {
+            // "hvc1": la etiqueta que piden los reproductores de Apple (y Premiere) en MP4.
+            videoStream->codecpar->codec_tag = MKTAG('h', 'v', 'c', '1');
+        }
         videoStream->time_base = video->time_base;
         videoStream->avg_frame_rate = video->framerate;
 

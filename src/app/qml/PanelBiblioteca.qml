@@ -15,7 +15,6 @@ ColumnLayout {
     required property Item fantasma
     property bool cuadricula: false
     signal importar()
-    signal abrirEnOrigen(string ruta)
     signal nuevaSecuencia()
     signal cerrarProyecto(var uid)
 
@@ -538,7 +537,8 @@ ColumnLayout {
     }
 
     // Ratón sobre un elemento: arrastrar (medio a la línea de tiempo o a una carpeta,
-    // secuencia a una carpeta), doble clic para abrir y clic derecho para su menú.
+    // secuencia a una carpeta), doble clic para abrir (carpeta o secuencia) y clic derecho
+    // para su menú.
     component Zona: MouseArea {
         id: zona
         required property var elemento
@@ -586,8 +586,6 @@ ColumnLayout {
                 biblioteca.entrar(elemento.id)
             else if (elemento.tipo === "secuencia")
                 biblioteca.editor.openSequence(elemento.id)
-            else
-                biblioteca.abrirEnOrigen(elemento.path)
         }
     }
 

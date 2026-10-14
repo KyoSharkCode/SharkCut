@@ -3,21 +3,25 @@
 #include "audio/audio_output.h"
 #include "audio/audio_worker.h"
 #include "core/edit.h"
+#include "core/export_settings.h"
 #include "core/project_file.h"
 #include "core/sfx.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
 #include "media/timeline_audio.h"
-#include "player.h"
 #include "render/sequence_exporter.h"
 
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QLocale>
 #include <QMetaObject>
 #include <QOffscreenSurface>
 #include <QPointer>
+#include <QRegularExpression>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QThreadPool>
 #include <QVariantMap>
@@ -37,6 +41,15 @@ using sharkcut::ObjectId;
 using sharkcut::Project;
 
 namespace {
+
+// Ajustes de la aplicación (QSettings).
+constexpr auto kExportSettingsKey = "exportar/ajustes";
+constexpr auto kRecentProjectsKey = "proyectos/recientes";
+constexpr int kMaxRecentProjects = 15;
+
+sharkcut::VideoCodec codecOf(const QString& name) {
+    return name == QLatin1String("h265") ? sharkcut::VideoCodec::H265 : sharkcut::VideoCodec::H264;
+}
 
 // Duración legible: "3:35" o "1:02:03".
 QString durationText(std::int64_t us) {
@@ -226,6 +239,9 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     refreshView();
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
+    m_exportSettings =
+        completeExportSettings(QSettings().value(QLatin1String(kExportSettingsKey)).toMap());
+    refreshRecentProjects();
     connect(this, &Editor::selectionChanged, this, &Editor::selectedClipChanged);
     connect(this, &Editor::projectChanged, this, &Editor::selectedClipChanged);
 }
@@ -698,6 +714,12 @@ QVariantList Editor::sequences() const {
             QStringLiteral("%1×%2 · %3 fps").arg(s.width).arg(s.height).arg(fpsText(s.frameRate));
         entry[QStringLiteral("duration")] =
             QString::fromStdString(sharkcut::formatTimecode(view.length(), s.frameRate));
+        entry[QStringLiteral("width")] = s.width;
+        entry[QStringLiteral("height")] = s.height;
+        entry[QStringLiteral("fps")] =
+            static_cast<double>(s.frameRate.num) / static_cast<double>(s.frameRate.den);
+        entry[QStringLiteral("frames")] = static_cast<qint64>(view.length());
+        entry[QStringLiteral("active")] = sequence.id == activeSequenceId();
         entry[QStringLiteral("open")] =
             std::any_of(m_tabs.begin(), m_tabs.end(), [&](const Tab& t) {
                 return t.project == m_activeProject && t.sequence == sequence.id;
@@ -1079,6 +1101,7 @@ void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
     m_activeTab = -1;
     m_activeProject = project.uid;
     switchTo(active);
+    addRecentProject(path);
     emit opened(true);
 }
 
@@ -1142,6 +1165,7 @@ void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Docum
         return;
     }
     project->history.markSaved(written);
+    addRecentProject(path);
     if (project->path != path) {
         const bool firstSave = project->path.isEmpty();
         project->path = path;
@@ -1165,35 +1189,112 @@ void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Docum
 
 // --- Exportación ----------------------------------------------------------------------
 
-void Editor::exportToFolder(const QUrl& folder, const QString& name, int quality) {
-    const QString directory = folder.isLocalFile() ? folder.toLocalFile() : folder.toString();
-    const QString file = name.trimmed();
-    if (directory.isEmpty() || file.isEmpty()) {
-        return;
+QVariantMap Editor::completeExportSettings(QVariantMap settings) {
+    const QVariantMap defaults{
+        {QStringLiteral("codec"), QStringLiteral("h264")},
+        {QStringLiteral("scale"), 1.0},
+        {QStringLiteral("fps"), 0},
+        {QStringLiteral("quality"), 1},
+        {QStringLiteral("mbps"), 16.0},
+        {QStringLiteral("audio"), true},
+        {QStringLiteral("audioKbps"), 192},
+        {QStringLiteral("folder"), QString()},
+    };
+    for (auto it = defaults.begin(); it != defaults.end(); ++it) {
+        if (!settings.contains(it.key())) {
+            settings.insert(it.key(), it.value());
+        }
     }
-    exportTo(QUrl::fromLocalFile(QDir(directory).filePath(file)), quality);
+    return settings;
 }
 
-void Editor::exportTo(const QUrl& file, int quality) {
-    if (frameCount() <= 0 || m_exporter) {
+void Editor::exportSequence(const QVariantMap& options) {
+    if (m_exporter) {
         return;
     }
-    QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
-    if (path.isEmpty()) {
+    const auto id = static_cast<ObjectId>(options.value(QStringLiteral("sequence")).toLongLong());
+    const ObjectId sequence = id != 0 ? id : activeSequenceId();
+    if (!document().sequence(sequence)) {
+        setError(QStringLiteral("No hay ninguna secuencia que exportar"));
         return;
     }
+    QVariantMap settings = completeExportSettings(m_exportSettings);
+    for (const QString& key :
+         {QStringLiteral("codec"), QStringLiteral("scale"), QStringLiteral("fps"),
+          QStringLiteral("quality"), QStringLiteral("mbps"), QStringLiteral("audio"),
+          QStringLiteral("audioKbps"), QStringLiteral("folder")}) {
+        if (options.contains(key)) {
+            settings.insert(key, options.value(key));
+        }
+    }
+    const QUrl folderUrl = settings.value(QStringLiteral("folder")).toUrl();
+    const QString folder = folderUrl.isLocalFile() ? folderUrl.toLocalFile() : folderUrl.toString();
+    const QString name = options.value(QStringLiteral("name")).toString().trimmed();
+    if (folder.isEmpty() || name.isEmpty()) {
+        return;
+    }
+    m_exportSettings = settings;
+    QSettings().setValue(QLatin1String(kExportSettingsKey), m_exportSettings);
+    emit exportSettingsChanged();
+    startExport(document().view(sequence), settings, folder, name,
+                options.value(QStringLiteral("rangeStart"), -1).toLongLong(),
+                options.value(QStringLiteral("rangeEnd"), -1).toLongLong());
+}
+
+void Editor::quickExport() {
+    if (m_exporter || !hasSequence()) {
+        return;
+    }
+    QVariantMap settings = completeExportSettings(m_exportSettings);
+    QUrl folder = settings.value(QStringLiteral("folder")).toUrl();
+    if (folder.isEmpty()) {
+        folder = defaultExportFolder();
+    }
+    QString name = sequenceName().trimmed();
+    // Caracteres que no valen en un nombre de archivo de Windows.
+    static const QRegularExpression invalid(QStringLiteral("[<>:\"/\\\\|?*]"));
+    name.replace(invalid, QStringLiteral("_"));
+    startExport(project(), settings,
+                folder.isLocalFile() ? folder.toLocalFile() : folder.toString(),
+                name.isEmpty() ? projectName() : name, -1, -1);
+}
+
+void Editor::startExport(const Project& sequence, const QVariantMap& settings,
+                         const QString& folder, const QString& name, qint64 rangeStart,
+                         qint64 rangeEnd) {
+    if (m_exporter || sequence.length() <= 0) {
+        setError(QStringLiteral("La secuencia está vacía: no hay nada que exportar"));
+        return;
+    }
+    QString path = QDir(folder).filePath(name);
     if (!path.endsWith(QLatin1String(".mp4"), Qt::CaseInsensitive)) {
         path += QLatin1String(".mp4");
     }
     pause();
 
+    const sharkcut::VideoCodec codec = codecOf(settings.value(QStringLiteral("codec")).toString());
+    const int fps = settings.value(QStringLiteral("fps")).toInt();
+    const sharkcut::ExportSize size = sharkcut::exportSize(
+        sequence.settings.width, sequence.settings.height,
+        std::clamp(settings.value(QStringLiteral("scale")).toDouble(), 0.1, 4.0));
+    const int quality = settings.value(QStringLiteral("quality")).toInt();
+
     sharkcut::ExportJob job;
-    job.content = project();
-    job.rate = project().settings.frameRate;
-    job.canvasSize = canvasSize();
+    job.content = sequence;
+    job.rate = fps > 0 ? sharkcut::FrameRate{fps, 1} : sequence.settings.frameRate;
+    job.canvasSize = QSize(size.width, size.height);
+    job.rangeStart = std::max<qint64>(0, rangeStart);
+    job.rangeEnd = rangeEnd;
     job.outputPath = path.toStdString();
-    constexpr std::array<std::int64_t, 3> kBitrates{8'000'000, 16'000'000, 40'000'000};
-    job.videoBitrate = kBitrates[static_cast<std::size_t>(std::clamp(quality, 0, 2))];
+    job.codec = codec;
+    job.videoBitrate =
+        quality >= 0 && quality < sharkcut::kExportQualityCount
+            ? sharkcut::recommendedBitrate(size.width, size.height, job.rate, quality, codec)
+            : static_cast<std::int64_t>(
+                  std::clamp(settings.value(QStringLiteral("mbps")).toDouble(), 0.5, 400.0) * 1e6);
+    job.audio = settings.value(QStringLiteral("audio")).toBool();
+    job.audioBitrate =
+        std::clamp(settings.value(QStringLiteral("audioKbps")).toInt(), 64, 320) * 1000;
 #ifndef Q_OS_WIN
     // OpenGL necesita una superficie creada en el hilo de la interfaz.
     if (!m_exportSurface) {
@@ -1226,17 +1327,21 @@ void Editor::exportTo(const QUrl& file, int quality) {
             emit editor.exportChanged();
         });
     };
-    callbacks.finished = [post, path, timer](bool ok, const std::string& message,
-                                             const std::string& encoder) {
+    callbacks.finished = [post, timer](bool ok, const std::string& message,
+                                       const std::string& encoder, const std::string& written) {
         const QString text = QString::fromStdString(message);
-        const QString codec = QString::fromStdString(encoder);
+        const QString codecName = QString::fromStdString(encoder);
+        const QString file = QString::fromStdString(written);
         const double seconds = static_cast<double>(timer->elapsed()) / 1000.0;
-        post([ok, text, codec, path, seconds](Editor& editor) {
+        post([ok, text, codecName, file, seconds](Editor& editor) {
             editor.m_exporter.reset(); // el hilo ya terminó
             editor.m_exportProgress = ok ? 1.0 : 0.0;
+            if (ok) {
+                editor.m_lastExportPath = file;
+            }
             editor.m_exportMessage = ok ? QStringLiteral("Exportado en %1 s con %2: %3")
                                               .arg(seconds, 0, 'f', 1)
-                                              .arg(codec, QDir::toNativeSeparators(path))
+                                              .arg(codecName, QDir::toNativeSeparators(file))
                                         : QStringLiteral("No se exportó: %1").arg(text);
             emit editor.exportChanged();
         });
@@ -1246,6 +1351,119 @@ void Editor::exportTo(const QUrl& file, int quality) {
     m_exportMessage = QStringLiteral("Preparando la exportación…");
     m_exporter = std::make_unique<sharkcut::SequenceExporter>(std::move(job), std::move(callbacks));
     emit exportChanged();
+}
+
+void Editor::showLastExport() const {
+    if (!m_lastExportPath.isEmpty()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_lastExportPath).absolutePath()));
+    }
+}
+
+QVariantList Editor::exportSizes(qint64 sequenceId) const {
+    QVariantList list;
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return list;
+    }
+    for (const sharkcut::ExportSize& size :
+         sharkcut::exportSizes(sequence->settings.width, sequence->settings.height)) {
+        QVariantMap entry;
+        entry[QStringLiteral("width")] = size.width;
+        entry[QStringLiteral("height")] = size.height;
+        entry[QStringLiteral("scale")] = size.scale;
+        entry[QStringLiteral("label")] =
+            QStringLiteral("%1×%2").arg(size.width).arg(size.height) +
+            (size.scale == 1.0 ? QStringLiteral(" (la de la secuencia)")
+                               : QStringLiteral(" (%1 %)").arg(std::lround(size.scale * 100)));
+        list.append(entry);
+    }
+    return list;
+}
+
+double Editor::recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
+                               const QString& codec) const {
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return 0.0;
+    }
+    const sharkcut::ExportSize size =
+        sharkcut::exportSize(sequence->settings.width, sequence->settings.height, scale);
+    const sharkcut::FrameRate rate =
+        fps > 0 ? sharkcut::FrameRate{fps, 1} : sequence->settings.frameRate;
+    return static_cast<double>(sharkcut::recommendedBitrate(size.width, size.height, rate, quality,
+                                                            codecOf(codec))) /
+           1e6;
+}
+
+QString Editor::sequenceTimecode(qint64 sequenceId, qint64 frame) const {
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return {};
+    }
+    return QString::fromStdString(sharkcut::formatTimecode(frame, sequence->settings.frameRate));
+}
+
+qint64 Editor::parseTimecode(qint64 sequenceId, const QString& text) const {
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return -1;
+    }
+    const auto frame = sharkcut::parseTimecode(text.toStdString(), sequence->settings.frameRate);
+    return frame ? static_cast<qint64>(*frame) : -1;
+}
+
+// --- Proyectos recientes ------------------------------------------------------------
+
+void Editor::addRecentProject(const QString& path) {
+    const QString absolute = QFileInfo(path).absoluteFilePath();
+    QSettings settings;
+    QStringList list = settings.value(QLatin1String(kRecentProjectsKey)).toStringList();
+    list.removeAll(absolute);
+    list.prepend(absolute);
+    while (list.size() > kMaxRecentProjects) {
+        list.removeLast();
+    }
+    settings.setValue(QLatin1String(kRecentProjectsKey), list);
+    refreshRecentProjects();
+}
+
+void Editor::forgetRecentProject(const QString& path) {
+    QSettings settings;
+    QStringList list = settings.value(QLatin1String(kRecentProjectsKey)).toStringList();
+    list.removeAll(path);
+    settings.setValue(QLatin1String(kRecentProjectsKey), list);
+    refreshRecentProjects();
+}
+
+void Editor::refreshRecentProjects() {
+    const QStringList paths = QSettings().value(QLatin1String(kRecentProjectsKey)).toStringList();
+    // Mirar si existen es acceso a disco (quizá a una unidad de red): fuera de la interfaz.
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, paths] {
+        QVariantList list;
+        for (const QString& path : paths) {
+            const QFileInfo info(path);
+            QVariantMap entry;
+            entry[QStringLiteral("path")] = path;
+            entry[QStringLiteral("name")] = info.completeBaseName();
+            entry[QStringLiteral("folder")] = QDir::toNativeSeparators(info.absolutePath());
+            entry[QStringLiteral("exists")] = info.exists();
+            entry[QStringLiteral("date")] =
+                info.exists()
+                    ? QLocale().toString(info.lastModified(), QStringLiteral("d MMM yyyy, HH:mm"))
+                    : QString();
+            list.append(entry);
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, list] {
+                if (self) {
+                    self->m_recentProjects = list;
+                    emit self->recentProjectsChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
 }
 
 void Editor::cancelExport() {
@@ -1482,48 +1700,6 @@ void Editor::addMedia(qint64 mediaId, qint64 frame, int track) {
         const auto id = static_cast<ObjectId>(mediaId);
         adoptSettings(p, id);
         const ObjectId clip = sharkcut::placeClip(p, id, frame < 0 ? p.length() : frame, target);
-        if (clip != 0) {
-            end = p.clip(clip)->end();
-        }
-        return clip != 0;
-    });
-    if (placed) {
-        seek(end);
-    }
-}
-
-void Editor::addFromSource(Player* source, bool atPlayhead) {
-    if (!source || !source->loaded()) {
-        return;
-    }
-    const std::string path = source->filePath().toStdString();
-    const sharkcut::FrameRate sourceRate = source->frameRate();
-    MediaItem item;
-    item.path = path;
-    item.name = source->fileName().toStdString();
-    item.durationUs = sharkcut::frameToMicroseconds(source->frameCount(), sourceRate);
-    item.frameRate = sourceRate;
-    item.width = source->canvasSize().width();
-    item.height = source->canvasSize().height();
-    item.hasVideo = true;
-    item.hasAudio = source->hasAudio();
-    // Tramo marcado en µs del medio (la salida del reproductor es el último incluido).
-    const std::int64_t inUs = sharkcut::frameToMicroseconds(source->rangeIn(), sourceRate);
-    const std::int64_t outUs = sharkcut::frameToMicroseconds(source->rangeOut() + 1, sourceRate);
-    const std::int64_t playhead = m_currentFrame;
-
-    std::int64_t end = -1;
-    const bool placed = edit(QStringLiteral("Añadir tramo"), [&](Project& p) {
-        ObjectId id = findMediaByPath(p, path);
-        if (id == 0) {
-            id = sharkcut::addMedia(p, item);
-        }
-        adoptSettings(p, id);
-        const sharkcut::Rational frame = p.settings.frameRate.frameDuration();
-        const std::int64_t in = sharkcut::rescale(inUs, sharkcut::kMicroseconds, frame);
-        const std::int64_t out = sharkcut::rescale(outUs, sharkcut::kMicroseconds, frame);
-        const std::int64_t start = atPlayhead ? playhead : p.length();
-        const ObjectId clip = sharkcut::placeClip(p, id, start, in, out - in);
         if (clip != 0) {
             end = p.clip(clip)->end();
         }

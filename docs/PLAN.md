@@ -663,9 +663,20 @@ ctest --preset windows-debug
      medio lo quita de todas las secuencias. Pedidos de Kyo en la etapa: barra de
      desplazamiento vertical visible en la línea de tiempo y pistas de video en tono
      azulado y de audio en tono verdoso.
-   - [ ] Etapa 2: nueva distribución y exportación. Pestañas Proyectos · Editor ·
-     Exportar; panel Propiedades separado (Medios · Transiciones · Efectos | Propiedades |
-     Programa); Exportar con configuración completa y "Exportar rápido" en la esquina.
+   - [x] Etapa 2: nueva distribución y exportación. Pestañas superiores Proyectos (nuevo,
+     abrir, proyectos abiertos, recientes y datos del sistema; es la pestaña con la que
+     arranca la app), Editor y Exportar. Editor: Medios · Transiciones · Efectos |
+     Propiedades | Programa. Exportar: secuencia (la activa; elegir otra la abre), nombre
+     y carpeta, tramo (completa o desde/hasta en código de tiempo, con «Cabezal»), códec
+     H.264 o H.265, resolución (la de la secuencia o escalas con su forma: 200, 133, 67 y
+     50 %), fps (los de la secuencia, 60, 50, 30, 25, 24), calidad (Ligera, Alta, Máxima
+     con la tasa ajustada a la resolución y los fps, o a medida en Mbps) y audio (AAC
+     128/192/320 kbps o sin audio); vista previa, resumen con el tamaño aproximado y
+     «Abrir carpeta» al terminar. «Exportar rápido» (esquina inferior, Ctrl+Mayús+M)
+     exporta la secuencia activa entera con los últimos ajustes, a la última carpeta y
+     con el nombre de la secuencia. Nunca se reemplaza un archivo: «nombre (2).mp4». Se
+     retiran Origen, Transición y su código (Player, TransitionLab); la prueba de
+     transición sigue en tools/filmstrip.
    - [ ] Etapa 3: edición rápida y trabajo seguro. Q/W, ripple delete, J/K/L, marcadores,
      crear pista al soltar en la zona vacía, autoguardado y recuperación.
    - [ ] Etapa 4: rendimiento con VODs largos.

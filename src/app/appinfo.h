@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
 // Datos de la aplicación expuestos a QML (versión, Qt, sistema).
@@ -15,6 +16,7 @@ class AppInfo : public QObject {
     Q_PROPERTY(QString operatingSystem READ operatingSystem CONSTANT)
     Q_PROPERTY(QString buildType READ buildType CONSTANT)
     Q_PROPERTY(QString initialFile READ initialFile CONSTANT)
+    Q_PROPERTY(QStringList initialFiles READ initialFiles CONSTANT)
 
 public:
     explicit AppInfo(QObject* parent = nullptr);
@@ -25,4 +27,6 @@ public:
     QString buildType() const;
     // Archivo pasado al abrir la app (p. ej. "SharkCut.exe clip.mp4"), o vacío.
     QString initialFile() const;
+    // Todos los archivos pasados al abrir la app (con dos: clip A y clip B).
+    QStringList initialFiles() const;
 };

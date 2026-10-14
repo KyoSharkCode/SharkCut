@@ -39,24 +39,13 @@ QString channelsText(int channels) {
 
 } // namespace
 
-Player::Player(QObject* parent) : QObject(parent) {
-    try {
-        // SHARKCUT_AUDIO_DEVICE=null: salida muda que avanza a velocidad real (pruebas en
-        // equipos sin tarjeta de sonido).
-        const bool useNull = qEnvironmentVariable("SHARKCUT_AUDIO_DEVICE") == QLatin1String("null");
-        m_audioOutput = std::make_unique<sharkcut::AudioOutput>(
-            useNull ? sharkcut::AudioOutput::Device::Null : sharkcut::AudioOutput::Device::Default);
-        m_audioOutputText =
-            QStringLiteral("%1 · %2").arg(QString::fromStdString(m_audioOutput->backendName()),
-                                          QString::fromStdString(m_audioOutput->deviceName()));
-    } catch (const std::exception& e) {
-        // Sin tarjeta de sonido se reproduce igual, en silencio y con temporizador.
-        m_audioOutputText = QStringLiteral("No disponible (%1)").arg(QString::fromUtf8(e.what()));
-    }
+Player::Player(QObject* parent) : CompositionSource(parent) {
+    m_audioOutput = createAudioOutput(&m_audioOutputText);
 }
 
 Player::~Player() {
     // Detener los hilos antes de destruir el resto de miembros (y la salida de audio).
+    m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
     m_worker.reset();
 }
@@ -67,6 +56,59 @@ QString Player::timecode() const {
 
 QString Player::durationTimecode() const {
     return QString::fromStdString(sharkcut::formatTimecode(m_frameCount, m_rate));
+}
+
+QString Player::markInTimecode() const {
+    return m_markIn >= 0 ? QString::fromStdString(sharkcut::formatTimecode(m_markIn, m_rate))
+                         : QStringLiteral("—");
+}
+
+QString Player::markOutTimecode() const {
+    return m_markOut >= 0 ? QString::fromStdString(sharkcut::formatTimecode(m_markOut, m_rate))
+                          : QStringLiteral("—");
+}
+
+QString Player::markedDurationTimecode() const {
+    const qint64 length = std::max<qint64>(rangeOut() - rangeIn() + 1, 0);
+    return QString::fromStdString(sharkcut::formatTimecode(length, m_rate));
+}
+
+sharkcut::CompositorInput Player::composition() const {
+    sharkcut::CompositorInput input;
+    input.a = m_frame;
+    return input;
+}
+
+QSize Player::canvasSize() const {
+    return m_frame ? QSize(m_frame->width, m_frame->height) : QSize(1920, 1080);
+}
+
+void Player::setMarkIn() {
+    if (!m_loaded) {
+        return;
+    }
+    m_markIn = m_currentFrame;
+    if (m_markOut >= 0 && m_markOut < m_markIn) {
+        m_markOut = -1; // una salida anterior a la entrada no tiene sentido
+    }
+    emit marksChanged();
+}
+
+void Player::setMarkOut() {
+    if (!m_loaded) {
+        return;
+    }
+    m_markOut = m_currentFrame;
+    if (m_markIn >= 0 && m_markIn > m_markOut) {
+        m_markIn = -1;
+    }
+    emit marksChanged();
+}
+
+void Player::clearMarks() {
+    m_markIn = -1;
+    m_markOut = -1;
+    emit marksChanged();
 }
 
 QString Player::decoderText() const {
@@ -112,6 +154,8 @@ void Player::openPath(const QString& path) {
         return;
     }
     // Los hilos anteriores se detienen antes de abrir el nuevo archivo.
+    m_clock.stop();
+    m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
     m_worker.reset();
     const quint64 session = ++m_session;
@@ -124,13 +168,16 @@ void Player::openPath(const QString& path) {
     m_pendingFrame = 0; // al abrir se muestra el primer fotograma
     m_hwAccelName.clear();
     m_hasAudio = false;
-    m_audioClock = false;
     m_fileName = QFileInfo(path).fileName();
+    m_filePath = path;
+    m_markIn = -1;
+    m_markOut = -1;
+    emit marksChanged();
     setCurrentFrame(0);
     emit loadedChanged();
     emit decoderChanged();
     emit audioChanged();
-    emit frameChanged();
+    emit compositionChanged();
     setBusy(true);
 
     // Los avisos llegan desde los hilos de decodificación: se reenvían al hilo de la
@@ -171,8 +218,9 @@ void Player::openPath(const QString& path) {
             post([info](Player& p) { p.onAudioOpened(info); });
         };
         // Un clip sin audio no es un error: simplemente se reproduce en silencio.
-        m_audioWorker =
-            std::make_unique<AudioWorker>(utf8Path, *m_audioOutput, std::move(audioCallbacks));
+        m_audioWorker = std::make_unique<AudioWorker>(
+            [utf8Path] { return std::make_unique<sharkcut::AudioDecoder>(utf8Path); },
+            *m_audioOutput, std::move(audioCallbacks));
     }
 }
 
@@ -187,6 +235,7 @@ void Player::onOpened(const VideoStreamInfo& info) {
                              .arg(info.height);
     m_loaded = true;
     emit loadedChanged();
+    emit marksChanged(); // la duración marcada depende del número de fotogramas
     emit decoderChanged();
     emit audioChanged();
     emit currentFrameChanged(); // el código de tiempo depende de los fps
@@ -196,9 +245,8 @@ void Player::onAudioOpened(const AudioStreamInfo& info) {
     m_hasAudio = true;
     m_audioInfo = info;
     emit audioChanged();
-    if (m_playing) {
-        startClockAt(m_currentFrame); // empezó a sonar a mitad: pasar al reloj del audio
-    }
+    // Desde ahora el reloj lo marca el audio (si ya se reproducía, sigue desde ahí).
+    m_clock.setAudio(m_audioOutput.get(), m_audioWorker.get());
 }
 
 void Player::onFailed(const QString& message) {
@@ -224,37 +272,6 @@ void Player::onFramesAvailable() {
     }
 }
 
-void Player::startClockAt(qint64 frame) {
-    m_clockAnchorUs = sharkcut::frameToMicroseconds(frame, m_rate);
-    m_clock.start();
-    m_audioClock = m_hasAudio && m_audioWorker;
-    if (m_audioClock) {
-        const std::int64_t sample = sharkcut::rescale(m_clockAnchorUs, sharkcut::kMicroseconds,
-                                                      sharkcut::kAudioSampleDuration);
-        m_audioRequest = m_audioWorker->play(sample);
-    }
-}
-
-qint64 Player::clockUs() {
-    if (m_audioClock) {
-        const sharkcut::AudioOutput::Clock clock = m_audioOutput->clock();
-        if (clock.requestId != m_audioRequest) {
-            // El audio aún se está preparando: el reloj espera en el punto de partida.
-            m_clock.start();
-            return m_clockAnchorUs;
-        }
-        m_clockAnchorUs = sharkcut::rescale(clock.sample, sharkcut::kAudioSampleDuration,
-                                            sharkcut::kMicroseconds);
-        m_clock.start();
-        if (!m_audioWorker->finished()) {
-            return m_clockAnchorUs;
-        }
-        // El audio terminó antes que el video: se sigue con el temporizador.
-        m_audioClock = false;
-    }
-    return m_clockAnchorUs + m_clock.nsecsElapsed() / 1000;
-}
-
 void Player::play() {
     if (!m_loaded || m_playing) {
         return;
@@ -263,15 +280,13 @@ void Player::play() {
         seek(0); // al final: empezar de nuevo
     }
     m_pendingFrame = -1;
+    setBusy(false);
     setPlaying(true);
-    startClockAt(m_currentFrame);
+    m_clock.start(sharkcut::frameToMicroseconds(m_currentFrame, m_rate));
 }
 
 void Player::pause() {
-    if (m_audioWorker) {
-        m_audioWorker->pause();
-    }
-    m_audioClock = false;
+    m_clock.stop();
     setPlaying(false);
 }
 
@@ -288,7 +303,7 @@ void Player::seek(qint64 frame) {
 
     if (m_playing) {
         m_worker->seek(frame);
-        startClockAt(frame);
+        m_clock.start(sharkcut::frameToMicroseconds(frame, m_rate));
         return;
     }
     // En pausa: si el fotograma ya está preparado (p. ej. al avanzar de uno en uno)
@@ -312,7 +327,7 @@ void Player::advance() {
     if (!m_playing || !m_worker) {
         return;
     }
-    const qint64 target = sharkcut::microsecondsToFrame(clockUs(), m_rate);
+    const qint64 target = sharkcut::microsecondsToFrame(m_clock.nowUs(), m_rate);
 
     if (auto frame = m_worker->takeUpTo(target)) {
         showFrame(std::move(frame));
@@ -329,7 +344,7 @@ void Player::showFrame(std::shared_ptr<const VideoFrame> frame) {
     }
     m_frame = std::move(frame);
     setCurrentFrame(m_frame->index);
-    emit frameChanged();
+    emit compositionChanged();
 }
 
 void Player::setCurrentFrame(qint64 frame) {

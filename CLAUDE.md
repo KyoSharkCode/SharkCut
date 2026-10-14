@@ -7,7 +7,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 ## Stack
 - C++20 + Qt 6.10.3, interfaz en Qt Quick / QML.
 - Render: QRhi (backend Direct3D 11 en Windows) + shaders GLSL 440 compilados
-  con qsb. Vista previa y exportación usan el MISMO compositor.
+  con qsb. Vista previa y exportación usan el MISMO compositor. Las texturas que
+  se renderizan y luego se muestrean se invierten en Y si rhi->isYUpInFramebuffer().
+  Los shaders deben valer para GLSL ES 100 (bucles con límite constante).
 - Medios: FFmpeg enlazado como biblioteca (libavformat/libavcodec; Windows: build
   de Gyan 9.0.2 descargada por cmake/FFmpeg.cmake; Linux: pkg-config), con
   NVDEC (D3D11VA) para decodificar y NVENC para codificar. Los fotogramas se
@@ -22,7 +24,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - src/core y src/media no dependen de Qt; deben poder probarse sin ventanas.
   src/media: análisis (probeMedia), VideoDecoder, DecodeWorker (hilo + cola), color.
   src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
-  src/app: Player (reloj y estado) y VideoViewer (QQuickRhiItem + shaders).
+  src/core también: easing, catálogo de transiciones (transition.h) y la secuencia
+  A → transición → B (sequence.h).
+  src/media también: AudioSource, SequenceAudioSource (mezcla A/B con fundido).
+  src/render (Qt Gui, sin Quick): Compositor QRhi (capas → transición → lienzo →
+  presentación) y sus shaders; lo usan el visor y la exportación (mismo motor).
+  src/app: Player (origen, marcas I/O), TransitionLab (secuencia de prueba),
+  PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem + Compositor).
+  tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
+  (útil para revisar cambios en transition.frag).
 - Formato de audio interno: float estéreo intercalado a 48 kHz; la muestra 0 es el
   primer fotograma del video. El reloj de reproducción lo marca el audio.
 - El callback de audio es tiempo real: sin esperas, sin reservas de memoria, sin

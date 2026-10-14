@@ -72,7 +72,39 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Etapa 3: audio sincronizado
+### Fase 1, etapa 1: laboratorio de transiciones
+
+SharkCut tiene ahora dos pestañas arriba: **1 · Origen** y **2 · Transición**.
+
+**Marcas de entrada y salida (como el monitor de origen de Premiere).** En vez de cortar
+los videos en archivos separados, eliges un tramo dentro de un video:
+
+1. En **Origen**, abre un video y lleva el cabezal al punto donde quieres que empiece
+   el tramo. Pulsa **I** (entrada).
+2. Lleva el cabezal al punto donde quieres que termine y pulsa **O** (salida). El tramo
+   queda resaltado en la barra. Sin marcas se usa el video entero.
+3. Pulsa **Usar como clip A**.
+4. Marca otro tramo (del mismo video o de otro) y pulsa **Usar como clip B**.
+5. Ve a **2 · Transición** (o pulsa **Ir a la transición →**, o la tecla **2**).
+
+> La transición solapa el **final de A** con el **principio de B**: deja un poco de
+> margen al final del tramo A y al principio del B.
+
+Atajo: `SharkCut.exe clipA.mp4 clipB.mp4` carga los dos videos enteros como A y B.
+
+**En la pestaña Transición:**
+
+- [ ] La barra muestra A (azul), B (verde) y la zona de transición (morado).
+- [ ] **Ver transición (T)** reproduce desde 1 s antes hasta 1 s después y se detiene.
+- [ ] Prueba las 7 transiciones del selector **Tipo**: cada una carga sus valores por defecto.
+- [ ] **Duración**, **Intensidad**, **Desenfoque** y **Curva** cambian el resultado al
+  instante (también en pausa: avanza fotograma a fotograma con ← y →).
+- [ ] El audio hace un fundido cruzado suave durante la transición.
+- [ ] **Intercambiar A ↔ B** funciona.
+- [ ] Compara con Composer: anota qué transiciones se parecen y cuáles no, y qué cambiarías
+  (más rápida, más desenfoque, otra curva…). ¡Capturas o videos del móvil ayudan mucho!
+
+### Fase 0, etapa 3: audio sincronizado (validada)
 
 Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmadas).
 
@@ -87,7 +119,7 @@ Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmad
    - [ ] Reproduce el clip hasta el final: al terminar se detiene sola.
 4. Si notas desfase, di si la voz va **adelantada** o **retrasada** respecto a la imagen.
 
-### Etapa 2: reproducir un clip de OBS (validada)
+### Fase 0, etapa 2: reproducir un clip de OBS (validada)
 
 1. Abre SharkCut y pulsa **Abrir video…** (o `Ctrl + O`), o arrastra un MP4 al visor.
    También funciona `SharkCut.exe ruta\al\clip.mp4`.
@@ -103,7 +135,7 @@ Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmad
    - [ ] Los colores se ven igual que en Premiere u OBS (ni lavados ni saturados).
 4. Envía una captura con el panel **Clip** visible.
 
-### Etapa 1: ventana y diagnóstico (validada)
+### Fase 0, etapa 1: ventana y diagnóstico (validada)
 
 Al ejecutar SharkCut debe abrirse una ventana oscura con el visor y el panel
 **Diagnóstico**:

@@ -17,8 +17,8 @@ constexpr std::size_t kChunkFrames = 1024;
 constexpr std::size_t kPrebufferFloats = kAudioSampleRate / 10 * kAudioChannels;
 } // namespace
 
-AudioWorker::AudioWorker(std::string path, AudioOutput& output, Callbacks callbacks)
-    : m_path(std::move(path)), m_output(output), m_callbacks(std::move(callbacks)),
+AudioWorker::AudioWorker(SourceFactory makeSource, AudioOutput& output, Callbacks callbacks)
+    : m_makeSource(std::move(makeSource)), m_output(output), m_callbacks(std::move(callbacks)),
       m_thread([this] { run(); }) {}
 
 AudioWorker::~AudioWorker() {
@@ -56,9 +56,9 @@ bool AudioWorker::finished() const {
 }
 
 void AudioWorker::run() {
-    std::unique_ptr<AudioDecoder> decoder;
+    std::unique_ptr<AudioSource> decoder;
     try {
-        decoder = std::make_unique<AudioDecoder>(m_path);
+        decoder = m_makeSource();
     } catch (const std::exception& e) {
         if (m_callbacks.failed) {
             m_callbacks.failed(e.what());

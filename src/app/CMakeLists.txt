@@ -11,6 +11,13 @@ qt_add_qml_module(SharkCut
     QML_FILES
         qml/Main.qml
         qml/Theme.qml
+        qml/Boton.qml
+        qml/Chip.qml
+        qml/FilaDato.qml
+        qml/Pestana.qml
+        qml/Deslizador.qml
+        qml/Selector.qml
+        qml/BarraTiempo.qml
     SOURCES
         appinfo.h
         appinfo.cpp
@@ -18,14 +25,11 @@ qt_add_qml_module(SharkCut
         player.cpp
         videoviewer.h
         videoviewer.cpp
-)
-
-# Shaders GLSL 440 compilados con qsb para cada API gráfica (D3D11, Vulkan, OpenGL…).
-qt_add_shaders(SharkCut "shaders"
-    PREFIX "/"
-    FILES
-        shaders/video.vert
-        shaders/video.frag
+        compositionsource.h
+        playbackclock.h
+        playbackclock.cpp
+        transitionlab.h
+        transitionlab.cpp
 )
 
 # El ejecutable va a bin/ para no chocar con la carpeta del módulo QML "SharkCut".
@@ -34,7 +38,9 @@ set_target_properties(SharkCut PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BIN
 target_compile_definitions(SharkCut PRIVATE SHARKCUT_VERSION="${PROJECT_VERSION}")
 target_link_libraries(SharkCut PRIVATE
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::GuiPrivate
+    sharkcut_render
     sharkcut_core
     sharkcut_media
     sharkcut_audio

@@ -354,6 +354,8 @@ desincronía en SharkCut, y se puede saltar a cualquier fotograma.
 ### Fase 1 — Transiciones
 - Compositor con dos clips y las siete transiciones de prioridad 1.
 - Panel de prueba con controles de intensidad, duración y easing.
+- Marcas de entrada y salida (I/O) para elegir los tramos A y B dentro de un video,
+  sin tener que cortar archivos aparte (la línea de tiempo completa es la fase 2).
 - Exportación de prueba de esa mezcla con NVENC.
 **Hecho cuando:** la calidad visual convence frente a Premiere Composer y el
 resultado exportado es idéntico a la vista previa.
@@ -458,6 +460,15 @@ ctest --preset windows-debug
    - **Fase 0 terminada.** La optimización "sin copias" (textura de NVDEC directa al
      visor) pasa a la fase 4, donde importa (4K, varias pistas, VODs).
 5. Fase 1: transiciones.
+   - [x] Etapa 1: laboratorio de transiciones. Núcleo (curvas de suavizado, catálogo
+     de transiciones, secuencia A → transición → B), compositor QRhi de cuatro
+     pasadas (capa A, capa B, transición, presentación) compartido por visor y
+     exportación, las 7 transiciones en un shader con desenfoques radial, de giro y
+     direccional y bordes en espejo, audio de la secuencia con fundido cruzado de
+     potencia constante, pestañas Origen (marcas I/O) y Transición (parámetros en
+     directo, "Ver transición"). Herramienta `sharkcut_filmstrip` para revisar las
+     transiciones fuera de la interfaz. Pendiente de validar en el PC de Kyo.
+   - [ ] Etapa 2: exportar la secuencia de prueba a MP4 con NVENC (mismo compositor).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

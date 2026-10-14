@@ -3,6 +3,7 @@
 #include "audio/ring_buffer.h"
 #include "media/audio_decoder.h"
 #include "media/media_error.h"
+#include "media/sequence_audio.h"
 #include "test_clip.h"
 
 #include <catch2/catch_approx.hpp>
@@ -173,7 +174,8 @@ TEST_CASE("AudioWorker alimenta la salida y el reloj avanza", "[audio]") {
     std::atomic<bool> opened = false;
     AudioWorker::Callbacks callbacks;
     callbacks.opened = [&](const AudioStreamInfo&) { opened = true; };
-    AudioWorker worker(clip.path.string(), *output, callbacks);
+    const std::string path = clip.path.string();
+    AudioWorker worker([path] { return std::make_unique<AudioDecoder>(path); }, *output, callbacks);
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!opened && std::chrono::steady_clock::now() < deadline) {
@@ -193,4 +195,58 @@ TEST_CASE("AudioWorker alimenta la salida y el reloj avanza", "[audio]") {
     const std::int64_t paused = output->clock().sample;
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
     CHECK(output->clock().sample == paused); // en pausa el reloj no avanza
+}
+
+TEST_CASE("SequenceAudioSource mezcla A y B con fundido cruzado", "[audio][sequence]") {
+    TempClip clipA(pcmClip(), "a.mkv");
+    TempClip clipB(pcmClip(), "b.mkv");
+    // A: fotogramas 10–69 (60), B: 20–109 (90), transición de 20 → 130 fotogramas.
+    const SequenceLayout layout = makeLayout({10, 70}, {20, 110}, 20);
+    SequenceAudioSource source(layout, {60, 1}, clipA.path.string(), clipB.path.string());
+
+    std::vector<float> all;
+    std::vector<float> chunk(1000 * kAudioChannels);
+    while (const std::size_t n = source.read(chunk.data(), 1000)) {
+        all.insert(all.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(n * 2));
+    }
+    REQUIRE(all.size() == 130u * kSamplesPerFrame * 2);
+
+    auto sampleAt = [&](std::int64_t frame) {
+        return all[static_cast<std::size_t>(frame * kSamplesPerFrame + 400) * 2];
+    };
+    // Antes de la transición: solo A (fotograma 10 + t).
+    CHECK(sampleAt(5) == Catch::Approx(audioLevelFor(15)).margin(1e-4));
+    // Después: solo B (fotograma 20 + t − 40).
+    CHECK(sampleAt(100) == Catch::Approx(audioLevelFor(80)).margin(1e-4));
+    // En la transición (t = 50, 10 fotogramas dentro de 20): mezcla de potencia constante.
+    const double x = (10.0 * kSamplesPerFrame + 400.0 + 0.5) / (20.0 * kSamplesPerFrame);
+    const double expected = std::cos(x * 3.14159265358979 / 2) * audioLevelFor(60) +
+                            std::sin(x * 3.14159265358979 / 2) * audioLevelFor(30);
+    CHECK(sampleAt(50) == Catch::Approx(expected).margin(1e-4));
+
+    // Tras una búsqueda se obtiene lo mismo que leyendo de corrido.
+    source.seekToSample(50 * kSamplesPerFrame + 400);
+    float stereo[2] = {};
+    REQUIRE(source.read(stereo, 1) == 1);
+    CHECK(stereo[0] == Catch::Approx(sampleAt(50)).margin(1e-6));
+    source.seekToSample(100 * kSamplesPerFrame + 400);
+    REQUIRE(source.read(stereo, 1) == 1);
+    CHECK(stereo[0] == Catch::Approx(sampleAt(100)).margin(1e-6));
+}
+
+TEST_CASE("SequenceAudioSource pone silencio en el clip sin audio", "[audio][sequence]") {
+    TempClip clipA(pcmClip(), "a.mkv");
+    ClipOptions silent;
+    silent.frames = 120;
+    TempClip clipB(silent, "b-sin-audio.mp4");
+    const SequenceLayout layout = makeLayout({0, 60}, {0, 60}, 10);
+    SequenceAudioSource source(layout, {60, 1}, clipA.path.string(), clipB.path.string());
+
+    source.seekToSample(100 * kSamplesPerFrame);
+    float stereo[2] = {1.0f, 1.0f};
+    REQUIRE(source.read(stereo, 1) == 1);
+    CHECK(stereo[0] == 0.0f);
+
+    CHECK_THROWS_AS(SequenceAudioSource(layout, {60, 1}, clipB.path.string(), clipB.path.string()),
+                    MediaError);
 }

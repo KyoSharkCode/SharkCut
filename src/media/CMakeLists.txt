@@ -12,8 +12,11 @@ add_library(sharkcut_media STATIC
     color.cpp
     video_decoder.h
     video_decoder.cpp
+    audio_source.h
     audio_decoder.h
     audio_decoder.cpp
+    sequence_audio.h
+    sequence_audio.cpp
     decode_worker.h
     decode_worker.cpp
 )

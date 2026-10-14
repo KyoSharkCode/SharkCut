@@ -39,9 +39,9 @@ un año. La app debe cubrir el flujo diario antes de esa fecha.
 | Lenguaje | JavaScript (módulos ES), con JSDoc donde ayude | Mismo lenguaje que Kyo Estudio, fácil reutilizar plantillas |
 | Render (vista previa y exportación) | **WebGL2 + shaders GLSL** | Transiciones y efectos rápidos en GPU |
 | Codificación final | **ffmpeg nativo** incluido en la app | Mucho más rápido que ffmpeg.wasm; usa la GPU |
-| Codificación por hardware | NVENC / AMF / QuickSync, con fallback a `libx264` | Exportaciones rápidas en cualquier tarjeta gráfica |
+| Codificación por hardware | **NVENC por defecto** (RTX 3060 12 GB); AMF / QuickSync detectados si existen; fallback a `libx264` | El PC de trabajo tiene NVIDIA; el resto queda por compatibilidad |
 | Edición | **No destructiva** | Los archivos originales nunca se modifican |
-| Archivo de proyecto | `.sharkcut` (JSON) | Legible, versionable, fácil de depurar |
+| Archivo de proyecto | `.sharkp` (JSON) | Legible, versionable, fácil de depurar |
 | Empaquetado | `electron-builder` → instalador NSIS `.exe` | Instalación sencilla en Windows |
 | Alternativa futura | Tauri (Rust) | Solo si el rendimiento o el tamaño lo exigen |
 
@@ -62,7 +62,7 @@ que se exporta.
 - Biblioteca de transiciones propias (sección 6).
 - Biblioteca de efectos de sonido con licencia libre (sección 7).
 - Textos y títulos con la marca Marea Nocturna.
-- Overlays y animaciones procedentes de Kyo Estudio.
+- Overlays y animaciones propios (conexión con Kyo Estudio más adelante).
 - Presets de exportación: 1080×1920 (9:16), 1920×1080 (16:9), 1080×1080 (1:1).
 - Deshacer/rehacer, autoguardado y atajos de teclado.
 
@@ -82,7 +82,7 @@ que se exporta.
 │                                                            │
 │  Proceso principal (Node.js)                               │
 │   ├─ Gestión de ventanas y menús                           │
-│   ├─ Sistema de archivos (abrir/guardar .sharkcut, medios)  │
+│   ├─ Sistema de archivos (abrir/guardar .sharkp, medios)  │
 │   ├─ ffprobe: leer metadatos de los clips                  │
 │   ├─ ffmpeg: generar miniaturas, ondas de audio, proxies   │
 │   └─ ffmpeg: codificar la exportación final                │
@@ -144,7 +144,7 @@ SharkCut/
 │  │  ├─ index.html
 │  │  ├─ app.js
 │  │  ├─ ui/                 # Línea de tiempo, biblioteca, inspector, visor
-│  │  ├─ project/            # Modelo, historial, guardado .sharkcut
+│  │  ├─ project/            # Modelo, historial, guardado .sharkp
 │  │  ├─ render/             # Motor WebGL, compositor
 │  │  │  └─ shaders/
 │  │  └─ audio/              # Mezcla y reproducción
@@ -173,16 +173,24 @@ personalizable.
 
 | Transición | Técnica |
 |---|---|
+Prioridad 1 — las que se usan hoy en Composer (fase 0):
+
+| Transición | Técnica |
+|---|---|
+| Fade to Black | Opacidad del clip A a negro y de negro al clip B, con curva configurable |
+| Pan (Left) | El clip A sale hacia la izquierda y el B entra desde la derecha, con desenfoque de movimiento horizontal |
+| Rotate | Rotación del clip A con desenfoque radial mientras entra el clip B girando hasta 0° |
+| Shake & Distort | Desplazamiento y rotación con ruido que decae + shader de deformación (ondas / lente) + aberración cromática RGB |
 | Zoom In | Escala del clip A de 100% a ~300% con curva rápida + desenfoque radial; el clip B entra desde ~30% a 100% |
 | Zoom Out | Inverso del Zoom In |
-| Shake | Desplazamiento y rotación con ruido que decae + desenfoque direccional |
-| Distort | Shader de deformación (ondas / lente) + aberración cromática RGB |
-| Whip / Slide | Desplazamiento rápido con desenfoque de movimiento en la dirección |
-| Spin | Rotación rápida con desenfoque radial |
-| Glitch | Bloques desplazados, separación RGB y ruido digital |
+| Zoom & Rotate Out | Zoom Out combinado con rotación y desenfoque radial |
 
-> Pendiente: confirmar las 4–5 transiciones favoritas de Composer para
-> priorizarlas en la prueba de concepto.
+Prioridad 2 — ampliaciones posteriores (fase 4):
+
+| Transición | Técnica |
+|---|---|
+| Pan (otras direcciones) | Mismo shader que Pan (Left) con dirección como parámetro |
+| Glitch | Bloques desplazados, separación RGB y ruido digital |
 
 ### Formato de un preset (ejemplo)
 
@@ -235,21 +243,23 @@ Whoosh, Impacto / Hit, Riser, Pop / Click, Glitch, Swoosh, Transición musical.
 
 ## 8. Integración con Kyo Estudio
 
-- Reutilizar el motor de plantillas canvas de Kyo Estudio (repositorio
-  `KyoSharkCode/KyoWidgets`, archivo `animaciones.js` y carpeta `animaciones/`)
-  como **clips de animación** dentro de la línea de tiempo.
-- Usar la guía de marca **Marea Nocturna** (colores, tipografías de `fonts/`,
-  logo) para los textos y títulos predefinidos.
-- Opción A (inicial): copiar los módulos necesarios a `src/renderer/kyo/`.
-- Opción B (futura): extraer un paquete compartido que usen ambos proyectos.
+- **SharkCut se construye desde cero.** No se copia código de Kyo Estudio
+  (`KyoSharkCode/KyoWidgets`), aunque ese proyecto ya tenga un mini editor.
+- Usar la guía de marca **Marea Nocturna** (colores, tipografías, logo) para
+  la interfaz y los textos y títulos predefinidos.
+- **Conexión futura (después de la fase 2):** cuando ambos proyectos estén
+  estables, valorar que SharkCut pueda cargar las animaciones de Kyo Estudio
+  como clips de animación, o extraer un paquete compartido. No se diseña nada
+  de esto antes de tiempo.
 
 ---
 
 ## 9. Fases y criterios de "hecho"
 
 ### Fase 0 — Prueba de concepto (`prototype/`)
-Página HTML independiente: se cargan dos clips y se previsualizan Zoom In,
-Zoom Out, Shake y Distort entre ellos con controles de intensidad y duración.
+Página HTML independiente: se cargan dos clips y se previsualizan entre ellos
+las siete transiciones de prioridad 1 (sección 6) con controles de intensidad
+y duración.
 **Hecho cuando:** la calidad visual convence frente a Premiere Composer.
 
 ### Fase 0.5 — Spike técnico del pipeline (`prototype/pipeline/`)
@@ -268,7 +278,7 @@ exportación.
 - Importar clips (arrastrar y soltar), leer metadatos con ffprobe.
 - Línea de tiempo: 1 pista de video + 1 de audio; cortar, recortar, mover.
 - Visor con reproducción, pausa y búsqueda.
-- Guardar y abrir `.sharkcut`.
+- Guardar y abrir `.sharkp`.
 - Exportar a MP4 1080p con codificación por hardware (decodificación
   fotograma a fotograma con WebCodecs, ver 13.2).
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
@@ -276,7 +286,7 @@ exportación.
 ### Fase 2 — Lo propio
 - Transiciones de la fase 0 integradas (arrastrar entre clips).
 - Biblioteca de efectos de sonido y emparejamiento transición ↔ sonido.
-- Textos con la marca, overlays y animaciones de Kyo Estudio.
+- Textos con la marca y overlays propios.
 - Presets de exportación 9:16, 16:9 y 1:1.
 **Hecho cuando:** se puede producir un short típico de principio a fin.
 
@@ -356,12 +366,14 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 
 ### Decisiones pendientes
 - [x] Nombre definitivo de la app: **SharkCut**.
-- [ ] Las 4–5 transiciones favoritas de Premiere Composer para priorizar.
-- [ ] Tarjeta gráfica del PC (NVIDIA / AMD / Intel) para ajustar el codificador por defecto.
-- [ ] Resolución y fotogramas por segundo habituales de los clips (p. ej. 1080p60 desde OBS).
-- [ ] Contenedor y pistas de audio de OBS: ¿MKV o MP4? ¿Micrófono y audio del
-      escritorio en pistas separadas? (ver sección 13.3).
-- [ ] Vía de exportación tras el spike de la fase 0.5 (ver sección 13.1).
+- [x] Transiciones prioritarias: Fade to Black, Pan (Left), Rotate,
+      Shake & Distort, Zoom In, Zoom Out, Zoom & Rotate Out.
+- [x] Tarjeta gráfica: NVIDIA RTX 3060 12 GB → `h264_nvenc` por defecto.
+- [x] Clips habituales: 1080p a 60 fps (proyecto por defecto 1080p60).
+- [x] Grabación de OBS: MP4 fragmentado, una sola pista de audio.
+- [x] Extensión del proyecto: `.sharkp`.
+- [x] Vía de exportación: **A** (ffmpeg por stdin con conversión a YUV).
+- [x] Kyo Estudio: SharkCut se hace desde cero; conexión eventual más adelante.
 
 ---
 
@@ -380,9 +392,9 @@ justo, y en 4K no lo es. Dos vías a comparar en la fase 0.5:
 | **A. ffmpeg por stdin** (plan original) | Un shader convierte el fotograma a YUV 4:2:0 (≈ 3,1 MB, 2,7× menos) antes de leerlo con `readPixels` asíncrono (PBO). Se envía al proceso principal con `MessagePort` y buffers transferibles. | Control total del codificador (NVENC/AMF/QSV con todas sus opciones). | Copia GPU→CPU→IPC en cada fotograma. |
 | **B. WebCodecs `VideoEncoder`** | Se crea un `VideoFrame` directamente desde el canvas WebGL y Chromium lo codifica por hardware (Media Foundation en Windows). ffmpeg solo une video y audio en el MP4 final (`-c copy`). | Sin copias de píxeles por IPC; muy rápido. | Menos control de calidad y bitrate; depende del soporte de Chromium. |
 
-Recomendación: implementar la vía A con conversión a YUV como base fiable y
-medir la B. Quedarse con la más rápida que dé buena calidad; la otra queda
-como alternativa.
+**Decisión: vía A.** ffmpeg por stdin, con conversión a YUV en la GPU y
+`h264_nvenc` como codificador por defecto. La vía B queda documentada solo
+como alternativa si la A no alcanzara la velocidad necesaria.
 
 ### 13.2 Decodificación precisa desde la fase 1
 `HTMLVideoElement` sirve para la vista previa en tiempo real, pero al exportar
@@ -397,18 +409,19 @@ garantiza (es lento e impreciso con GOPs largos). Ajuste:
   arrastrar por la línea de tiempo).
 
 ### 13.3 Importación de clips de OBS
-- OBS suele grabar en **MKV** (seguro ante cortes) y `mp4box.js` solo lee MP4.
-  Al importar, si el clip es MKV, se hace un **remux** a MP4 con
-  `ffmpeg -c copy` (segundos, sin pérdida de calidad) en la carpeta de caché.
-  El original nunca se toca.
+- Las grabaciones de OBS son **MP4 fragmentado**, que `mp4box.js` lee
+  directamente: **no se duplica ni se convierte el archivo**. Se usa tal cual.
+- Solo si algún día se importa un MKV u otro contenedor no compatible, se hace
+  un remux a MP4 con `ffmpeg -c copy` en la carpeta de caché (rápido y sin
+  pérdida). El original nunca se toca.
 - **VFR:** ffprobe detecta fotogramas variables (`r_frame_rate` ≠
   `avg_frame_rate`); en ese caso se genera una copia a fotogramas constantes
   en la caché.
-- **Varias pistas de audio** (micrófono, escritorio, música por separado): el
-  modelo de clip debe admitir N pistas de audio por archivo desde el principio,
-  aunque la interfaz de la fase 1 solo muestre la primera.
-- Carpeta de caché por proyecto (`<proyecto>.sharkcut.cache/`) para remux,
-  proxies, miniaturas y ondas; se puede borrar sin perder nada.
+- **Audio:** las grabaciones actuales tienen una sola pista. El modelo de clip
+  guarda las pistas como lista para no cerrar la puerta a varias, pero la
+  interfaz solo trabaja con una hasta que haga falta.
+- Carpeta de caché por proyecto (`<proyecto>.sharkp.cache/`) para proxies,
+  miniaturas y ondas; se puede borrar sin perder nada.
 
 ### 13.4 Modelo de tiempo
 - Los tiempos del proyecto se guardan como **enteros** (microsegundos o
@@ -417,7 +430,7 @@ garantiza (es lento e impreciso con GOPs largos). Ajuste:
 - Cada clip guarda `sourceIn`, `sourceOut` (en el archivo original) y
   `timelineStart` (en la línea de tiempo). Recortar y dividir solo cambia esos
   números: edición no destructiva por diseño.
-- El `.sharkcut` incluye un campo `version` para poder migrar proyectos
+- El `.sharkp` incluye un campo `version` para poder migrar proyectos
   antiguos cuando cambie el formato.
 
 ### 13.5 Electron

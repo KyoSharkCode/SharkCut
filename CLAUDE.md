@@ -13,12 +13,12 @@ secciones anteriores cuando difieren.
 - Seguridad Electron: contextIsolation activado, nodeIntegration desactivado,
   sandbox activado, toda la comunicación por preload.js + IPC. Medios locales
   servidos con un protocolo propio (`media://`), nunca con webSecurity desactivado.
-- Archivo de proyecto: `.sharkcut` (JSON con campo `version`).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`).
 - Tiempos internos en enteros (microsegundos o fotogramas), no en segundos float.
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.
-  Remux, proxies, miniaturas y ondas van a la carpeta de caché del proyecto.
+  Proxies, miniaturas y ondas van a la carpeta de caché del proyecto.
 - No copiar código ni recursos de Premiere Composer ni de otros productos de pago.
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.
 - Respetar las fases del plan; no adelantar funciones de fases posteriores.

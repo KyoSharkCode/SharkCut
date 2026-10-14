@@ -5,14 +5,14 @@ Pensado para VODs de Twitch largos (40+ min) y para shorts/clips.
 El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes.
 
 ## Stack
-- C++20 + Qt 6 (LTS ≥ 6.8), interfaz en Qt Quick / QML.
+- C++20 + Qt 6.10.3, interfaz en Qt Quick / QML.
 - Render: QRhi (backend Direct3D 11 en Windows) + shaders GLSL 440 compilados
   con qsb. Vista previa y exportación usan el MISMO compositor.
 - Medios: FFmpeg enlazado como biblioteca (libavformat/libavcodec), con
   NVDEC (D3D11VA) para decodificar y NVENC para codificar. Los fotogramas se
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio (WASAPI) + mezclador propio; el audio es el reloj maestro.
-- Compilación: CMake + vcpkg. Tests: Catch2 + ctest.
+- Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
 - Archivo de proyecto: `.sharkp` (JSON con campo `version`).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -32,9 +32,11 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.
 - Respetar las fases del plan; no adelantar funciones de fases posteriores.
 - Comentarios y textos de la interfaz en español.
-- Estilo visual de la app: marca Marea Nocturna de KyoSumiVT.
+- Estilo visual del editor: tema "Marea Profunda" (docs/PLAN.md, sección 15),
+  definido en src/app/qml/Theme.qml. No usar colores sueltos fuera del tema.
 
-## Comandos (actualizar cuando existan)
-- cmake --preset windows-release
-- cmake --build --preset windows-release
-- ctest --preset windows-release
+## Comandos
+- cmake --preset windows-debug        (en Linux: linux-debug; requiere QT_ROOT_DIR)
+- cmake --build --preset windows-debug
+- ctest --preset windows-debug
+- Solo núcleo y tests, sin Qt: cmake -S . -B build/core -G Ninja -DSHARKCUT_BUILD_APP=OFF

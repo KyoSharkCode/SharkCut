@@ -43,7 +43,7 @@ una base sólida sobre la rapidez.
 | Plataforma | Windows 10/11 (64 bits) | Es el sistema que se usa |
 | Tipo de app | **Nativa**, local, sin depender de internet | Rendimiento de editor profesional, VODs largos |
 | Lenguaje | **C++20** | Lenguaje de Premiere, DaVinci, Kdenlive y Shotcut; acceso directo a FFmpeg, GPU y audio |
-| Interfaz | **Qt 6 (LTS ≥ 6.8)** con **Qt Quick / QML** | Interfaz acelerada por GPU y totalmente personalizable (Marea Nocturna); Qt es lo que usa DaVinci |
+| Interfaz | **Qt 6.10.3** con **Qt Quick / QML** (versión fijada en todo el proyecto) | Interfaz acelerada por GPU y totalmente personalizable (Marea Nocturna); Qt es lo que usa DaVinci |
 | GPU / render | **QRhi** (capa gráfica de Qt) con backend **Direct3D 11** en Windows | Un solo código de render; en Windows habla D3D11 directamente; permite compilar y probar en otros sistemas con Vulkan/OpenGL |
 | Shaders | GLSL estilo Vulkan (`#version 440`), compilados con `qsb` a HLSL/SPIR-V | Se escriben una vez y Qt los traduce a cada backend |
 | Decodificación | **FFmpeg (libavformat/libavcodec)** enlazado como biblioteca, con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
@@ -53,10 +53,11 @@ una base sólida sobre la rapidez.
 | Proyecto por defecto | **1080p a 60 fps**, audio estéreo 48 kHz | Formato habitual de grabación |
 | Edición | **No destructiva** | Los archivos originales nunca se modifican |
 | Archivo de proyecto | **`.sharkp`** (JSON con campo `version`) | Legible, versionable, migrable |
-| Compilación | **CMake** + **vcpkg** (dependencias) | Estándar en C++ moderno; reproducible en el PC y en CI |
+| Compilación | **CMake** (presets) + Ninja; dependencias de C++ con FetchContent y, desde la llegada de FFmpeg, vcpkg o binarios precompilados | Estándar en C++ moderno; reproducible en el PC y en CI |
 | Empaquetado | `windeployqt` + instalador (Inno Setup o NSIS) | Instalación sencilla en Windows |
-| Tests | **Catch2** (o Qt Test) + `ctest` | Pruebas del modelo, tiempos y pipeline sin interfaz |
-| CI | GitHub Actions en `windows-latest` | Compila, ejecuta tests y genera el instalador |
+| Tests | **Catch2 v3** + `ctest` | Pruebas del modelo, tiempos y pipeline sin interfaz |
+| CI | GitHub Actions en `windows-latest` y Ubuntu | Compila, ejecuta tests y publica el ejecutable de Windows |
+| Estilo visual | Tema **"Marea Profunda"**: versión sobria de Marea Nocturna (sección 15) | El editor se usa durante horas; la marca va en acentos |
 
 ### Principio clave: un solo motor de render
 
@@ -414,20 +415,20 @@ fluidez y no se echa de menos Premiere.
 - Visual Studio 2022 (o Build Tools) con la carga "Desarrollo para el
   escritorio con C++".
 - CMake ≥ 3.25 y Ninja.
-- Qt 6 (LTS ≥ 6.8) para MSVC 64 bits, con Qt Shader Tools.
-- vcpkg (instala FFmpeg con soporte NVENC/NVDEC, miniaudio, Catch2, etc.).
+- Qt 6.10.3 para MSVC 64 bits, con Qt Shader Tools.
 - Controladores NVIDIA actualizados.
+- Guía paso a paso: [`docs/SETUP-WINDOWS.md`](SETUP-WINDOWS.md).
 
 ### En sesiones en la nube (Linux)
 - Compilan y prueban el núcleo y el camino por software.
 - Lo específico de Windows y de NVIDIA se valida en el PC de Kyo o en el CI
   de Windows.
 
-### Comandos (actualizar cuando existan)
+### Comandos
 ```
-cmake --preset windows-release
-cmake --build --preset windows-release
-ctest --preset windows-release
+cmake --preset windows-debug          # o linux-debug / *-release
+cmake --build --preset windows-debug
+ctest --preset windows-debug
 ```
 
 ---
@@ -437,7 +438,11 @@ ctest --preset windows-release
 1. ~~Crear el repositorio en GitHub~~ → `KyoSharkCode/SharkCut`.
 2. ~~Añadir este plan y `CLAUDE.md`.~~
 3. Preparar el entorno de desarrollo en el PC (sección 13).
-4. Fase 0: cimientos (compilación, CI, visor, decodificación y audio).
+4. Fase 0: cimientos.
+   - [x] Etapa 1: proyecto CMake, CI, núcleo de tiempo con tests, ventana Qt Quick
+     con diagnóstico (API gráfica, fps).
+   - [ ] Etapa 2: FFmpeg + decodificación por hardware y visor de video.
+   - [ ] Etapa 3: audio sincronizado, play/pausa y búsqueda precisa.
 5. Fase 1: transiciones.
 
 ### Decisiones tomadas
@@ -450,7 +455,61 @@ ctest --preset windows-release
 - [x] Grabación de OBS: MP4 fragmentado, una sola pista de audio.
 - [x] Extensión del proyecto: `.sharkp`.
 - [x] Kyo Estudio: SharkCut se hace desde cero; conexión eventual más adelante.
+- [x] Lenguaje: C++ (Rust descartado por la madurez de sus bibliotecas de interfaz).
+- [x] Estilo visual del editor: tema "Marea Profunda" (sección 15).
 
 ### Decisiones pendientes
 - [ ] Atajos de teclado: copiar el mapa de Premiere tal cual o uno propio.
 - [ ] Instalador: Inno Setup o NSIS (decidir al llegar a la fase 2).
+- [ ] FFmpeg en Windows: vcpkg (compila desde código) o binarios precompilados
+      (decidir en la etapa 2 de la fase 0).
+
+---
+
+## 15. Estilo visual del editor: "Marea Profunda"
+
+Marea Nocturna es una identidad de stream: saturada, con pegatinas, rebotes y
+destellos. Un editor se mira durante horas y necesita lo contrario: calma visual
+y neutralidad de color. Por eso la interfaz usa una variante sobria.
+
+### Principios
+- **Base neutra:** grises carbón con un matiz azul muy leve, como DaVinci o
+  Premiere. Nada de fondos saturados.
+- **El visor manda:** su entorno es casi negro y neutro (`#0B0C10`) para no
+  alterar la percepción del color del video.
+- **La marca en acentos:** Bioluz suavizado para foco y selección; Bioluz puro
+  solo en el cabezal de reproducción.
+- **Texto sin blanco puro** y contraste suficiente (WCAG AA) para leer cómodo.
+- **Animaciones discretas y rápidas** (100–200 ms, sin rebotes) en la interfaz.
+  Los rebotes y destellos de la marca quedan para la pantalla de inicio y
+  momentos puntuales (p. ej. exportación terminada).
+- **Clips de colores apagados** en la línea de tiempo, para que no compitan con
+  el video.
+
+### Paleta
+| Rol | Color |
+|---|---|
+| Fondo | `#14161C` |
+| Panel | `#1B1E26` |
+| Panel elevado / hover | `#232733` |
+| Bordes | `#2C3140` |
+| Entorno del visor | `#0B0C10` |
+| Texto principal | `#E6E8EE` |
+| Texto secundario | `#9AA3B5` |
+| Texto desactivado | `#5F6778` |
+| Acento (foco, selección) | `#4FC3D1` (Bioluz suavizado) |
+| Cabezal de reproducción | `#6FE3F0` (Bioluz) |
+| Acento secundario | `#3A7BD5` (Aleta) |
+| Clip de video / audio / transición / texto | `#3D5A8A` / `#2F6F6A` / `#7D74A8` / `#9C8340` |
+| OK / aviso / error | `#4FBF8F` / `#E0B440` / `#D0465F` |
+
+La paleta completa de Marea Nocturna sigue disponible en el tema
+(`Theme.marca`) para la pantalla de inicio, el logo y los textos y títulos de
+marca que se insertan en los videos.
+
+### Tipografía
+- Interfaz: fuente del sistema (Segoe UI en Windows) por legibilidad.
+- Más adelante se puede incluir una fuente propia para la interfaz y las
+  fuentes de marca (Fredoka, Chakra Petch…) para los títulos de los videos.
+
+Implementación: `src/app/qml/Theme.qml`.

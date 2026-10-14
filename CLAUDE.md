@@ -26,6 +26,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
   src/core también: easing, catálogo de transiciones (transition.h) y la secuencia
   A → transición → B (sequence.h).
+  src/core también: proyecto y línea de tiempo (project.h), operaciones de edición
+  (edit.h), deshacer/rehacer (history.h: cada edición se aplica a una copia del
+  proyecto) y el archivo .sharkp (project_file.h, con nlohmann/json).
   src/media también: AudioSource, SequenceAudioSource (mezcla A/B con fundido).
   src/render (Qt Gui, sin Quick): Compositor QRhi (capas → transición → lienzo →
   presentación) y sus shaders; lo usan el visor y la exportación (mismo motor).

@@ -23,6 +23,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(FFmpeg)
 include(miniaudio)
+include(json)
 
 add_subdirectory(src/core)
 add_subdirectory(src/media)

@@ -479,6 +479,18 @@ ctest --preset windows-debug
      MP4 se ve y se oye igual que en SharkCut.
    - **Fase 1 terminada.** Lo único que falta frente a Composer son los efectos de
      sonido de cada transición, previstos en la fase 3 (sección 7).
+6. Fase 2: editor básico.
+   - [x] Etapa 1: núcleo de la línea de tiempo, sin interfaz. Proyecto (ajustes,
+     biblioteca de medios, pistas V1 y A1), clips enlazados video + audio, operaciones
+     de edición (colocar sobrescribiendo, dividir, recortar inicio/final, mover,
+     quitar dejando hueco), historial de deshacer/rehacer por instantáneas del proyecto
+     y archivo `.sharkp` (JSON con `version`, rutas absolutas y relativas, guardado
+     atómico). Todo con tests.
+   - [ ] Etapa 2: la línea de tiempo en la interfaz. Biblioteca de medios (arrastrar y
+     soltar), reproducción de la línea de tiempo (video y audio de varios clips),
+     herramientas de edición con ratón y atajos, deshacer/rehacer.
+   - [ ] Etapa 3: guardar y abrir proyectos desde la interfaz y exportar la línea de
+     tiempo completa a MP4.
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

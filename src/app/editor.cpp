@@ -3,20 +3,27 @@
 #include "audio/audio_output.h"
 #include "audio/audio_worker.h"
 #include "core/edit.h"
+#include "core/project_file.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
 #include "media/timeline_audio.h"
 #include "player.h"
+#include "render/sequence_exporter.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QOffscreenSurface>
 #include <QPointer>
 #include <QThreadPool>
 #include <QVariantMap>
+#include <rhi/qrhi.h>
 
 #include <algorithm>
 #include <exception>
+#include <filesystem>
 
 using sharkcut::Clip;
 using sharkcut::DecodeWorker;
@@ -76,6 +83,7 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
 }
 
 Editor::~Editor() {
+    m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
     for (VideoSlot& slot : m_slots) {
@@ -207,6 +215,235 @@ sharkcut::CompositorInput Editor::composition() const {
         input.a = m_frame;
     }
     return input;
+}
+
+// --- Archivo del proyecto -------------------------------------------------------------
+
+QString Editor::projectName() const {
+    return m_projectPath.isEmpty() ? QStringLiteral("Sin título")
+                                   : QFileInfo(m_projectPath).completeBaseName();
+}
+
+void Editor::setFileBusy(bool busy) {
+    if (m_fileBusy != busy) {
+        m_fileBusy = busy;
+        emit fileBusyChanged();
+    }
+}
+
+void Editor::newProject() {
+    if (m_fileBusy) {
+        return;
+    }
+    pause();
+    m_history.reset(Project{});
+    m_projectPath.clear();
+    m_selection.clear();
+    setCurrentFrame(0);
+    setError({});
+    onProjectChanged();
+    emit fileChanged();
+}
+
+void Editor::openProject(const QUrl& file) {
+    openProjectPath(file.isLocalFile() ? file.toLocalFile() : file.toString());
+}
+
+void Editor::openProjectPath(const QString& path) {
+    if (path.isEmpty() || m_fileBusy) {
+        return;
+    }
+    pause();
+    setFileBusy(true);
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, path] {
+        auto project = std::make_shared<Project>();
+        QString error;
+        QStringList missing;
+        try {
+            *project = sharkcut::loadProject(sharkcut::pathFromUtf8(path.toStdString()));
+            for (const MediaItem& item : project->media) {
+                std::error_code ignored;
+                if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
+                    missing << QString::fromStdString(item.name);
+                }
+            }
+        } catch (const std::exception& e) {
+            error = QString::fromStdString(e.what());
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, project, path, error, missing] {
+                if (self) {
+                    self->finishOpen(project, path, error, missing);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::finishOpen(const std::shared_ptr<Project>& project, const QString& path,
+                        const QString& error, const QStringList& missing) {
+    setFileBusy(false);
+    if (!error.isEmpty()) {
+        setError(QStringLiteral("No se pudo abrir el proyecto: %1").arg(error));
+        emit opened(false);
+        return;
+    }
+    m_history.reset(std::move(*project));
+    m_projectPath = path;
+    m_selection.clear();
+    setCurrentFrame(0);
+    setError(missing.isEmpty() ? QString()
+                               : QStringLiteral("No se encuentran estos medios: %1")
+                                     .arg(missing.join(QStringLiteral(", "))));
+    onProjectChanged();
+    emit fileChanged();
+    emit opened(true);
+}
+
+bool Editor::save() {
+    if (m_projectPath.isEmpty()) {
+        return false;
+    }
+    saveToPath(m_projectPath);
+    return true;
+}
+
+void Editor::saveAs(const QUrl& file) {
+    QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
+    if (path.isEmpty()) {
+        return;
+    }
+    const QString extension =
+        QString::fromUtf8(sharkcut::kProjectExtension.data(),
+                          static_cast<qsizetype>(sharkcut::kProjectExtension.size()));
+    if (!path.endsWith(extension, Qt::CaseInsensitive)) {
+        path += extension;
+    }
+    saveToPath(path);
+}
+
+void Editor::saveToPath(const QString& path) {
+    if (m_fileBusy) {
+        return;
+    }
+    setFileBusy(true);
+    const std::shared_ptr<const Project> snapshot = m_history.snapshot();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, snapshot, path] {
+        QString error;
+        try {
+            sharkcut::saveProject(*snapshot, sharkcut::pathFromUtf8(path.toStdString()));
+        } catch (const std::exception& e) {
+            error = QString::fromStdString(e.what());
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, snapshot, path, error] {
+                if (self) {
+                    self->finishSave(snapshot, path, error);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::finishSave(const std::shared_ptr<const Project>& written, const QString& path,
+                        const QString& error) {
+    setFileBusy(false);
+    if (!error.isEmpty()) {
+        setError(error);
+        emit saved(false);
+        return;
+    }
+    m_history.markSaved(written);
+    if (m_projectPath != path) {
+        m_projectPath = path;
+        emit fileChanged();
+    }
+    emit modifiedChanged();
+    emit saved(true);
+}
+
+// --- Exportación ----------------------------------------------------------------------
+
+void Editor::exportTo(const QUrl& file) {
+    if (frameCount() <= 0 || m_exporter) {
+        return;
+    }
+    QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(QLatin1String(".mp4"), Qt::CaseInsensitive)) {
+        path += QLatin1String(".mp4");
+    }
+    pause();
+
+    sharkcut::ExportJob job;
+    job.content = project();
+    job.rate = project().settings.frameRate;
+    job.canvasSize = canvasSize();
+    job.outputPath = path.toStdString();
+#ifndef Q_OS_WIN
+    // OpenGL necesita una superficie creada en el hilo de la interfaz.
+    if (!m_exportSurface) {
+        m_exportSurface.reset(QRhiGles2InitParams::newFallbackSurface());
+    }
+    job.fallbackSurface = m_exportSurface.get();
+#endif
+
+    const quint64 session = ++m_exportSession;
+    QPointer<Editor> self(this);
+    auto post = [self, session](auto fn) {
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, session, fn = std::move(fn)]() {
+                if (self && self->m_exportSession == session) {
+                    fn(*self);
+                }
+            },
+            Qt::QueuedConnection);
+    };
+
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    sharkcut::SequenceExporter::Callbacks callbacks;
+    callbacks.progress = [post](std::int64_t done, std::int64_t total) {
+        post([done, total](Editor& editor) {
+            editor.m_exportProgress = static_cast<double>(done) / static_cast<double>(total);
+            editor.m_exportMessage =
+                QStringLiteral("Exportando… %1 / %2 fotogramas").arg(done).arg(total);
+            emit editor.exportChanged();
+        });
+    };
+    callbacks.finished = [post, path, timer](bool ok, const std::string& message,
+                                             const std::string& encoder) {
+        const QString text = QString::fromStdString(message);
+        const QString codec = QString::fromStdString(encoder);
+        const double seconds = static_cast<double>(timer->elapsed()) / 1000.0;
+        post([ok, text, codec, path, seconds](Editor& editor) {
+            editor.m_exporter.reset(); // el hilo ya terminó
+            editor.m_exportProgress = ok ? 1.0 : 0.0;
+            editor.m_exportMessage = ok ? QStringLiteral("Exportado en %1 s con %2: %3")
+                                              .arg(seconds, 0, 'f', 1)
+                                              .arg(codec, QDir::toNativeSeparators(path))
+                                        : QStringLiteral("No se exportó: %1").arg(text);
+            emit editor.exportChanged();
+        });
+    };
+
+    m_exportProgress = 0.0;
+    m_exportMessage = QStringLiteral("Preparando la exportación…");
+    m_exporter = std::make_unique<sharkcut::SequenceExporter>(std::move(job), std::move(callbacks));
+    emit exportChanged();
+}
+
+void Editor::cancelExport() {
+    if (m_exporter) {
+        m_exporter->cancel(); // el aviso de "terminado" llega después
+    }
 }
 
 // --- Biblioteca ---------------------------------------------------------------------
@@ -492,6 +729,7 @@ void Editor::onProjectChanged() {
     resetVideoSlots();
     restartAudio();
     emit projectChanged();
+    emit modifiedChanged();
     seek(m_currentFrame);
     if (wasPlaying) {
         play();

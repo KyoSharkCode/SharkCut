@@ -72,7 +72,7 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Fase 2, etapa 2: la línea de tiempo
+### Fase 2: editor básico (línea de tiempo, proyectos y exportación)
 
 SharkCut abre ahora en la pestaña **1 · Editor**: visor arriba, biblioteca de medios a
 la derecha y línea de tiempo abajo, con una pista de video (**V1**) y una de audio (**A1**).
@@ -111,7 +111,25 @@ Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
 - [ ] `Ctrl + rueda` hace zoom; la rueda sola desplaza. `+`, `-` y **Ajustar** (`\`) también.
 - [ ] Prueba con un VOD largo (40 min) cortado en muchos trozos: ¿va fluido?
 
-> Guardar el proyecto y exportar la línea de tiempo llegan en la etapa 3.
+**Proyecto** (botones arriba a la derecha):
+
+- [ ] **Guardar** (`Ctrl + S`) pide un nombre la primera vez y crea un archivo `.sharkp`.
+  Mientras hay cambios sin guardar, el nombre del proyecto lleva un punto (•).
+- [ ] Cierra SharkCut con cambios sin guardar: pregunta si quieres guardarlos.
+  Lo mismo con **Nuevo** (`Ctrl + N`) y **Abrir…** (`Ctrl + O`).
+- [ ] **Abrir…** el proyecto guardado: vuelve todo tal cual (clips, cortes, biblioteca).
+  También vale hacer doble clic en el `.sharkp` si lo asocias a SharkCut, o
+  `SharkCut.exe proyecto.sharkp`.
+- [ ] Mueve la carpeta del proyecto junto con sus videos a otro sitio y ábrelo: los
+  encuentra solo. Si falta un video, la barra de estado dice cuál.
+- [ ] `Ctrl + Mayús + S` guarda con otro nombre.
+
+**Exportar** (`Ctrl + M` o el botón **Exportar…**):
+
+- [ ] Exporta la línea de tiempo entera a MP4. El panel derecho muestra el progreso, se
+  puede cancelar y al final dice el tiempo y el códec (**h264_nvenc**).
+- [ ] El MP4 se ve y se oye igual que en SharkCut: cortes, huecos en negro y audio en su sitio.
+- [ ] Monta un short sencillo de principio a fin sin abrir Premiere. ¿Qué echas de menos?
 
 ### Fase 1: laboratorio de transiciones y exportación (validada)
 

@@ -37,9 +37,15 @@ public:
     bool undo();
     bool redo();
 
-    // Cambios sin guardar respecto al último markSaved() (o al proyecto inicial).
+    // Estado actual, compartido e inmutable (p. ej. para guardarlo en otro hilo).
+    std::shared_ptr<const Project> snapshot() const { return m_states[m_index].project; }
+
+    // Cambios sin guardar respecto al último estado guardado (o al proyecto inicial).
     bool modified() const { return m_states[m_index].project != m_saved; }
     void markSaved() { m_saved = m_states[m_index].project; }
+    // Marca como guardado un estado concreto: el que se escribió, aunque mientras
+    // tanto se haya seguido editando.
+    void markSaved(std::shared_ptr<const Project> state) { m_saved = std::move(state); }
 
     // Empieza de cero con otro proyecto (nuevo o recién abierto), sin historial.
     void reset(Project project);

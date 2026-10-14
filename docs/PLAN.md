@@ -493,8 +493,12 @@ ctest --preset windows-debug
      (el clip actual y el siguiente preparado en su primer fotograma) y audio de la línea
      de tiempo con fundidos de 2 ms en los cortes. Desde Origen se envía el tramo marcado
      al final o al cabezal. Pendiente de validar en el PC de Kyo.
-   - [ ] Etapa 3: guardar y abrir proyectos desde la interfaz y exportar la línea de
-     tiempo completa a MP4.
+   - [x] Etapa 3: proyectos y exportación. Nuevo, Abrir, Guardar y Guardar como (lectura y
+     escritura en segundo plano, aviso de medios que faltan, pregunta antes de perder
+     cambios) y exportación de la línea de tiempo a MP4 con el mismo exportador de la
+     fase 1, ahora genérico (prueba de transición o línea de tiempo). Comprobado en Linux
+     que cada fotograma exportado coincide con su origen (cortes y huecos incluidos).
+   - Pendiente de validar en el PC de Kyo (docs/SETUP-WINDOWS.md, "Fase 2").
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

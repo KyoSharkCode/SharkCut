@@ -40,7 +40,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   de tiempo); interfaz en qml/LineaTiempo.qml.
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
-  (útil para revisar cambios en transition.frag); con --export exporta como la app.
+  (útil para revisar cambios en transition.frag); con --export exporta como la app y
+  con --export-project exporta la línea de tiempo de un .sharkp.
   En Linux sin pantalla, ejecutar con xvfb-run.
 - Formato de audio interno: float estéreo intercalado a 48 kHz; la muestra 0 es el
   primer fotograma del video. El reloj de reproducción lo marca el audio.

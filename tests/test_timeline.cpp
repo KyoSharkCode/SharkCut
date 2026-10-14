@@ -294,6 +294,14 @@ TEST_CASE("History undoes and redoes edits", "[timeline]") {
     CHECK_FALSE(history.canRedo());
     CHECK(history.modified());
 
+    // Guardar en segundo plano: se marca el estado que se escribió, no el actual.
+    const auto written = history.snapshot();
+    REQUIRE(history.apply("Añadir clip", [&](Project& p) { return placeClip(p, a, 0) != 0; }));
+    history.markSaved(written);
+    CHECK(history.modified());
+    history.undo();
+    CHECK_FALSE(history.modified());
+
     history.reset(Project{});
     CHECK_FALSE(history.canUndo());
     CHECK_FALSE(history.modified());

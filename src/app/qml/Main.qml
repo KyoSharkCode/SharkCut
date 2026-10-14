@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import SharkCut
@@ -11,9 +12,10 @@ Window {
     minimumWidth: 1000
     minimumHeight: 620
     visible: true
-    title: modo === "origen" && reproductor.fileName.length > 0
-           ? reproductor.fileName + " — SharkCut " + AppInfo.appVersion
-           : "SharkCut " + AppInfo.appVersion
+    title: (modo === "origen" && reproductor.fileName.length > 0
+            ? reproductor.fileName
+            : editor.projectName + (editor.modified ? " •" : ""))
+           + " — SharkCut " + AppInfo.appVersion
     color: Theme.fondo
 
     // "editor": línea de tiempo · "origen": ver un video y marcar tramos ·
@@ -99,11 +101,145 @@ Window {
         onAccepted: editor.importFiles(selectedFiles)
     }
 
-    // Archivos al abrir (p. ej. "SharkCut.exe a.mp4 b.mp4"): se importan y se colocan
-    // en la línea de tiempo, uno detrás de otro.
+    FileDialog {
+        id: dialogoAbrirProyecto
+        title: "Abrir proyecto"
+        nameFilters: ["Proyectos de SharkCut (*.sharkp)"]
+        onAccepted: editor.openProject(selectedFile)
+    }
+    FileDialog {
+        id: dialogoGuardarProyecto
+        title: "Guardar proyecto"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "sharkp"
+        nameFilters: ["Proyectos de SharkCut (*.sharkp)"]
+        onAccepted: editor.saveAs(selectedFile)
+        onRejected: ventana.accionPendiente = ""
+    }
+    FileDialog {
+        id: dialogoExportarLinea
+        title: "Exportar la línea de tiempo"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "mp4"
+        nameFilters: ["Video MP4 (*.mp4)"]
+        onAccepted: editor.exportTo(selectedFile)
+    }
+
+    // --- Proyecto: guardar, abrir y cambios sin guardar ---
+
+    // Acción que espera a que se guarden (o descarten) los cambios: "nuevo", "abrir" o "cerrar".
+    property string accionPendiente: ""
+    property bool cerrarSinPreguntar: false
+
+    function guardar() {
+        if (!editor.save())
+            dialogoGuardarProyecto.open()
+    }
+    function siGuardado(accion) {
+        if (!editor.modified) {
+            ejecutar(accion)
+            return
+        }
+        accionPendiente = accion
+        dialogoCambios.open()
+    }
+    function ejecutar(accion) {
+        accionPendiente = ""
+        if (accion === "nuevo") {
+            editor.newProject()
+        } else if (accion === "abrir") {
+            dialogoAbrirProyecto.open()
+        } else if (accion === "cerrar") {
+            cerrarSinPreguntar = true
+            Qt.callLater(ventana.close)
+        }
+    }
+
+    // ¿Guardar los cambios? (propio, para que los botones estén en español y con el tema)
+    Popup {
+        id: dialogoCambios
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        padding: 20
+        closePolicy: Popup.CloseOnEscape
+        property bool respondido: false
+        onOpened: respondido = false
+        onClosed: {
+            if (!respondido)
+                ventana.accionPendiente = "" // Esc: como cancelar
+        }
+        function responder(respuesta) {
+            respondido = true
+            close()
+            if (respuesta === "guardar")
+                ventana.guardar() // la acción sigue al terminar de guardar
+            else if (respuesta === "descartar")
+                ventana.ejecutar(ventana.accionPendiente)
+            else
+                ventana.accionPendiente = ""
+        }
+        background: Rectangle {
+            color: Theme.panel
+            radius: Theme.radio
+            border.color: Theme.borde
+        }
+        Overlay.modal: Rectangle { color: "#99000000" }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "¿Guardar los cambios de «" + editor.projectName + "»?"
+                color: Theme.texto
+                font.pixelSize: 16
+                font.bold: true
+            }
+            Text {
+                text: "Si no los guardas, se perderán."
+                color: Theme.textoSecundario
+                font.pixelSize: Theme.tamTexto
+            }
+            RowLayout {
+                Layout.topMargin: 6
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                Boton { texto: "Cancelar"; onPulsado: dialogoCambios.responder("cancelar") }
+                Boton { texto: "No guardar"; onPulsado: dialogoCambios.responder("descartar") }
+                Boton {
+                    texto: "Guardar"
+                    acentuado: true
+                    onPulsado: dialogoCambios.responder("guardar")
+                }
+            }
+        }
+    }
+    Connections {
+        target: editor
+        function onSaved(ok) {
+            if (ok && ventana.accionPendiente.length > 0)
+                ventana.ejecutar(ventana.accionPendiente)
+            else if (!ok)
+                ventana.accionPendiente = ""
+        }
+    }
+    onClosing: (cierre) => {
+        if (editor.modified && !cerrarSinPreguntar) {
+            cierre.accepted = false
+            siGuardado("cerrar")
+        }
+    }
+
+    // Archivos al abrir (p. ej. "SharkCut.exe a.mp4 b.mp4"): un proyecto .sharkp se abre;
+    // los videos se importan y se colocan en la línea de tiempo, uno detrás de otro.
     Component.onCompleted: {
-        if (AppInfo.initialFiles.length > 0)
-            editor.importPaths(AppInfo.initialFiles, 0)
+        const archivos = AppInfo.initialFiles
+        if (archivos.length === 0)
+            return
+        if (archivos[0].toLowerCase().endsWith(".sharkp"))
+            editor.openProjectPath(archivos[0])
+        else
+            editor.importPaths(archivos, 0)
     }
 
     // Atajos de teclado (estilo Premiere). Actúan sobre la pestaña visible.
@@ -122,7 +258,18 @@ Window {
         onActivated: { ventana.activo.pause(); ventana.activo.seek(ventana.activo.frameCount - 1) }
     }
     Shortcut { sequence: "M"; onActivated: ventana.activo.muted = !ventana.activo.muted }
-    Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrir.open() }
+    Shortcut {
+        sequences: [StandardKey.Open]
+        onActivated: ventana.enEditor ? ventana.siGuardado("abrir") : dialogoAbrir.open()
+    }
+    Shortcut { sequences: [StandardKey.New]; onActivated: ventana.siGuardado("nuevo") }
+    Shortcut { sequences: [StandardKey.Save]; onActivated: ventana.guardar() }
+    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: dialogoGuardarProyecto.open() }
+    Shortcut {
+        sequence: "Ctrl+M"
+        enabled: ventana.enEditor && editor.frameCount > 0 && !editor.exporting
+        onActivated: dialogoExportarLinea.open()
+    }
     Shortcut { sequence: "I"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkIn() }
     Shortcut { sequence: "O"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkOut() }
     Shortcut { sequence: "T"; enabled: ventana.enTransicion; onActivated: laboratorio.playTransition() }
@@ -188,7 +335,40 @@ Window {
             }
 
             Item { Layout.fillWidth: true }
+            Text {
+                visible: ventana.enEditor
+                text: editor.projectName + (editor.modified ? " •" : "")
+                color: editor.modified ? Theme.texto : Theme.textoSecundario
+                font.pixelSize: Theme.tamTexto
+                elide: Text.ElideMiddle
+                Layout.maximumWidth: 260
+            }
             Boton {
+                visible: ventana.enEditor
+                texto: "Nuevo"
+                onPulsado: ventana.siGuardado("nuevo")
+            }
+            Boton {
+                visible: ventana.enEditor
+                texto: "Abrir…"
+                onPulsado: ventana.siGuardado("abrir")
+            }
+            Boton {
+                visible: ventana.enEditor
+                texto: "Guardar"
+                acentuado: editor.modified
+                enabled: !editor.fileBusy
+                onPulsado: ventana.guardar()
+            }
+            Boton {
+                visible: ventana.enEditor
+                texto: "Exportar…"
+                acentuado: true
+                enabled: editor.frameCount > 0 && !editor.exporting
+                onPulsado: dialogoExportarLinea.open()
+            }
+            Boton {
+                visible: !ventana.enEditor
                 texto: "Abrir video…"
                 onPulsado: dialogoAbrir.open()
             }
@@ -698,6 +878,7 @@ Window {
             readonly property string error: ventana.activo.errorString
             readonly property bool ocupado: ventana.activo.busy || (ventana.enEditor && editor.importing)
             text: error.length > 0 ? "Aviso: " + error
+                  : ventana.enEditor && editor.fileBusy ? "Leyendo o guardando el proyecto…"
                   : ventana.enEditor && editor.importing ? "Importando…"
                   : ocupado ? "Cargando…" : "Listo"
             color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
@@ -935,6 +1116,42 @@ Window {
             color: Theme.textoSecundario
             font.pixelSize: Theme.tamTextoPequeno
             text: "El primer clip con video fija la resolución y los fps del proyecto."
+        }
+
+        // Exportación en curso o terminada
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: editor.exporting || editor.exportMessage.length > 0
+            spacing: 6
+            Separador {}
+            Titulo { texto: "Exportar" }
+            Rectangle {
+                Layout.fillWidth: true
+                visible: editor.exporting
+                implicitHeight: 6
+                radius: 3
+                color: Theme.panelElevado
+                Rectangle {
+                    width: parent.width * editor.exportProgress
+                    height: parent.height
+                    radius: 3
+                    color: Theme.acento
+                }
+            }
+            Boton {
+                Layout.fillWidth: true
+                visible: editor.exporting
+                texto: "Cancelar exportación"
+                onPulsado: editor.cancelExport()
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WrapAnywhere
+                color: editor.exportMessage.startsWith("No se") ? Theme.aviso
+                                                               : Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+                text: editor.exportMessage
+            }
         }
     }
 }

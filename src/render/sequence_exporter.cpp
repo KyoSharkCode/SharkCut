@@ -3,6 +3,7 @@
 #include "media/audio_decoder.h"
 #include "media/mp4_writer.h"
 #include "media/sequence_audio.h"
+#include "media/timeline_audio.h"
 #include "media/video_decoder.h"
 #include "render/compositor.h"
 
@@ -32,16 +33,24 @@ std::unique_ptr<QRhi> createOffscreenRhi(QOffscreenSurface* fallbackSurface) {
 #endif
 }
 
-// Lee los fotogramas de un tramo en orden, avanzando solo lo necesario.
-class ClipReader {
+// Lee fotogramas de un archivo, normalmente en orden: avanza solo lo necesario y
+// vuelve a buscar si se le pide un fotograma anterior o muy lejano (otro tramo).
+class MediaReader {
 public:
-    ClipReader(const std::string& path, std::int64_t first) : m_decoder(path, HwAccel::Auto) {
-        m_decoder.seekToFrame(first);
-    }
+    explicit MediaReader(const std::string& path) : m_decoder(path, HwAccel::Auto) {}
 
-    // Último fotograma con índice <= `index` (el que corresponde mostrar). Si el clip
-    // se acaba antes, se repite su último fotograma.
+    // Último fotograma con índice <= `index` (el que corresponde mostrar). Si el
+    // archivo se acaba antes, se repite su último fotograma.
     std::shared_ptr<const VideoFrame> at(std::int64_t index) {
+        const bool needSeek =
+            (!m_current && !m_finished) ||
+            (m_current && (index < m_current->index || index > m_current->index + kMaxSkip));
+        if (needSeek) {
+            m_decoder.seekToFrame(index);
+            m_current.reset();
+            m_pending.reset();
+            m_finished = false;
+        }
         if (m_pending && m_pending->index <= index) {
             m_current = std::move(m_pending);
         }
@@ -53,7 +62,7 @@ public:
             }
             auto frame = std::make_shared<const VideoFrame>(std::move(*next));
             if (frame->index > index && m_current) {
-                m_pending = std::move(frame); // hueco en el clip: se guarda para después
+                m_pending = std::move(frame); // hueco en el archivo: se guarda para después
                 break;
             }
             m_current = std::move(frame);
@@ -62,10 +71,122 @@ public:
     }
 
 private:
+    // Más allá de esto es más rápido buscar (ir al fotograma clave) que decodificar todo.
+    static constexpr std::int64_t kMaxSkip = 120;
+
     VideoDecoder m_decoder;
     std::shared_ptr<const VideoFrame> m_current;
     std::shared_ptr<const VideoFrame> m_pending;
     bool m_finished = false;
+};
+
+// Qué componer en cada fotograma y con qué audio.
+class FrameSource {
+public:
+    virtual ~FrameSource() = default;
+    virtual std::int64_t length() const = 0;
+    virtual CompositorInput at(std::int64_t frame) = 0;
+    virtual std::unique_ptr<AudioSource> openAudio() = 0; // nullptr: sin audio
+};
+
+// Prueba de transición de la fase 1. Mismo reparto que TransitionLab::composition.
+class TransitionFrames : public FrameSource {
+public:
+    TransitionFrames(const TransitionTest& test, FrameRate rate)
+        : m_test(test), m_rate(rate), m_a(test.pathA), m_b(test.pathB) {}
+
+    std::int64_t length() const override { return m_test.layout.length(); }
+
+    CompositorInput at(std::int64_t frame) override {
+        const auto at = m_test.layout.at(frame);
+        CompositorInput input;
+        std::shared_ptr<const VideoFrame> a = at.aFrame ? m_a.at(*at.aFrame) : nullptr;
+        std::shared_ptr<const VideoFrame> b = at.bFrame ? m_b.at(*at.bFrame) : nullptr;
+        if (at.transitionFrame && a && b) {
+            input.a = a;
+            input.b = b;
+            input.transition = m_test.params;
+            input.state = evaluateTransition(m_test.params, *at.transitionFrame);
+        } else {
+            input.a = a ? a : b;
+        }
+        return input;
+    }
+
+    std::unique_ptr<AudioSource> openAudio() override {
+        try {
+            return std::make_unique<SequenceAudioSource>(m_test.layout, m_rate, m_test.pathA,
+                                                         m_test.pathB);
+        } catch (const std::exception&) {
+            return nullptr; // ningún clip tiene audio
+        }
+    }
+
+private:
+    TransitionTest m_test;
+    FrameRate m_rate;
+    MediaReader m_a;
+    MediaReader m_b;
+};
+
+// Línea de tiempo de un proyecto: la pista de video, negro en los huecos.
+class TimelineFrames : public FrameSource {
+public:
+    explicit TimelineFrames(Project project) : m_project(std::move(project)) {}
+
+    std::int64_t length() const override { return m_project.length(); }
+
+    CompositorInput at(std::int64_t frame) override {
+        CompositorInput input;
+        const Clip* clip = m_project.clipAt(kVideoTrack, frame);
+        const MediaItem* item = clip ? m_project.findMedia(clip->media) : nullptr;
+        if (!item) {
+            return input;
+        }
+        const std::int64_t index =
+            microsecondsToFrame(m_project.mediaTimeUs(*clip, frame), item->frameRate);
+        input.a = reader(*item).at(index);
+        return input;
+    }
+
+    std::unique_ptr<AudioSource> openAudio() override {
+        try {
+            return std::make_unique<TimelineAudioSource>(m_project);
+        } catch (const std::exception&) {
+            return nullptr; // la línea de tiempo no tiene audio
+        }
+    }
+
+private:
+    // Un lector por archivo, con un máximo abierto a la vez (se cierra el menos usado).
+    MediaReader& reader(const MediaItem& item) {
+        ++m_clock;
+        for (Entry& entry : m_readers) {
+            if (entry.media == item.id) {
+                entry.lastUse = m_clock;
+                return *entry.reader;
+            }
+        }
+        if (m_readers.size() >= kMaxOpen) {
+            const auto oldest = std::min_element(
+                m_readers.begin(), m_readers.end(),
+                [](const Entry& a, const Entry& b) { return a.lastUse < b.lastUse; });
+            m_readers.erase(oldest);
+        }
+        m_readers.push_back({item.id, std::make_unique<MediaReader>(item.path), m_clock});
+        return *m_readers.back().reader;
+    }
+
+    struct Entry {
+        ObjectId media = 0;
+        std::unique_ptr<MediaReader> reader;
+        std::uint64_t lastUse = 0;
+    };
+    static constexpr std::size_t kMaxOpen = 4;
+
+    Project m_project;
+    std::vector<Entry> m_readers;
+    std::uint64_t m_clock = 0;
 };
 
 } // namespace
@@ -106,17 +227,13 @@ void SequenceExporter::run() {
         compositor.initialize(rhi.get());
         compositor.setCanvasSize(m_job.canvasSize);
 
-        const SequenceLayout& layout = m_job.layout;
-        ClipReader readerA(m_job.pathA, layout.a.in);
-        ClipReader readerB(m_job.pathB, layout.b.in);
-
-        std::unique_ptr<SequenceAudioSource> audio;
-        try {
-            audio =
-                std::make_unique<SequenceAudioSource>(layout, m_job.rate, m_job.pathA, m_job.pathB);
-        } catch (const std::exception&) {
-            audio.reset(); // ningún clip tiene audio: MP4 solo con video
+        std::unique_ptr<FrameSource> source;
+        if (const auto* test = std::get_if<TransitionTest>(&m_job.content)) {
+            source = std::make_unique<TransitionFrames>(*test, m_job.rate);
+        } else {
+            source = std::make_unique<TimelineFrames>(std::get<Project>(m_job.content));
         }
+        const std::unique_ptr<AudioSource> audio = source->openAudio(); // nullptr: solo video
 
         EncoderSettings settings;
         settings.width = m_job.canvasSize.width();
@@ -127,7 +244,10 @@ void SequenceExporter::run() {
         Mp4Writer writer(m_job.outputPath, settings);
         encoder = writer.videoEncoderName();
 
-        const std::int64_t total = layout.length();
+        const std::int64_t total = source->length();
+        if (total <= 0) {
+            throw std::runtime_error("No hay nada que exportar");
+        }
         const bool flipRows = rhi->isYUpInFramebuffer(); // OpenGL: filas de abajo arriba
         std::vector<float> samples;
         std::int64_t audioWritten = 0;
@@ -140,19 +260,7 @@ void SequenceExporter::run() {
                 return;
             }
 
-            // Mismo reparto que la vista previa (TransitionLab::composition).
-            const auto at = layout.at(frame);
-            CompositorInput input;
-            std::shared_ptr<const VideoFrame> a = at.aFrame ? readerA.at(*at.aFrame) : nullptr;
-            std::shared_ptr<const VideoFrame> b = at.bFrame ? readerB.at(*at.bFrame) : nullptr;
-            if (at.transitionFrame && a && b) {
-                input.a = a;
-                input.b = b;
-                input.transition = m_job.params;
-                input.state = evaluateTransition(m_job.params, *at.transitionFrame);
-            } else {
-                input.a = a ? a : b;
-            }
+            const CompositorInput input = source->at(frame);
 
             QRhiCommandBuffer* cb = nullptr;
             if (rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess) {

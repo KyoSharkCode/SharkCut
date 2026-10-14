@@ -19,9 +19,12 @@
 #include <optional>
 #include <vector>
 
+class QOffscreenSurface;
+
 namespace sharkcut {
 class AudioOutput;
 class AudioWorker;
+class SequenceExporter;
 } // namespace sharkcut
 
 // Editor (fase 2): el proyecto con su línea de tiempo, las herramientas de edición
@@ -49,6 +52,15 @@ class Editor : public CompositionSource {
     // Selección (ids de clips; un clip enlazado se considera seleccionado con su pareja)
     Q_PROPERTY(QVariantList selection READ selection NOTIFY selectionChanged)
     Q_PROPERTY(QString selectionDescription READ selectionDescription NOTIFY selectionChanged)
+    // Archivo del proyecto
+    Q_PROPERTY(QString projectName READ projectName NOTIFY fileChanged)
+    Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
+    Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
+    Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
+    // Exportación
+    Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
+    Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
+    Q_PROPERTY(QString exportMessage READ exportMessage NOTIFY exportChanged)
     // Reproducción
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -77,6 +89,14 @@ public:
     QVariantList selection() const;
     QString selectionDescription() const;
 
+    QString projectName() const;
+    QString projectPath() const { return m_projectPath; }
+    bool modified() const { return m_history.modified(); }
+    bool fileBusy() const { return m_fileBusy; }
+    bool exporting() const { return m_exporter != nullptr; }
+    double exportProgress() const { return m_exportProgress; }
+    QString exportMessage() const { return m_exportMessage; }
+
     bool playing() const { return m_playing; }
     bool busy() const { return m_busy; }
     qint64 currentFrame() const { return m_currentFrame; }
@@ -88,6 +108,18 @@ public:
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
+
+    // --- Archivo del proyecto (lectura y escritura en segundo plano) ---
+    Q_INVOKABLE void newProject();
+    Q_INVOKABLE void openProject(const QUrl& file);
+    Q_INVOKABLE void openProjectPath(const QString& path);
+    // Guarda en el archivo actual; false si aún no tiene (hay que usar saveAs).
+    Q_INVOKABLE bool save();
+    Q_INVOKABLE void saveAs(const QUrl& file);
+
+    // Exporta la línea de tiempo a MP4 (mismo compositor que la vista previa).
+    Q_INVOKABLE void exportTo(const QUrl& file);
+    Q_INVOKABLE void cancelExport();
 
     // --- Biblioteca ---
     // Analiza los archivos en segundo plano y los añade a la biblioteca. Con
@@ -133,6 +165,12 @@ public:
 
 signals:
     void projectChanged();
+    void fileChanged();
+    void modifiedChanged();
+    void fileBusyChanged();
+    void saved(bool ok);
+    void opened(bool ok);
+    void exportChanged();
     void selectionChanged();
     void importingChanged();
     void playingChanged();
@@ -170,8 +208,16 @@ private:
     void setBusy(bool busy);
     void setError(const QString& message);
     void finishImport(std::vector<sharkcut::MediaItem> items, QStringList errors, qint64 placeAt);
+    void saveToPath(const QString& path);
+    void finishSave(const std::shared_ptr<const sharkcut::Project>& written, const QString& path,
+                    const QString& error);
+    void finishOpen(const std::shared_ptr<sharkcut::Project>& project, const QString& path,
+                    const QString& error, const QStringList& missing);
+    void setFileBusy(bool busy);
 
     sharkcut::History m_history;
+    QString m_projectPath; // vacío: proyecto sin guardar
+    bool m_fileBusy = false;
     std::vector<sharkcut::ObjectId> m_selection;
     int m_importing = 0;
 
@@ -190,4 +236,10 @@ private:
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
+
+    std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
+    std::unique_ptr<sharkcut::SequenceExporter> m_exporter;
+    quint64 m_exportSession = 0;
+    double m_exportProgress = 0.0;
+    QString m_exportMessage;
 };

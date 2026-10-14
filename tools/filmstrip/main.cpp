@@ -7,7 +7,10 @@
 // Uso: sharkcut_filmstrip <clipA> <clipB> <salida.png> [fotogramaA] [fotogramaB]
 //      sharkcut_filmstrip --export <clipA> <clipB> <salida.mp4> [transición 0–6]
 //        (exporta los clips enteros con SequenceExporter, como el botón de la app)
+//      sharkcut_filmstrip --export-project <proyecto.sharkp> <salida.mp4>
+//        (exporta la línea de tiempo de un proyecto, como "Exportar" del editor)
 
+#include "core/project_file.h"
 #include "core/sequence.h"
 #include "core/transition.h"
 #include "media/media_info.h"
@@ -77,29 +80,8 @@ QImage renderOnce(QRhi* rhi, sharkcut::Compositor& compositor,
 
 } // namespace
 
-int exportMode(int argc, char* argv[]) {
-    if (argc < 5) {
-        std::fprintf(stderr, "Uso: %s --export <clipA> <clipB> <salida.mp4> [transición]\n",
-                     argv[0]);
-        return 2;
-    }
-    const auto infoA = sharkcut::probeMedia(argv[2]);
-    const auto infoB = sharkcut::probeMedia(argv[3]);
-    const int type = argc > 5 ? std::atoi(argv[5]) : 4;
-
-    sharkcut::ExportJob job;
-    job.params = sharkcut::kTransitions[static_cast<std::size_t>(type)].defaults;
-    job.layout = sharkcut::makeLayout({0, infoA.video->frameCount}, {0, infoB.video->frameCount},
-                                      job.params.durationFrames);
-    job.rate = infoA.video->frameRate;
-    job.pathA = argv[2];
-    job.pathB = argv[3];
-    job.canvasSize = QSize(infoA.video->width, infoA.video->height);
-    job.outputPath = argv[4];
-#ifndef Q_OS_WIN
-    job.fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
-#endif
-
+// Exporta y espera mostrando el progreso. Devuelve el código de salida.
+int runExport(const sharkcut::ExportJob& job, std::int64_t frames) {
     std::atomic<bool> done = false;
     std::atomic<bool> ok = false;
     const auto start = std::chrono::steady_clock::now();
@@ -121,15 +103,70 @@ int exportMode(int argc, char* argv[]) {
     }
     const double seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    std::printf("%lld fotogramas en %.1f s\n", static_cast<long long>(job.layout.length()),
-                seconds);
+    std::printf("%lld fotogramas en %.1f s\n", static_cast<long long>(frames), seconds);
     return ok ? 0 : 1;
+}
+
+int exportProjectMode(int argc, char* argv[]) {
+    if (argc < 4) {
+        std::fprintf(stderr, "Uso: %s --export-project <proyecto.sharkp> <salida.mp4>\n", argv[0]);
+        return 2;
+    }
+    sharkcut::Project project;
+    try {
+        project = sharkcut::loadProject(sharkcut::pathFromUtf8(argv[2]));
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "%s\n", e.what());
+        return 1;
+    }
+    sharkcut::ExportJob job;
+    job.rate = project.settings.frameRate;
+    job.canvasSize = QSize(project.settings.width, project.settings.height);
+    job.outputPath = argv[3];
+    const std::int64_t frames = project.length();
+    job.content = std::move(project);
+#ifndef Q_OS_WIN
+    job.fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
+#endif
+    return runExport(job, frames);
+}
+
+int exportMode(int argc, char* argv[]) {
+    if (argc < 5) {
+        std::fprintf(stderr, "Uso: %s --export <clipA> <clipB> <salida.mp4> [transición]\n",
+                     argv[0]);
+        return 2;
+    }
+    const auto infoA = sharkcut::probeMedia(argv[2]);
+    const auto infoB = sharkcut::probeMedia(argv[3]);
+    const int type = argc > 5 ? std::atoi(argv[5]) : 4;
+
+    sharkcut::TransitionTest test;
+    test.params = sharkcut::kTransitions[static_cast<std::size_t>(type)].defaults;
+    test.layout = sharkcut::makeLayout({0, infoA.video->frameCount}, {0, infoB.video->frameCount},
+                                       test.params.durationFrames);
+    test.pathA = argv[2];
+    test.pathB = argv[3];
+    const std::int64_t frames = test.layout.length();
+    sharkcut::ExportJob job;
+    job.content = test;
+    job.rate = infoA.video->frameRate;
+    job.canvasSize = QSize(infoA.video->width, infoA.video->height);
+    job.outputPath = argv[4];
+#ifndef Q_OS_WIN
+    job.fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
+#endif
+
+    return runExport(job, frames);
 }
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     if (argc > 1 && std::string(argv[1]) == "--export") {
         return exportMode(argc, argv);
+    }
+    if (argc > 1 && std::string(argv[1]) == "--export-project") {
+        return exportProjectMode(argc, argv);
     }
     if (argc < 4) {
         std::fprintf(stderr, "Uso: %s <clipA> <clipB> <salida.png> [fotogramaA] [fotogramaB]\n",

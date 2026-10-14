@@ -477,11 +477,9 @@ void TransitionLab::exportTo(const QUrl& file) {
     pause();
 
     sharkcut::ExportJob job;
-    job.layout = m_layout;
+    job.content = sharkcut::TransitionTest{m_layout, m_a.path.toStdString(), m_b.path.toStdString(),
+                                           m_params};
     job.rate = m_rate;
-    job.pathA = m_a.path.toStdString();
-    job.pathB = m_b.path.toStdString();
-    job.params = m_params;
     job.canvasSize = m_canvasSize;
     job.outputPath = path.toStdString();
 #ifndef Q_OS_WIN

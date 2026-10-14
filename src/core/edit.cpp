@@ -1,11 +1,23 @@
 #include "core/edit.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <map>
+#include <optional>
 
 namespace sharkcut {
 
 namespace {
+
+// Clips partidos durante una operación: original → parte derecha (nuevo id) y el
+// enlace que tenía el original. Sirve para enlazar entre sí las dos partes derechas
+// de un par enlazado que se partió por el mismo sitio.
+struct SplitInfo {
+    ObjectId right = 0;
+    ObjectId link = 0;
+};
+using Splits = std::map<ObjectId, SplitInfo>;
 
 ObjectId newId(Project& project) {
     return project.nextId++;
@@ -13,6 +25,21 @@ ObjectId newId(Project& project) {
 
 bool contains(const std::vector<ObjectId>& ids, ObjectId id) {
     return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+
+Clip* findMutable(Project& project, ObjectId id) {
+    const auto ref = project.findClip(id);
+    return ref ? &project.tracks[ref->track].clips[ref->index] : nullptr;
+}
+
+bool inLockedTrack(const Project& project, ObjectId id) {
+    const auto ref = project.findClip(id);
+    return ref && project.tracks[ref->track].locked;
+}
+
+bool anyLocked(const Project& project, const std::vector<ObjectId>& ids) {
+    return std::any_of(ids.begin(), ids.end(),
+                       [&project](ObjectId id) { return inLockedTrack(project, id); });
 }
 
 void insertSorted(Track& track, const Clip& clip) {
@@ -23,11 +50,11 @@ void insertSorted(Track& track, const Clip& clip) {
 }
 
 // Despeja [start, end) en la pista: los clips tapados se recortan, se parten o se quitan.
-void clearRange(Project& project, std::size_t trackIndex, std::int64_t start, std::int64_t end) {
-    Track& track = project.tracks[trackIndex];
+void clearRange(Project& project, std::size_t trackIndex, std::int64_t start, std::int64_t end,
+                Splits& splits) {
     std::vector<Clip> result;
-    result.reserve(track.clips.size() + 1);
-    for (const Clip& clip : track.clips) {
+    result.reserve(project.tracks[trackIndex].clips.size() + 1);
+    for (const Clip& clip : project.tracks[trackIndex].clips) {
         if (clip.end() <= start || clip.start >= end) {
             result.push_back(clip);
             continue;
@@ -41,6 +68,7 @@ void clearRange(Project& project, std::size_t trackIndex, std::int64_t start, st
             Clip right = clip;
             if (clip.start < start) {
                 right.id = newId(project); // el clip se partió en dos
+                splits[clip.id] = {right.id, clip.link};
             }
             const std::int64_t cut = end - clip.start;
             right.start = end;
@@ -49,7 +77,61 @@ void clearRange(Project& project, std::size_t trackIndex, std::int64_t start, st
             result.push_back(right);
         }
     }
-    track.clips = std::move(result);
+    project.tracks[trackIndex].clips = std::move(result);
+}
+
+bool sameRange(const Clip& a, const Clip& b) {
+    return a.media == b.media && a.start == b.start && a.in == b.in && a.length == b.length;
+}
+
+// Tras una edición: enlaza las partes derechas de los pares que se partieron juntos y
+// deshace los enlaces que ya no son válidos.
+void fixLinks(Project& project, const Splits& splits) {
+    for (const auto& [original, info] : splits) {
+        if (Clip* right = findMutable(project, info.right)) {
+            right->link = 0; // heredado del original: no vale para la parte derecha
+        }
+    }
+    for (const auto& [original, info] : splits) {
+        const auto partner = splits.find(info.link);
+        if (info.link == 0 || partner == splits.end()) {
+            continue;
+        }
+        Clip* a = findMutable(project, info.right);
+        Clip* b = findMutable(project, partner->second.right);
+        if (a && b) {
+            a->link = b->id;
+            b->link = a->id;
+        }
+    }
+
+    struct Entry {
+        Clip* clip;
+        TrackKind kind;
+    };
+    std::map<ObjectId, Entry> all;
+    for (Track& track : project.tracks) {
+        for (Clip& clip : track.clips) {
+            all[clip.id] = {&clip, track.kind};
+        }
+    }
+    std::vector<ObjectId> broken;
+    for (const auto& [id, entry] : all) {
+        const ObjectId link = entry.clip->link;
+        if (link == 0) {
+            continue;
+        }
+        const auto partner = all.find(link);
+        const bool valid = partner != all.end() && partner->second.kind != entry.kind &&
+                           partner->second.clip->link == id &&
+                           sameRange(*partner->second.clip, *entry.clip);
+        if (!valid) {
+            broken.push_back(id);
+        }
+    }
+    for (ObjectId id : broken) {
+        all[id].clip->link = 0;
+    }
 }
 
 } // namespace
@@ -69,12 +151,62 @@ bool removeMedia(Project& project, ObjectId media) {
     for (Track& track : project.tracks) {
         std::erase_if(track.clips, [media](const Clip& clip) { return clip.media == media; });
     }
-    relinkClips(project);
+    fixLinks(project, {});
     return true;
 }
 
+// --- Pistas -----------------------------------------------------------------------
+
+std::size_t addTrack(Project& project, TrackKind kind) {
+    if (kind == TrackKind::Audio) {
+        project.tracks.push_back(Track{TrackKind::Audio, {}});
+        return project.tracks.size() - 1;
+    }
+    const std::size_t index = project.trackCount(TrackKind::Video);
+    project.tracks.insert(project.tracks.begin() + static_cast<std::ptrdiff_t>(index),
+                          Track{TrackKind::Video, {}});
+    return index;
+}
+
+bool removeTrack(Project& project, std::size_t track) {
+    if (track >= project.tracks.size() || project.trackCount(project.tracks[track].kind) <= 1) {
+        return false;
+    }
+    project.tracks.erase(project.tracks.begin() + static_cast<std::ptrdiff_t>(track));
+    fixLinks(project, {});
+    return true;
+}
+
+bool setTrackHidden(Project& project, std::size_t track, bool hidden) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||
+        project.tracks[track].hidden == hidden) {
+        return false;
+    }
+    project.tracks[track].hidden = hidden;
+    return true;
+}
+
+bool setTrackMuted(Project& project, std::size_t track, bool muted) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Audio ||
+        project.tracks[track].muted == muted) {
+        return false;
+    }
+    project.tracks[track].muted = muted;
+    return true;
+}
+
+bool setTrackLocked(Project& project, std::size_t track, bool locked) {
+    if (track >= project.tracks.size() || project.tracks[track].locked == locked) {
+        return false;
+    }
+    project.tracks[track].locked = locked;
+    return true;
+}
+
+// --- Clips ------------------------------------------------------------------------
+
 ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::int64_t in,
-                   std::int64_t length) {
+                   std::int64_t length, PlaceTarget target) {
     const MediaItem* item = project.findMedia(media);
     if (!item || start < 0 || in < 0) {
         return 0;
@@ -83,40 +215,72 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::in
     if (length <= 0) {
         return 0;
     }
+    const bool hasVideo = item->hasVideo;
+    const bool hasAudio = item->hasAudio;
 
-    ObjectId first = 0;
-    auto put = [&](std::size_t trackIndex) {
-        if (trackIndex >= project.tracks.size()) {
-            return;
+    // Pistas de destino (se crean las que falten).
+    if (hasVideo) {
+        while (project.trackCount(TrackKind::Video) <= target.video) {
+            addTrack(project, TrackKind::Video);
         }
-        clearRange(project, trackIndex, start, start + length);
-        const Clip clip{newId(project), media, 0, start, in, length};
-        insertSorted(project.tracks[trackIndex], clip);
-        if (first == 0) {
-            first = clip.id;
+    }
+    if (hasAudio) {
+        while (project.trackCount(TrackKind::Audio) <= target.audio) {
+            addTrack(project, TrackKind::Audio);
         }
+    }
+    std::optional<std::size_t> videoTrack =
+        hasVideo ? project.trackIndex(TrackKind::Video, target.video) : std::nullopt;
+    std::optional<std::size_t> audioTrack =
+        hasAudio ? project.trackIndex(TrackKind::Audio, target.audio) : std::nullopt;
+    if (videoTrack && project.tracks[*videoTrack].locked) {
+        videoTrack.reset();
+    }
+    if (audioTrack && project.tracks[*audioTrack].locked) {
+        audioTrack.reset();
+    }
+    if (!videoTrack && !audioTrack) {
+        return 0;
+    }
+
+    Splits splits;
+    const ObjectId videoId = videoTrack ? newId(project) : 0;
+    const ObjectId audioId = audioTrack ? newId(project) : 0;
+    auto put = [&](std::size_t track, ObjectId id, ObjectId link) {
+        clearRange(project, track, start, start + length, splits);
+        Clip clip;
+        clip.id = id;
+        clip.media = media;
+        clip.link = link;
+        clip.start = start;
+        clip.in = in;
+        clip.length = length;
+        insertSorted(project.tracks[track], clip);
     };
-    if (item->hasVideo) {
-        put(kVideoTrack);
+    if (videoTrack) {
+        put(*videoTrack, videoId, audioId);
     }
-    if (item->hasAudio) {
-        put(kAudioTrack);
+    if (audioTrack) {
+        put(*audioTrack, audioId, videoId);
     }
-    relinkClips(project);
-    return first;
+    fixLinks(project, splits);
+    return videoId != 0 ? videoId : audioId;
 }
 
-ObjectId placeClip(Project& project, ObjectId media, std::int64_t start) {
+ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, PlaceTarget target) {
     const MediaItem* item = project.findMedia(media);
-    return item ? placeClip(project, media, start, 0, project.mediaFrames(*item)) : 0;
+    return item ? placeClip(project, media, start, 0, project.mediaFrames(*item), target) : 0;
 }
 
 bool splitAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& clips) {
     const bool all = clips.empty();
     const std::vector<ObjectId> targets =
         all ? std::vector<ObjectId>{} : withLinked(project, clips);
-    bool changed = false;
+    Splits splits;
     for (Track& track : project.tracks) {
+        if (track.locked) {
+            continue;
+        }
         for (std::size_t i = 0; i < track.clips.size(); ++i) {
             const Clip clip = track.clips[i];
             if (clip.start >= frame || frame >= clip.end() ||
@@ -128,27 +292,29 @@ bool splitAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& 
             right.start = frame;
             right.in = clip.in + (frame - clip.start);
             right.length = clip.end() - frame;
+            splits[clip.id] = {right.id, clip.link};
             track.clips[i].length = frame - clip.start;
             track.clips.insert(track.clips.begin() + static_cast<std::ptrdiff_t>(i) + 1, right);
             ++i;
-            changed = true;
         }
     }
-    if (changed) {
-        relinkClips(project);
+    if (splits.empty()) {
+        return false;
     }
-    return changed;
+    fixLinks(project, splits);
+    return true;
 }
 
 bool removeClips(Project& project, const std::vector<ObjectId>& clips) {
-    const std::vector<ObjectId> group = withLinked(project, clips);
+    std::vector<ObjectId> group = withLinked(project, clips);
+    std::erase_if(group, [&project](ObjectId id) { return inLockedTrack(project, id); });
     if (group.empty()) {
         return false;
     }
     for (Track& track : project.tracks) {
         std::erase_if(track.clips, [&group](const Clip& clip) { return contains(group, clip.id); });
     }
-    relinkClips(project);
+    fixLinks(project, {});
     return true;
 }
 
@@ -156,7 +322,8 @@ std::int64_t limitTrimStart(const Project& project, ObjectId clip, std::int64_t 
     std::int64_t lo = 0;
     std::int64_t hi = std::numeric_limits<std::int64_t>::max();
     std::int64_t current = start;
-    for (ObjectId id : withLinked(project, {clip})) {
+    const std::vector<ObjectId> group = withLinked(project, {clip});
+    for (ObjectId id : group) {
         const auto ref = project.findClip(id);
         const Track& track = project.tracks[ref->track];
         const Clip& c = track.clips[ref->index];
@@ -167,7 +334,7 @@ std::int64_t limitTrimStart(const Project& project, ObjectId clip, std::int64_t 
         }
         hi = std::min(hi, c.end() - 1); // al menos un fotograma
     }
-    if (lo > hi) {
+    if (lo > hi || anyLocked(project, group)) {
         return current;
     }
     return std::clamp(start, lo, hi);
@@ -183,13 +350,12 @@ bool trimStart(Project& project, ObjectId clip, std::int64_t start) {
         return false;
     }
     for (ObjectId id : withLinked(project, {clip})) {
-        const auto ref = project.findClip(id);
-        Clip& c = project.tracks[ref->track].clips[ref->index];
+        Clip& c = *findMutable(project, id);
         c.start += delta;
         c.in += delta;
         c.length -= delta;
     }
-    relinkClips(project);
+    fixLinks(project, {});
     return true;
 }
 
@@ -197,7 +363,8 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
     std::int64_t lo = 0;
     std::int64_t hi = std::numeric_limits<std::int64_t>::max();
     std::int64_t current = end;
-    for (ObjectId id : withLinked(project, {clip})) {
+    const std::vector<ObjectId> group = withLinked(project, {clip});
+    for (ObjectId id : group) {
         const auto ref = project.findClip(id);
         const Track& track = project.tracks[ref->track];
         const Clip& c = track.clips[ref->index];
@@ -210,7 +377,7 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
             hi = std::min(hi, track.clips[ref->index + 1].start); // sin pisar el siguiente
         }
     }
-    if (lo > hi) {
+    if (lo > hi || anyLocked(project, group)) {
         return current;
     }
     return std::clamp(end, lo, hi);
@@ -226,17 +393,16 @@ bool trimEnd(Project& project, ObjectId clip, std::int64_t end) {
         return false;
     }
     for (ObjectId id : withLinked(project, {clip})) {
-        const auto ref = project.findClip(id);
-        project.tracks[ref->track].clips[ref->index].length += delta;
+        findMutable(project, id)->length += delta;
     }
-    relinkClips(project);
+    fixLinks(project, {});
     return true;
 }
 
 std::int64_t limitMove(const Project& project, const std::vector<ObjectId>& clips,
                        std::int64_t delta) {
     const std::vector<ObjectId> group = withLinked(project, clips);
-    if (group.empty()) {
+    if (group.empty() || anyLocked(project, group)) {
         return 0;
     }
     std::int64_t first = std::numeric_limits<std::int64_t>::max();
@@ -246,35 +412,145 @@ std::int64_t limitMove(const Project& project, const std::vector<ObjectId>& clip
     return std::max(delta, -first);
 }
 
-bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_t delta) {
+int limitTrackShift(const Project& project, const std::vector<ObjectId>& clips, TrackKind shiftKind,
+                    int trackShift) {
+    const std::vector<ObjectId> group = withLinked(project, clips);
+    if (group.empty() || trackShift == 0 || anyLocked(project, group)) {
+        return 0;
+    }
+    const auto count = static_cast<std::int64_t>(project.trackCount(shiftKind));
+    std::int64_t lo = std::numeric_limits<std::int64_t>::min();
+    std::int64_t hi = std::numeric_limits<std::int64_t>::max();
+    for (ObjectId id : group) {
+        const auto ref = project.findClip(id);
+        if (project.tracks[ref->track].kind != shiftKind) {
+            continue;
+        }
+        const auto number = static_cast<std::int64_t>(project.trackNumber(ref->track));
+        lo = std::max(lo, -number);
+        hi = std::min(hi, count - 1 - number);
+    }
+    if (lo > hi) {
+        return 0;
+    }
+    const auto shift = static_cast<int>(std::clamp<std::int64_t>(trackShift, lo, hi));
+    for (ObjectId id : group) {
+        const auto ref = project.findClip(id);
+        if (project.tracks[ref->track].kind != shiftKind) {
+            continue;
+        }
+        const auto destination = project.trackIndex(
+            shiftKind, static_cast<std::size_t>(
+                           static_cast<std::int64_t>(project.trackNumber(ref->track)) + shift));
+        if (!destination || project.tracks[*destination].locked) {
+            return 0;
+        }
+    }
+    return shift;
+}
+
+bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_t delta,
+               int trackShift, TrackKind shiftKind) {
     const std::vector<ObjectId> group = withLinked(project, clips);
     delta = limitMove(project, group, delta);
-    if (group.empty() || delta == 0) {
+    trackShift = limitTrackShift(project, group, shiftKind, trackShift);
+    if (group.empty() || (delta == 0 && trackShift == 0)) {
         return false;
     }
     // Se sacan los clips que se mueven, se despeja su destino y se vuelven a poner.
-    std::vector<std::vector<Clip>> moving(project.tracks.size());
+    struct Moving {
+        std::size_t track;
+        Clip clip;
+    };
+    std::vector<Moving> moving;
     for (std::size_t t = 0; t < project.tracks.size(); ++t) {
+        std::size_t destination = t;
+        if (trackShift != 0 && project.tracks[t].kind == shiftKind) {
+            const auto number = static_cast<int>(project.trackNumber(t)) + trackShift;
+            destination = *project.trackIndex(shiftKind, static_cast<std::size_t>(number));
+        }
         auto& trackClips = project.tracks[t].clips;
         for (const Clip& clip : trackClips) {
             if (contains(group, clip.id)) {
                 Clip moved = clip;
                 moved.start += delta;
-                moving[t].push_back(moved);
+                moving.push_back({destination, moved});
             }
         }
         std::erase_if(trackClips, [&group](const Clip& clip) { return contains(group, clip.id); });
     }
-    for (std::size_t t = 0; t < moving.size(); ++t) {
-        for (const Clip& clip : moving[t]) {
-            clearRange(project, t, clip.start, clip.end());
-        }
-        for (const Clip& clip : moving[t]) {
-            insertSorted(project.tracks[t], clip);
-        }
+    Splits splits;
+    for (const Moving& m : moving) {
+        clearRange(project, m.track, m.clip.start, m.clip.end(), splits);
     }
-    relinkClips(project);
+    for (const Moving& m : moving) {
+        insertSorted(project.tracks[m.track], m.clip);
+    }
+    fixLinks(project, splits);
     return true;
+}
+
+ClipTransform clampTransform(ClipTransform t) {
+    auto finite = [](double value, double fallback) {
+        return std::isfinite(value) ? value : fallback;
+    };
+    constexpr double kMaxOffset = 1'000'000.0;
+    t.x = std::clamp(finite(t.x, 0.0), -kMaxOffset, kMaxOffset);
+    t.y = std::clamp(finite(t.y, 0.0), -kMaxOffset, kMaxOffset);
+    t.scale = std::clamp(finite(t.scale, 1.0), kMinScale, kMaxScale);
+    t.opacity = std::clamp(finite(t.opacity, 1.0), 0.0, 1.0);
+    t.cropLeft = std::clamp(finite(t.cropLeft, 0.0), 0.0, kMaxCrop);
+    t.cropTop = std::clamp(finite(t.cropTop, 0.0), 0.0, kMaxCrop);
+    t.cropRight = std::clamp(finite(t.cropRight, 0.0), 0.0, kMaxCrop - t.cropLeft);
+    t.cropBottom = std::clamp(finite(t.cropBottom, 0.0), 0.0, kMaxCrop - t.cropTop);
+    return t;
+}
+
+bool setClipTransform(Project& project, ObjectId clip, const ClipTransform& transform) {
+    const auto ref = project.findClip(clip);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Video ||
+        project.tracks[ref->track].locked) {
+        return false;
+    }
+    Clip& c = project.tracks[ref->track].clips[ref->index];
+    const ClipTransform clamped = clampTransform(transform);
+    if (c.transform == clamped) {
+        return false;
+    }
+    c.transform = clamped;
+    return true;
+}
+
+bool setClipVolume(Project& project, ObjectId clip, double volumeDb) {
+    const auto ref = project.findClip(clip);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Audio ||
+        project.tracks[ref->track].locked || !std::isfinite(volumeDb)) {
+        return false;
+    }
+    Clip& c = project.tracks[ref->track].clips[ref->index];
+    const double clamped = std::clamp(volumeDb, kMinVolumeDb, kMaxVolumeDb);
+    if (c.volumeDb == clamped) {
+        return false;
+    }
+    c.volumeDb = clamped;
+    return true;
+}
+
+bool unlinkClips(Project& project, const std::vector<ObjectId>& clips) {
+    bool changed = false;
+    for (ObjectId id : clips) {
+        Clip* clip = findMutable(project, id);
+        if (!clip || clip->link == 0 || inLockedTrack(project, id) ||
+            inLockedTrack(project, clip->link)) {
+            continue;
+        }
+        if (Clip* partner = findMutable(project, clip->link)) {
+            partner->link = 0;
+        }
+        clip->link = 0;
+        changed = true;
+    }
+    return changed;
 }
 
 std::vector<ObjectId> withLinked(const Project& project, const std::vector<ObjectId>& clips) {
@@ -293,28 +569,31 @@ std::vector<ObjectId> withLinked(const Project& project, const std::vector<Objec
     return result;
 }
 
-void relinkClips(Project& project) {
+void repairLinks(Project& project) {
+    fixLinks(project, {});
+}
+
+void linkMatchingClips(Project& project) {
     for (Track& track : project.tracks) {
         for (Clip& clip : track.clips) {
             clip.link = 0;
         }
     }
-    if (project.tracks.size() <= kAudioTrack) {
+    const auto videoIndex = project.trackIndex(TrackKind::Video, 0);
+    const auto audioIndex = project.trackIndex(TrackKind::Audio, 0);
+    if (!videoIndex || !audioIndex) {
         return;
     }
-    auto& video = project.tracks[kVideoTrack].clips;
-    auto& audio = project.tracks[kAudioTrack].clips;
+    auto& video = project.tracks[*videoIndex].clips;
+    auto& audio = project.tracks[*audioIndex].clips;
     std::size_t j = 0;
     for (Clip& v : video) {
         while (j < audio.size() && audio[j].start < v.start) {
             ++j;
         }
-        if (j < audio.size()) {
-            Clip& a = audio[j];
-            if (a.start == v.start && a.media == v.media && a.in == v.in && a.length == v.length) {
-                v.link = a.id;
-                a.link = v.id;
-            }
+        if (j < audio.size() && sameRange(audio[j], v)) {
+            v.link = audio[j].id;
+            audio[j].link = v.id;
         }
     }
 }

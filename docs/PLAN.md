@@ -376,7 +376,7 @@ Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
   clip) e iconos de herramientas. Primero una maqueta aprobada; después, la
   implementación con el tema Marea Profunda. (El logo definitivo, los cursores y el
   icono de los .sharkp se diseñan con el instalador, en la fase 4.)
-- Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
+- ✅ Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
   onda del audio dibujada en la línea de tiempo, y posición y escala de cada clip
   (facecam encima, reencuadrar un video 16:9 en un lienzo vertical).
 - Transiciones integradas en la línea de tiempo (arrastrar entre clips y
@@ -539,19 +539,37 @@ ctest --preset windows-debug
      Validada en el PC de Kyo (proyecto vertical 1080×1920 con clips de OBS): "se ve
      de maravilla". Las pestañas Transiciones, Efectos y Propiedades muestran de
      momento lo que llegará; la onda del audio en los clips llega en la etapa 2.
-   - [ ] Etapa 2: varias pistas y reencuadre.
+   - [x] Etapa 2: varias pistas y reencuadre.
      - Modelo: pistas de video y audio en número variable (V1, V2… encima; A1, A2…),
-       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio.
-       Archivo `.sharkp` versión 2, que abre los de la versión 1.
+       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio
+       (con "Desvincular audio y video" para editarlos por separado, p. ej. quitar el
+       audio de la facecam). Ocultar (video), silenciar (audio) y bloquear cada pista,
+       también como pasos de deshacer. Archivo `.sharkp` versión 2 (pistas, enlaces,
+       transformación y volumen), que abre los de la versión 1.
      - Compositor con N capas apiladas (V2 sobre V1…) y transformación por clip:
-       posición, escala (y opacidad). Igual en vista previa y exportación.
-     - Propiedades del clip editables en su pestaña y arrastrando en el visor para
-       reencuadrar (un video 16:9 en un lienzo 9:16, la facecam en una esquina).
-     - Audio: mezcla de todas las pistas, volumen por clip; ocultar, silenciar y
-       bloquear pistas desde su cabecera (los iconos pasan a funcionar).
-     - Onda del audio de cada clip, calculada en segundo plano y guardada en la caché
-       del proyecto (nunca junto a los medios originales).
-     - Música: arrastrar un archivo de audio a A2 (o a cualquier pista de audio).
+       posición, escala, opacidad y recorte (necesario para sacar la facecam de la propia
+       grabación de OBS). Cada capa se dibuja directamente en el lienzo con alfa
+       premultiplicado; las transiciones del laboratorio siguen igual. Mismo motor en
+       vista previa y exportación; las pistas ocultas no se ven ni se exportan.
+     - Propiedades del clip editables (números que se arrastran o se escriben, con vista
+       previa en directo y un solo paso de deshacer al soltar; Ajustar, Rellenar y
+       Restablecer) y arrastrando en el visor: clic sobre un clip lo selecciona (el de más
+       arriba), arrastrar lo mueve con guías de bordes y centro (Mayús: sin ajuste) y las
+       esquinas lo escalan.
+     - Audio: mezcla de todas las pistas que no están silenciadas, volumen por clip (dB)
+       en Propiedades. Mover la facecam o cambiar un volumen no reinicia los hilos de
+       video (y lo primero tampoco el audio).
+     - Onda del audio de cada clip, calculada en segundo plano (dos a la vez) y guardada
+       en `<proyecto>.sharkp.cache/ondas/` (en memoria mientras el proyecto no tiene
+       archivo); escala logarítmica para que se vea también la voz.
+     - Línea de tiempo: arrastrar un medio a cualquier pista (la música a A2; un video
+       soltado en V2 lleva su audio a A2), mover clips a otra pista del mismo tipo
+       arrastrando en vertical (su enlazado del otro tipo se queda en su pista), menú con
+       clic derecho en cabeceras (añadir y quitar pistas) y clips (desvincular, ajustar,
+       rellenar, dividir, quitar), desplazamiento vertical con muchas pistas.
+     - Comprobado en Linux: un short vertical 1080×1920 con gameplay rellenando el lienzo
+       en V1, facecam recortada en V2 y música a −6 dB en A2 se ve en el visor igual que
+       en el MP4 exportado, y suena la mezcla. Pendiente de validar en el PC de Kyo.
      - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
        en V2 y música en A2 se ve, se oye y se exporta igual.
    - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.

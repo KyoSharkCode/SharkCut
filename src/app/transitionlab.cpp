@@ -327,15 +327,16 @@ sharkcut::CompositorInput TransitionLab::composition() const {
         return input;
     }
     const auto at = m_layout.at(m_currentFrame);
+    sharkcut::CompositorLayer& layer = input.layers.emplace_back();
     if (at.transitionFrame && m_frameA && m_frameB) {
-        input.a = m_frameA;
-        input.b = m_frameB;
-        input.transition = m_params;
-        input.state = sharkcut::evaluateTransition(m_params, *at.transitionFrame);
+        layer.a = m_frameA;
+        layer.b = m_frameB;
+        layer.transition = m_params;
+        layer.state = sharkcut::evaluateTransition(m_params, *at.transitionFrame);
     } else if (at.aFrame) {
-        input.a = m_frameA;
+        layer.a = m_frameA;
     } else {
-        input.a = m_frameB;
+        layer.a = m_frameB;
     }
     return input;
 }

@@ -76,7 +76,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 1") != std::string::npos);
+    CHECK(json.find("\"version\": 2") != std::string::npos);
     CHECK(projectFromJson(json, {}) == Project{});
 }
 
@@ -103,7 +103,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 1"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 2"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -142,4 +142,76 @@ TEST_CASE("Older project files keep their format", "[project]") {
     CHECK_FALSE(p.settings.adoptCanvas);
     CHECK_FALSE(p.settings.adoptFrameRate);
     CHECK(Project{}.settings.adoptCanvas);
+}
+
+TEST_CASE("Version 2 keeps tracks, links, transforms and volume", "[project]") {
+    Project p = sampleProject("/x.mp4");
+    const ObjectId media = p.media[0].id;
+    // Facecam en V2 (sin su audio) y música en A2, con la pista A2 silenciada.
+    const ObjectId cam = placeClip(p, media, 0, 0, 120, {.video = 1, .audio = 1});
+    REQUIRE(cam != 0);
+    const ObjectId camAudio = p.clip(cam)->link;
+    REQUIRE(unlinkClips(p, {cam}));
+    REQUIRE(removeClips(p, {camAudio}));
+    ClipTransform t;
+    t.x = 270.5;
+    t.y = -640;
+    t.scale = 0.35;
+    t.opacity = 0.8;
+    t.cropLeft = 0.7;
+    t.cropBottom = 0.6;
+    REQUIRE(setClipTransform(p, cam, t));
+    const ObjectId gameplay = p.tracks[kVideoTrack].clips[0].id;
+    REQUIRE(setClipVolume(p, p.clip(gameplay)->link, -6.5));
+    REQUIRE(setTrackMuted(p, *p.trackIndex(TrackKind::Audio, 1), true));
+    REQUIRE(setTrackLocked(p, kVideoTrack, true));
+    REQUIRE(setTrackHidden(p, *p.trackIndex(TrackKind::Video, 1), true));
+    REQUIRE(p.tracks.size() == 4);
+
+    const Project loaded = projectFromJson(projectToJson(p, {}), {});
+    CHECK(loaded == p);
+    CHECK(loaded.clip(cam)->link == 0);
+    CHECK(loaded.clip(cam)->transform == t);
+    CHECK(loaded.clip(p.clip(gameplay)->link)->volumeDb == -6.5);
+}
+
+TEST_CASE("Version 1 files open with linked clips", "[project]") {
+    const std::string json = R"({"version": 1,
+        "settings": {"frameRate": [60, 1], "width": 1920, "height": 1080},
+        "media": [{"id": 1, "path": "/a.mp4", "durationUs": 10000000, "frameRate": [60, 1],
+                   "video": true, "audio": true}],
+        "tracks": [{"kind": "video", "clips": [{"id": 2, "media": 1, "link": 3, "start": 0,
+                                                 "in": 0, "length": 100}]},
+                   {"kind": "audio", "clips": [{"id": 3, "media": 1, "link": 2, "start": 0,
+                                                 "in": 0, "length": 100}]}],
+        "nextId": 4})";
+    const Project p = projectFromJson(json, {});
+    REQUIRE(p.tracks.size() == 2);
+    CHECK(p.clip(2)->link == 3);
+    CHECK(p.clip(3)->link == 2);
+    CHECK(p.clip(2)->transform == ClipTransform{});
+    CHECK(p.clip(3)->volumeDb == 0.0);
+}
+
+TEST_CASE("Version 2 files drop broken links and sort tracks", "[project]") {
+    // A1 antes que V1 en el archivo, y un enlace a un clip de otra posición.
+    const std::string json = R"({"version": 2,
+        "settings": {"frameRate": [60, 1], "width": 1920, "height": 1080},
+        "media": [{"id": 1, "path": "/a.mp4", "durationUs": 10000000, "frameRate": [60, 1],
+                   "video": true, "audio": true}],
+        "tracks": [{"kind": "audio", "clips": [{"id": 3, "media": 1, "link": 2, "start": 5,
+                                                 "in": 0, "length": 100, "volumeDb": 99}]},
+                   {"kind": "video", "clips": [{"id": 2, "media": 1, "link": 3, "start": 0,
+                                                 "in": 0, "length": 100,
+                                                 "transform": {"scale": 0, "opacity": 2}}]}],
+        "nextId": 4})";
+    const Project p = projectFromJson(json, {});
+    REQUIRE(p.tracks.size() == 2);
+    CHECK(p.tracks[0].kind == TrackKind::Video);
+    CHECK(p.tracks[1].kind == TrackKind::Audio);
+    CHECK(p.clip(2)->link == 0);
+    CHECK(p.clip(3)->link == 0);
+    CHECK(p.clip(2)->transform.scale == kMinScale);
+    CHECK(p.clip(2)->transform.opacity == 1.0);
+    CHECK(p.clip(3)->volumeDb == kMaxVolumeDb);
 }

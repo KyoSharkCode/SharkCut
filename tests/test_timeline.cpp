@@ -2,6 +2,7 @@
 #include "core/history.h"
 #include "core/project.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 using namespace sharkcut;
@@ -27,11 +28,19 @@ const std::vector<Clip>& video(const Project& p) {
 }
 
 const std::vector<Clip>& audio(const Project& p) {
-    return p.tracks[kAudioTrack].clips;
+    return p.tracks[*p.trackIndex(TrackKind::Audio, 0)].clips;
 }
 
 // Comprueba los invariantes: pistas ordenadas, sin solapes y enlaces recíprocos.
 void checkInvariants(const Project& p) {
+    // Primero las pistas de video y después las de audio.
+    bool audioSeen = false;
+    for (const Track& track : p.tracks) {
+        if (track.kind == TrackKind::Audio) {
+            audioSeen = true;
+        }
+        CHECK((track.kind == TrackKind::Audio || !audioSeen));
+    }
     for (const Track& track : p.tracks) {
         for (std::size_t i = 0; i < track.clips.size(); ++i) {
             const Clip& c = track.clips[i];
@@ -48,6 +57,11 @@ void checkInvariants(const Project& p) {
                 CHECK(partner->link == c.id);
                 CHECK(partner->start == c.start);
                 CHECK(partner->length == c.length);
+                CHECK(partner->in == c.in);
+                CHECK(partner->media == c.media);
+                const auto own = p.findClip(c.id);
+                const auto other = p.findClip(partner->id);
+                CHECK(p.tracks[own->track].kind != p.tracks[other->track].kind);
             }
         }
     }
@@ -323,4 +337,199 @@ TEST_CASE("History keeps a bounded number of steps", "[timeline]") {
         ++steps;
     }
     CHECK(steps == static_cast<int>(History::kMaxUndo));
+}
+
+// --- Varias pistas -------------------------------------------------------------------
+
+namespace {
+
+const std::vector<Clip>& trackClips(const Project& p, TrackKind kind, std::size_t number) {
+    return p.tracks[*p.trackIndex(kind, number)].clips;
+}
+
+} // namespace
+
+TEST_CASE("Tracks can be added and removed", "[timeline][tracks]") {
+    Project p;
+    CHECK(p.trackName(0) == "V1");
+    CHECK(p.trackName(1) == "A1");
+    const std::size_t v2 = addTrack(p, TrackKind::Video);
+    const std::size_t a2 = addTrack(p, TrackKind::Audio);
+    CHECK(v2 == 1);
+    CHECK(a2 == 3);
+    CHECK(p.trackName(v2) == "V2");
+    CHECK(p.trackName(2) == "A1");
+    CHECK(p.trackName(a2) == "A2");
+    CHECK(p.trackCount(TrackKind::Video) == 2);
+    CHECK(p.trackNumber(a2) == 1);
+    checkInvariants(p);
+
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    placeClip(p, m, 0, {.video = 1, .audio = 1});
+    CHECK(trackClips(p, TrackKind::Video, 1).size() == 1);
+    CHECK(trackClips(p, TrackKind::Audio, 1).size() == 1);
+
+    // Quitar V2 se lleva su clip; el audio de A2 queda sin enlace.
+    CHECK(removeTrack(p, v2));
+    CHECK(p.trackCount(TrackKind::Video) == 1);
+    REQUIRE(trackClips(p, TrackKind::Audio, 1).size() == 1);
+    CHECK(trackClips(p, TrackKind::Audio, 1)[0].link == 0);
+    checkInvariants(p);
+
+    // Siempre queda al menos una pista de cada tipo.
+    CHECK_FALSE(removeTrack(p, kVideoTrack));
+    CHECK(removeTrack(p, *p.trackIndex(TrackKind::Audio, 0)));
+    CHECK_FALSE(removeTrack(p, *p.trackIndex(TrackKind::Audio, 0)));
+}
+
+TEST_CASE("Placing on upper tracks creates them if needed", "[timeline][tracks]") {
+    Project p;
+    const ObjectId cam = addMedia(p, media("cam.mp4", 10, true, false));
+    const ObjectId music = addMedia(p, media("music.mp3", 20, false, true));
+    const ObjectId gameplay = addMedia(p, media("game.mp4", 30, true, true));
+    placeClip(p, gameplay, 0);
+    const ObjectId camClip = placeClip(p, cam, 60, {.video = 1, .audio = 0});
+    const ObjectId musicClip = placeClip(p, music, 0, {.video = 0, .audio = 1});
+    REQUIRE(camClip != 0);
+    REQUIRE(musicClip != 0);
+    CHECK(p.tracks.size() == 4);
+    CHECK(trackClips(p, TrackKind::Video, 1)[0].id == camClip);
+    CHECK(trackClips(p, TrackKind::Audio, 1)[0].id == musicClip);
+    // Lo de debajo no se toca.
+    CHECK(trackClips(p, TrackKind::Video, 0).size() == 1);
+    CHECK(trackClips(p, TrackKind::Audio, 0).size() == 1);
+    checkInvariants(p);
+
+    // Lo que se ve en un fotograma, de abajo arriba.
+    const auto layers = p.videoLayersAt(100);
+    REQUIRE(layers.size() == 2);
+    CHECK(layers[0].track == kVideoTrack);
+    CHECK(layers[1].clip->id == camClip);
+    CHECK(layers[1].mediaFrame == 40);
+    CHECK(p.videoLayersAt(10).size() == 1);
+    setTrackHidden(p, kVideoTrack, true);
+    CHECK(p.videoLayersAt(100).size() == 1);
+    CHECK(p.videoLayersAt(10).empty());
+}
+
+TEST_CASE("Clips move between tracks of their kind", "[timeline][tracks]") {
+    Project p;
+    addTrack(p, TrackKind::Video);
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    const ObjectId a = p.clip(v)->link;
+
+    CHECK(limitTrackShift(p, {v}, TrackKind::Video, 5) == 1);
+    CHECK(limitTrackShift(p, {v}, TrackKind::Video, -1) == 0);
+    REQUIRE(moveClips(p, {v}, 30, 1, TrackKind::Video));
+    // El video sube a V2; su audio se mueve en el tiempo pero sigue en A1.
+    REQUIRE(trackClips(p, TrackKind::Video, 1).size() == 1);
+    CHECK(trackClips(p, TrackKind::Video, 0).empty());
+    CHECK(p.clip(v)->start == 30);
+    CHECK(trackClips(p, TrackKind::Audio, 0)[0].id == a);
+    CHECK(p.clip(a)->start == 30);
+    CHECK(p.clip(v)->link == a);
+    checkInvariants(p);
+}
+
+TEST_CASE("Locked tracks are not edited", "[timeline][tracks]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    const ObjectId a = p.clip(v)->link;
+    const std::size_t a1 = *p.trackIndex(TrackKind::Audio, 0);
+    REQUIRE(setTrackLocked(p, a1, true));
+
+    CHECK(limitMove(p, {v}, 50) == 0);
+    CHECK_FALSE(moveClips(p, {v}, 50));
+    CHECK(limitTrimEnd(p, v, 100) == 600);
+    CHECK_FALSE(setClipVolume(p, a, -6));
+
+    // Dividir todo parte solo lo que no está bloqueado (y el enlace se pierde).
+    CHECK(splitAt(p, 300));
+    CHECK(trackClips(p, TrackKind::Video, 0).size() == 2);
+    CHECK(trackClips(p, TrackKind::Audio, 0).size() == 1);
+    CHECK(p.clip(v)->link == 0);
+    checkInvariants(p);
+
+    // Quitar no toca la pista bloqueada.
+    CHECK(removeClips(p, {a}) == false);
+    CHECK(p.clip(a) != nullptr);
+
+    // Colocar en la pista bloqueada solo coloca la otra parte.
+    const ObjectId placed = placeClip(p, m, 1000);
+    REQUIRE(placed != 0);
+    CHECK(p.clip(placed)->link == 0);
+    CHECK(trackClips(p, TrackKind::Audio, 0).size() == 1);
+    checkInvariants(p);
+}
+
+TEST_CASE("Unlinked clips are edited on their own", "[timeline][tracks]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    const ObjectId a = p.clip(v)->link;
+    REQUIRE(unlinkClips(p, {v}));
+    CHECK(p.clip(v)->link == 0);
+    CHECK(p.clip(a)->link == 0);
+    CHECK_FALSE(unlinkClips(p, {v}));
+    REQUIRE(removeClips(p, {a}));
+    CHECK(p.clip(v) != nullptr);
+    CHECK(trackClips(p, TrackKind::Audio, 0).empty());
+    // No se vuelven a enlazar al editar.
+    const ObjectId v2 = placeClip(p, m, 1000);
+    const ObjectId a2 = p.clip(v2)->link;
+    unlinkClips(p, {a2});
+    moveClips(p, {v2}, 10);
+    CHECK(p.clip(v2)->start == 1010);
+    CHECK(p.clip(a2)->start == 1000);
+    checkInvariants(p);
+}
+
+TEST_CASE("Splitting keeps links, transform and volume", "[timeline][tracks]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    const ObjectId a = p.clip(v)->link;
+    ClipTransform t;
+    t.scale = 2.5;
+    t.x = -100;
+    REQUIRE(setClipTransform(p, v, t));
+    REQUIRE(setClipVolume(p, a, -12));
+    REQUIRE(splitAt(p, 200));
+    const Clip& right = trackClips(p, TrackKind::Video, 0)[1];
+    CHECK(right.transform == t);
+    REQUIRE(right.link != 0);
+    CHECK(p.clip(right.link)->volumeDb == -12);
+    CHECK(p.clip(v)->link == a);
+    checkInvariants(p);
+
+    // Sobrescribir solo la pista de video parte el clip y deja el audio sin pareja.
+    const ObjectId still = addMedia(p, media("b.mp4", 1, true, false));
+    placeClip(p, still, 50);
+    checkInvariants(p);
+    CHECK(p.clip(v)->link == 0);
+}
+
+TEST_CASE("Transform and volume values are limited", "[timeline][tracks]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    const ObjectId a = p.clip(v)->link;
+    ClipTransform t;
+    t.scale = 0;
+    t.opacity = 7;
+    t.cropLeft = 0.8;
+    t.cropRight = 0.8;
+    REQUIRE(setClipTransform(p, v, t));
+    CHECK(p.clip(v)->transform.scale == kMinScale);
+    CHECK(p.clip(v)->transform.opacity == 1.0);
+    CHECK(p.clip(v)->transform.cropLeft + p.clip(v)->transform.cropRight <= kMaxCrop + 1e-9);
+    CHECK_FALSE(setClipTransform(p, a, t)); // el audio no tiene transformación
+    CHECK_FALSE(setClipVolume(p, v, -3));   // ni el video volumen
+    CHECK(setClipVolume(p, a, -200));
+    CHECK(p.clip(a)->volumeDb == kMinVolumeDb);
+    CHECK(gainFromDb(kMinVolumeDb) == 0.0);
+    CHECK(gainFromDb(0.0) == 1.0);
+    CHECK(gainFromDb(-6.0) == Catch::Approx(0.501).margin(0.001));
 }

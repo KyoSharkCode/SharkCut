@@ -214,10 +214,11 @@ int main(int argc, char* argv[]) {
             const auto frame =
                 static_cast<std::int64_t>(stages[col] * (params.durationFrames - 1) + 0.5);
             sharkcut::CompositorInput input;
-            input.a = frameA;
-            input.b = frameB;
-            input.transition = params;
-            input.state = sharkcut::evaluateTransition(params, frame);
+            sharkcut::CompositorLayer& layer = input.layers.emplace_back();
+            layer.a = frameA;
+            layer.b = frameB;
+            layer.transition = params;
+            layer.state = sharkcut::evaluateTransition(params, frame);
             const QImage image = renderOnce(rhi.get(), compositor, input);
             painter.drawImage(QRect(labelWidth + static_cast<int>(col) * thumb.width(),
                                     row * thumb.height(), thumb.width() - 4, thumb.height() - 4),

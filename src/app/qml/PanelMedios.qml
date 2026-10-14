@@ -400,60 +400,258 @@ Rectangle {
         }
 
         // --- Propiedades del clip seleccionado ---
-        ColumnLayout {
+        Flickable {
+            id: propiedades
             visible: panel.pestana === 3
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 14
-            spacing: 12
-            Text {
-                text: "CLIP SELECCIONADO"
-                color: Theme.textoDesactivado
-                font.pixelSize: Theme.tamTextoPequeno
-                font.letterSpacing: 0.6
-            }
-            Text {
-                Layout.fillWidth: true
-                text: panel.editor.selectionDescription.length > 0
-                      ? panel.editor.selectionDescription : "Ningún clip seleccionado"
-                color: panel.editor.selectionDescription.length > 0 ? Theme.texto
-                                                                    : Theme.textoDesactivado
-                font.pixelSize: Theme.tamTexto
-                wrapMode: Text.WrapAnywhere
-            }
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.borde }
-            Repeater {
-                model: ["Posición", "Escala", "Rotación", "Opacidad"]
-                delegate: RowLayout {
-                    required property string modelData
+            contentHeight: columnaPropiedades.implicitHeight + 28
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+
+            readonly property var sel: panel.editor.selectedClip
+            readonly property bool uno: sel.count === 1
+            readonly property bool hayVideo: uno && sel.video !== 0
+            readonly property bool hayAudio: uno && sel.audio !== 0
+            readonly property var t: hayVideo ? sel.transform : ({})
+            readonly property bool videoEditable: hayVideo && !sel.videoLocked
+
+            function vista(valores) { panel.editor.previewTransform(sel.video, valores) }
+            function aplicar(valores, etiqueta) { panel.editor.setClipTransform(sel.video, valores, etiqueta) }
+
+            ColumnLayout {
+                id: columnaPropiedades
+                x: 14
+                y: 14
+                width: propiedades.width - 28
+                spacing: 10
+
+                Text {
+                    text: "CLIP SELECCIONADO"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Text {
                     Layout.fillWidth: true
-                    opacity: 0.45
-                    spacing: 10
+                    text: panel.editor.selectionDescription.length > 0
+                          ? panel.editor.selectionDescription : "Ningún clip seleccionado"
+                    color: panel.editor.selectionDescription.length > 0 ? Theme.texto
+                                                                        : Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTexto
+                    wrapMode: Text.WrapAnywhere
+                }
+                Text {
+                    Layout.fillWidth: true
+                    visible: !propiedades.uno
+                    wrapMode: Text.WordWrap
+                    text: propiedades.sel.count > 1
+                          ? "Selecciona un solo clip para ver y cambiar sus propiedades."
+                          : "Selecciona un clip en la línea de tiempo (o haz clic sobre él en el visor)."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                // --- Video: posición, escala, opacidad y recorte ---
+                Separador { visible: propiedades.hayVideo }
+                RowLayout {
+                    visible: propiedades.hayVideo
+                    Layout.fillWidth: true
+                    Icono { nombre: "video"; tam: 15; color: Theme.clipVideoClaro }
                     Text {
-                        Layout.preferredWidth: 80
-                        text: parent.modelData
-                        color: Theme.textoSecundario
-                        font.pixelSize: Theme.tamTexto
-                    }
-                    Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: 4
-                        radius: 2
-                        color: Theme.panelElevado
+                        text: "Video · " + (propiedades.sel.videoTrack || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
                     }
-                    Icono { nombre: "keyframe"; tam: 14; color: Theme.textoDesactivado }
+                    Chip {
+                        visible: propiedades.hayVideo && propiedades.sel.videoLocked
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                ColumnLayout {
+                    visible: propiedades.hayVideo
+                    enabled: propiedades.videoEditable
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    CampoNumero {
+                        etiqueta: "Posición X"
+                        unidad: "px"
+                        valor: propiedades.t.x || 0
+                        activo: propiedades.videoEditable
+                        onCambiando: (v) => propiedades.vista({ x: v })
+                        onCambiado: (v) => propiedades.aplicar({ x: v }, "Posición")
+                    }
+                    CampoNumero {
+                        etiqueta: "Posición Y"
+                        unidad: "px"
+                        valor: propiedades.t.y || 0
+                        activo: propiedades.videoEditable
+                        onCambiando: (v) => propiedades.vista({ y: v })
+                        onCambiado: (v) => propiedades.aplicar({ y: v }, "Posición")
+                    }
+                    CampoNumero {
+                        etiqueta: "Escala"
+                        unidad: "%"
+                        decimales: 1
+                        paso: 0.5
+                        desde: 1
+                        hasta: 2000
+                        valor: (propiedades.t.scale || 1) * 100
+                        activo: propiedades.videoEditable
+                        onCambiando: (v) => propiedades.vista({ scale: v / 100 })
+                        onCambiado: (v) => propiedades.aplicar({ scale: v / 100 }, "Escala")
+                    }
+                    CampoNumero {
+                        etiqueta: "Opacidad"
+                        unidad: "%"
+                        paso: 0.5
+                        desde: 0
+                        hasta: 100
+                        valor: (propiedades.t.opacity !== undefined ? propiedades.t.opacity : 1) * 100
+                        activo: propiedades.videoEditable
+                        onCambiando: (v) => propiedades.vista({ opacity: v / 100 })
+                        onCambiado: (v) => propiedades.aplicar({ opacity: v / 100 }, "Opacidad")
+                    }
+                    Text {
+                        Layout.topMargin: 4
+                        text: "RECORTE"
+                        color: Theme.textoDesactivado
+                        font.pixelSize: Theme.tamTextoPequeno
+                        font.letterSpacing: 0.6
+                    }
+                    Repeater {
+                        model: [
+                            { clave: "cropLeft", nombre: "Izquierda" },
+                            { clave: "cropRight", nombre: "Derecha" },
+                            { clave: "cropTop", nombre: "Arriba" },
+                            { clave: "cropBottom", nombre: "Abajo" }
+                        ]
+                        delegate: CampoNumero {
+                            required property var modelData
+                            etiqueta: modelData.nombre
+                            unidad: "%"
+                            decimales: 1
+                            paso: 0.2
+                            desde: 0
+                            hasta: 95
+                            valor: (propiedades.t[modelData.clave] || 0) * 100
+                            activo: propiedades.videoEditable
+                            onCambiando: (v) => {
+                                const valores = {}
+                                valores[modelData.clave] = v / 100
+                                propiedades.vista(valores)
+                            }
+                            onCambiado: (v) => {
+                                const valores = {}
+                                valores[modelData.clave] = v / 100
+                                propiedades.aplicar(valores, "Recorte")
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 6
+                        BotonIcono {
+                            Layout.fillWidth: true
+                            icono: "ajustar"
+                            texto: "Ajustar"
+                            ayuda: "Ajustar al lienzo: se ve entero (con bandas si no encaja)"
+                            onPulsado: panel.editor.fitClip(propiedades.sel.video, false)
+                        }
+                        BotonIcono {
+                            Layout.fillWidth: true
+                            icono: "rellenar"
+                            texto: "Rellenar"
+                            ayuda: "Rellenar el lienzo: sin bandas (p. ej. un video 16:9 en vertical)"
+                            onPulsado: panel.editor.fitClip(propiedades.sel.video, true)
+                        }
+                        BotonIcono {
+                            icono: "restablecer"
+                            ayuda: "Restablecer posición, escala, opacidad y recorte"
+                            onPulsado: panel.editor.resetTransform(propiedades.sel.video)
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "Arrastra el número para cambiarlo (Mayús: más rápido, Ctrl: más fino) "
+                              + "o haz clic para escribirlo. En el visor: arrastra el clip para "
+                              + "moverlo y sus esquinas para escalarlo."
+                        color: Theme.textoDesactivado
+                        font.pixelSize: Theme.tamTextoPequeno
+                    }
+                }
+
+                // --- Audio: volumen ---
+                Separador { visible: propiedades.hayAudio }
+                RowLayout {
+                    visible: propiedades.hayAudio
+                    Layout.fillWidth: true
+                    Icono { nombre: "audio"; tam: 15; color: Theme.clipAudioClaro }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Audio · " + (propiedades.sel.audioTrack || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
+                    }
+                    Chip {
+                        visible: propiedades.hayAudio && propiedades.sel.audioLocked
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                RowLayout {
+                    visible: propiedades.hayAudio
+                    enabled: propiedades.hayAudio && !propiedades.sel.audioLocked
+                    opacity: enabled ? 1 : 0.45
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Deslizador {
+                        id: volumen
+                        etiqueta: "Volumen"
+                        from: -60
+                        to: 15
+                        stepSize: 0.5
+                        valor: propiedades.sel.volumeDb !== undefined ? propiedades.sel.volumeDb : 0
+                        textoValor: valorActual <= -60 ? "Silencio"
+                                    : (valorActual > 0 ? "+" : "") + valorActual.toFixed(1) + " dB"
+                        onSoltado: (v) => panel.editor.setClipVolume(propiedades.sel.audio, v)
+                    }
+                    BotonIcono {
+                        Layout.alignment: Qt.AlignBottom
+                        texto: "0 dB"
+                        ayuda: "Volumen original"
+                        implicitHeight: 26
+                        onPulsado: panel.editor.setClipVolume(propiedades.sel.audio, 0)
+                    }
+                }
+
+                // --- Enlace entre video y audio ---
+                Separador { visible: propiedades.uno && propiedades.sel.linked }
+                BotonIcono {
+                    visible: propiedades.uno && propiedades.sel.linked
+                    Layout.fillWidth: true
+                    icono: "desvincular"
+                    texto: "Desvincular audio y video"
+                    ayuda: "Para mover, recortar o quitar el video y su audio por separado"
+                    onPulsado: panel.editor.unlinkSelection()
                 }
             }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Posición y escala llegan en la etapa 2 (para reencuadrar en vertical y "
-                      + "colocar la facecam en V2); los keyframes, con los efectos."
-                color: Theme.textoDesactivado
-                font.pixelSize: Theme.tamTextoPequeno
-            }
-            Item { Layout.fillHeight: true }
         }
+    }
+
+    component Separador: Rectangle {
+        Layout.fillWidth: true
+        Layout.topMargin: 2
+        implicitHeight: 1
+        color: Theme.borde
     }
 
     // Archivos arrastrados desde el explorador: a la biblioteca.

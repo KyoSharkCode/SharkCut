@@ -102,13 +102,14 @@ public:
         CompositorInput input;
         std::shared_ptr<const VideoFrame> a = at.aFrame ? m_a.at(*at.aFrame) : nullptr;
         std::shared_ptr<const VideoFrame> b = at.bFrame ? m_b.at(*at.bFrame) : nullptr;
+        CompositorLayer& layer = input.layers.emplace_back();
         if (at.transitionFrame && a && b) {
-            input.a = a;
-            input.b = b;
-            input.transition = m_test.params;
-            input.state = evaluateTransition(m_test.params, *at.transitionFrame);
+            layer.a = a;
+            layer.b = b;
+            layer.transition = m_test.params;
+            layer.state = evaluateTransition(m_test.params, *at.transitionFrame);
         } else {
-            input.a = a ? a : b;
+            layer.a = a ? a : b;
         }
         return input;
     }
@@ -129,7 +130,8 @@ private:
     MediaReader m_b;
 };
 
-// Línea de tiempo de un proyecto: la pista de video, negro en los huecos.
+// Línea de tiempo de un proyecto: las pistas de video visibles, una encima de otra,
+// sobre negro.
 class TimelineFrames : public FrameSource {
 public:
     explicit TimelineFrames(Project project) : m_project(std::move(project)) {}
@@ -138,14 +140,11 @@ public:
 
     CompositorInput at(std::int64_t frame) override {
         CompositorInput input;
-        const Clip* clip = m_project.clipAt(kVideoTrack, frame);
-        const MediaItem* item = clip ? m_project.findMedia(clip->media) : nullptr;
-        if (!item) {
-            return input;
+        for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
+            CompositorLayer& out = input.layers.emplace_back();
+            out.a = reader(layer.track, *layer.media).at(layer.mediaFrame);
+            out.transform = layer.clip->transform;
         }
-        const std::int64_t index =
-            microsecondsToFrame(m_project.mediaTimeUs(*clip, frame), item->frameRate);
-        input.a = reader(*item).at(index);
         return input;
     }
 
@@ -158,11 +157,12 @@ public:
     }
 
 private:
-    // Un lector por archivo, con un máximo abierto a la vez (se cierra el menos usado).
-    MediaReader& reader(const MediaItem& item) {
+    // Un lector por pista y archivo (dos pistas con el mismo video no se pisan), con un
+    // máximo abierto a la vez (se cierra el menos usado).
+    MediaReader& reader(std::size_t track, const MediaItem& item) {
         ++m_clock;
         for (Entry& entry : m_readers) {
-            if (entry.media == item.id) {
+            if (entry.track == track && entry.media == item.id) {
                 entry.lastUse = m_clock;
                 return *entry.reader;
             }
@@ -173,16 +173,17 @@ private:
                 [](const Entry& a, const Entry& b) { return a.lastUse < b.lastUse; });
             m_readers.erase(oldest);
         }
-        m_readers.push_back({item.id, std::make_unique<MediaReader>(item.path), m_clock});
+        m_readers.push_back({track, item.id, std::make_unique<MediaReader>(item.path), m_clock});
         return *m_readers.back().reader;
     }
 
     struct Entry {
+        std::size_t track = 0;
         ObjectId media = 0;
         std::unique_ptr<MediaReader> reader;
         std::uint64_t lastUse = 0;
     };
-    static constexpr std::size_t kMaxOpen = 4;
+    static constexpr std::size_t kMaxOpen = 6;
 
     Project m_project;
     std::vector<Entry> m_readers;

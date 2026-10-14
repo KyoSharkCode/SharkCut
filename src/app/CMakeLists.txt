@@ -16,6 +16,7 @@ qt_add_qml_module(SharkCut
         qml/FilaDato.qml
         qml/Pestana.qml
         qml/Deslizador.qml
+        qml/CampoNumero.qml
         qml/Selector.qml
         qml/BarraTiempo.qml
         qml/LineaTiempo.qml
@@ -42,6 +43,8 @@ qt_add_qml_module(SharkCut
         editor.cpp
         thumbnails.h
         thumbnails.cpp
+        waveforms.h
+        waveforms.cpp
 )
 
 # El ejecutable va a bin/ para no chocar con la carpeta del módulo QML "SharkCut".

@@ -75,7 +75,9 @@ QString Player::markedDurationTimecode() const {
 
 sharkcut::CompositorInput Player::composition() const {
     sharkcut::CompositorInput input;
-    input.a = m_frame;
+    if (m_frame) {
+        input.layers.emplace_back().a = m_frame;
+    }
     return input;
 }
 

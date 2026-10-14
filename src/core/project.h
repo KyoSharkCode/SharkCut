@@ -2,9 +2,12 @@
 
 // Proyecto de SharkCut: ajustes, biblioteca de medios y línea de tiempo.
 //
-// Fase 2: una pista de video (V1) y una de audio (A1). Al colocar un medio se crea
-// un clip en cada pista que corresponda (video y/o audio) y los dos quedan
-// enlazados: comparten medio, posición y tramo, y se editan siempre juntos.
+// Pistas en número variable: V1, V2… (cada una se dibuja encima de la anterior) y
+// A1, A2… (se mezclan todas). En `tracks` van primero las de video, de V1 hacia
+// arriba, y después las de audio, de A1 hacia abajo. Al colocar un medio se crea un
+// clip en una pista de cada tipo que corresponda (video y/o audio) y los dos quedan
+// enlazados: comparten medio, posición y tramo, y se editan siempre juntos (hasta
+// que se desvinculan).
 //
 // Todas las posiciones y duraciones de la línea de tiempo están en fotogramas del
 // proyecto (settings.frameRate). Un clip muestra el tramo [in, in + length) del medio,
@@ -39,6 +42,33 @@ struct MediaItem {
 
 enum class TrackKind { Video, Audio };
 
+// Colocación de un clip de video en el lienzo. Sin transformar (los valores por
+// defecto), el video se ajusta al lienzo sin deformarse y centrado.
+struct ClipTransform {
+    double x = 0.0;     // desplazamiento del centro en píxeles del lienzo (+x derecha)
+    double y = 0.0;     // (+y abajo)
+    double scale = 1.0; // 1 = ajustado al lienzo
+    double opacity = 1.0;
+    // Recorte de cada lado, en fracción del ancho o alto del video (0 = nada).
+    double cropLeft = 0.0;
+    double cropTop = 0.0;
+    double cropRight = 0.0;
+    double cropBottom = 0.0;
+
+    friend bool operator==(const ClipTransform&, const ClipTransform&) = default;
+};
+
+inline constexpr double kMinScale = 0.01;
+inline constexpr double kMaxScale = 20.0;
+inline constexpr double kMaxCrop = 0.95; // entre dos lados opuestos, como mucho
+
+// Volumen de un clip de audio en dB. kMinVolumeDb o menos equivale a silencio.
+inline constexpr double kMinVolumeDb = -60.0;
+inline constexpr double kMaxVolumeDb = 15.0;
+
+// Ganancia lineal de un volumen en dB (0 si es kMinVolumeDb o menos).
+double gainFromDb(double db);
+
 struct Clip {
     ObjectId id = 0;
     ObjectId media = 0;
@@ -46,6 +76,8 @@ struct Clip {
     std::int64_t start = 0;  // primer fotograma en la línea de tiempo
     std::int64_t in = 0;     // desfase dentro del medio
     std::int64_t length = 0; // fotogramas (siempre > 0)
+    ClipTransform transform; // solo clips de video
+    double volumeDb = 0.0;   // solo clips de audio
 
     std::int64_t end() const { return start + length; } // primer fotograma excluido
     std::int64_t out() const { return in + length; }    // fin del tramo en el medio
@@ -56,13 +88,15 @@ struct Clip {
 struct Track {
     TrackKind kind = TrackKind::Video;
     std::vector<Clip> clips; // ordenados por `start` y sin solaparse
+    bool hidden = false;     // video: no se ve (ni en la vista previa ni al exportar)
+    bool muted = false;      // audio: no suena
+    bool locked = false;     // sus clips no se pueden editar
 
     friend bool operator==(const Track&, const Track&) = default;
 };
 
-// Índices de las pistas de la fase 2.
+// V1 es siempre la primera pista.
 inline constexpr std::size_t kVideoTrack = 0;
-inline constexpr std::size_t kAudioTrack = 1;
 
 struct ProjectSettings {
     FrameRate frameRate{60, 1};
@@ -87,8 +121,27 @@ struct Project {
         std::size_t index = 0;
     };
 
+    // Una capa de video visible en un fotograma (ver videoLayersAt).
+    struct Layer {
+        std::size_t track = 0;
+        const Clip* clip = nullptr;
+        const MediaItem* media = nullptr;
+        std::int64_t mediaFrame = 0; // fotograma del medio que se ve
+    };
+
     // Final de la línea de tiempo (fin del último clip de cualquier pista).
     std::int64_t length() const;
+
+    // --- Pistas ---
+    std::size_t trackCount(TrackKind kind) const;
+    // Índice en `tracks` de la pista `number` de ese tipo (0 = V1 o A1).
+    std::optional<std::size_t> trackIndex(TrackKind kind, std::size_t number) const;
+    // Número de la pista dentro de su tipo (0 = V1 o A1).
+    std::size_t trackNumber(std::size_t track) const;
+    // "V1", "A2"…
+    std::string trackName(std::size_t track) const;
+    // Hay algún clip de audio en una pista que no está silenciada.
+    bool hasAudibleAudio() const;
 
     const MediaItem* findMedia(ObjectId id) const;
     std::optional<ClipRef> findClip(ObjectId id) const;
@@ -103,6 +156,13 @@ struct Project {
     // Instante del medio (µs desde su inicio) que se ve en el fotograma `frame` de
     // la línea de tiempo, si `frame` cae dentro del clip.
     std::int64_t mediaTimeUs(const Clip& clip, std::int64_t frame) const;
+
+    // Fotograma del medio (en sus propios fps) que se ve en `frame`.
+    std::int64_t mediaFrameIndex(const Clip& clip, std::int64_t frame) const;
+
+    // Lo que se ve en `frame`, de abajo (V1) arriba: un clip por pista de video
+    // visible, sin los que apuntan a un medio que no existe.
+    std::vector<Layer> videoLayersAt(std::int64_t frame) const;
 
     friend bool operator==(const Project&, const Project&) = default;
 };

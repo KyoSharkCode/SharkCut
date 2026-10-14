@@ -19,6 +19,8 @@ add_library(sharkcut_media STATIC
     sequence_audio.cpp
     timeline_audio.h
     timeline_audio.cpp
+    waveform.h
+    waveform.cpp
     mp4_writer.h
     mp4_writer.cpp
     decode_worker.h

@@ -384,25 +384,46 @@ Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
 **Hecho cuando:** se monta un short con facecam o música encima y transiciones
 sin salir de la pestaña Editor.
 
-### Fase 4 — VODs y uso diario
-- Textos, títulos y overlays con la marca.
-- "Duplicar como vertical": copia de un proyecto horizontal en un lienzo 9:16 para
-  reencuadrarlo (el lienzo es del proyecto: se edita y se exporta en él).
-- Visor sin copias: la textura D3D11 de NVDEC pasa directamente al compositor
-  (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
-- Rendimiento con proyectos largos: caché de fotogramas, miniaturas en segundo
-  plano, proxies, línea de tiempo virtualizada.
-- Edición rápida tipo Premiere: ripple delete, atajos (Q, W, J/K/L…), marcadores.
+### Fase 4 — Varios proyectos, uso diario y efectos
+Reordenada al cerrar la fase 3 con los comentarios de Kyo (sección 14): la app queda
+neutral (sin plantillas de marca, para compartirla con su círculo), la estructura se
+parece a su espacio de trabajo de Premiere y los efectos que usa en sus shorts se
+adelantan desde la antigua fase 5.
+- Varios proyectos abiertos a la vez y varias secuencias por proyecto, como en Premiere:
+  cada proyecto abierto es una pestaña del panel de medios (con sus carpetas, medios y
+  secuencias) y cada secuencia abierta, de cualquier proyecto, es una pestaña de la línea
+  de tiempo. Cada secuencia tiene su propio lienzo y fps ("Duplicar como vertical" pasa
+  a ser duplicar una secuencia en 9:16).
+- Nueva distribución: pestañas superiores Proyectos (recientes, nuevo, abrir), Editor y
+  Exportar (configuración completa: formato, resolución, fps, códec, calidad, tramo,
+  audio); el botón de la esquina pasa a ser "Exportar rápido" (última configuración).
+  Panel Propiedades separado: Medios · Transiciones · Efectos | Propiedades | Programa.
+  Se retiran las pestañas Origen y Transición (eran herramientas de las primeras fases).
+- Edición rápida tipo Premiere: Q/W, ripple delete, J/K/L, marcadores, crear una pista al
+  soltar un medio en la zona vacía de la línea de tiempo.
 - Autoguardado y recuperación tras cierre inesperado.
-- Instalador, icono de los archivos .sharkp y asociación con SharkCut.
-**Hecho cuando:** se edita un VOD de 40+ minutos de principio a fin con
-fluidez y no se echa de menos Premiere.
+- Rendimiento con VODs largos: visor sin copias (textura D3D11 de NVDEC directa al
+  compositor), caché de fotogramas, proxies, línea de tiempo virtualizada.
+- Efectos para los shorts (se concretan con Kyo al llegar a esa etapa; candidatos de la
+  antigua fase 5: keyframes de posición/escala/rotación/opacidad, croma, LUTs básicas,
+  máscaras simples, más transiciones).
+**Hecho cuando:** se edita un VOD de 40+ minutos de principio a fin con fluidez, se
+saltan proyectos y secuencias sin cerrar nada y los shorts llevan sus efectos sin
+echar de menos Premiere.
 
-### Fase 5 — Lo pro
-- Keyframes en posición, escala, rotación y opacidad (zoom y movimiento en un clip).
-- Más transiciones y efectos (glitch, spin, LUTs básicas, máscaras simples, croma).
+### Fase 5 — Entrega
+- Instalador, icono de los archivos .sharkp y asociación con SharkCut.
+- Carpeta de licencias (FFmpeg, Qt) y código disponible, para compartir SharkCut gratis.
+- Mejora de los efectos de sonido (generador o sonidos CC0 registrados).
+- 0.1.0 Early Access para Kyo y sus amigos (.zip o instalador, y si se quiere una web
+  sencilla de descarga).
+**Hecho cuando:** los amigos de Kyo instalan SharkCut y editan con él.
+
+### Fase 6 — Lo pro
+- Lo que quede de efectos y transiciones tras la fase 4 (glitch, spin…).
 - Subtítulos automáticos en local con **whisper.cpp** (C++, usa la GPU).
 - Herramientas para VODs: detección de silencios y marcadores automáticos.
+- Herramienta de texto genérica (sin plantillas de marca), si hace falta.
 
 ---
 
@@ -419,7 +440,7 @@ fluidez y no se echa de menos Premiere.
 | Pruebas de GPU en la nube (sin Windows ni NVIDIA) | Tests del núcleo en Linux; pruebas de GPU en el PC de Kyo y en CI de Windows |
 | Licencias: Qt (LGPLv3) y FFmpeg (LGPL/GPL) | Enlace dinámico; uso personal; documentar en `LICENSES/` |
 | Licencias de sonidos | Registro obligatorio en `LICENCIAS.md` |
-| Alcance que crece sin control | Respetar las fases; nada de la fase 5 antes de cerrar la 3 |
+| Alcance que crece sin control | Respetar las fases; nada de una fase posterior antes de cerrar la actual |
 
 ---
 
@@ -622,20 +643,24 @@ ctest --preset windows-debug
        video más alta o debajo de la última de audio): que se vea que ahí se crea una
        pista nueva y que se cree al soltar → fase 4.
      - Mejorar los efectos de sonido → fase 4.
-8. Fase 4: VODs y uso diario. Etapas propuestas (pendientes de que Kyo las apruebe):
-   - [ ] Etapa 1: edición rápida y trabajo seguro. Q/W, eliminación con rizo (ripple
-     delete), J/K/L, marcadores, crear pista al soltar en la zona vacía, autoguardado
-     (`.sharkp.autosave`) y recuperación tras un cierre inesperado.
-   - [ ] Etapa 2: textos y títulos con la marca (Marea Nocturna, fuentes de marca) y
-     "Duplicar como vertical".
-   - [ ] Etapa 3: rendimiento con VODs largos. Visor sin copias (textura de NVDEC directa
-     al compositor), caché de fotogramas, proxies opcionales y línea de tiempo
-     virtualizada.
-   - [ ] Etapa 4: entrega. Instalador, icono de los `.sharkp` y asociación con SharkCut,
-     carpeta de licencias (FFmpeg, Qt), mejora de los efectos de sonido y una 0.1.0 Early
-     Access para Kyo y sus amigos.
-     - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
-       transiciones sin salir de la pestaña Editor).
+8. Fase 4: varios proyectos, uso diario y efectos. Etapas acordadas con Kyo:
+   - Decisiones al planificarla: sin textos ni títulos con la marca (la app queda neutral
+     para compartirla); se retiran Origen y Transición (Kyo no usaba Origen); varios
+     proyectos abiertos y varias secuencias por proyecto, como en su espacio de trabajo
+     de Premiere; efectos adelantados desde la antigua fase 5 y la entrega pasa a la 5.
+   - [ ] Etapa 1: proyectos y secuencias. Modelo con varias secuencias por proyecto
+     (`.sharkp` versión 4, que abre los anteriores como un proyecto de una secuencia),
+     varios proyectos abiertos a la vez (pestañas en el panel de medios, con carpetas),
+     pestañas de secuencias en la línea de tiempo, nueva secuencia, duplicar (también
+     como vertical), renombrar y quitar.
+   - [ ] Etapa 2: nueva distribución y exportación. Pestañas Proyectos · Editor ·
+     Exportar; panel Propiedades separado (Medios · Transiciones · Efectos | Propiedades |
+     Programa); Exportar con configuración completa y "Exportar rápido" en la esquina.
+   - [ ] Etapa 3: edición rápida y trabajo seguro. Q/W, ripple delete, J/K/L, marcadores,
+     crear pista al soltar en la zona vacía, autoguardado y recuperación.
+   - [ ] Etapa 4: rendimiento con VODs largos.
+   - [ ] Etapa 5: efectos para los shorts (lista por concretar con Kyo).
+9. Fase 5: entrega (instalador, licencias, sonidos, 0.1.0 Early Access).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.
@@ -649,6 +674,8 @@ ctest --preset windows-debug
 - [x] Kyo Estudio: SharkCut se hace desde cero; conexión eventual más adelante.
 - [x] Lenguaje: C++ (Rust descartado por la madurez de sus bibliotecas de interfaz).
 - [x] Estilo visual del editor: tema "Marea Profunda" (sección 15).
+- [x] SharkCut se comparte gratis con el círculo de Kyo: la app queda neutral (sin
+      plantillas de marca) y se cumplen las licencias de FFmpeg y Qt (fase 5).
 - [x] FFmpeg en Windows: binarios precompilados de Gyan (build "full shared", con NVENC,
       NVDEC y D3D11VA), versión 9.0.2 con hash fijado, descargados por CMake. En Linux,
       las bibliotecas del sistema. Cambiable sin tocar el código (`cmake/FFmpeg.cmake`).

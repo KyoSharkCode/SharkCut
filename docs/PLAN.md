@@ -369,7 +369,7 @@ resultado exportado es idéntico a la vista previa.
 - Interfaz con el tema Marea Profunda.
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
 
-### Fase 3 — Interfaz definitiva y montaje real
+### Fase 3 — Interfaz definitiva y montaje real ✅
 Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
 - ✅ Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
   (también para lo que llegará después: efectos, transiciones, propiedades del
@@ -605,7 +605,11 @@ ctest --preset windows-debug
        de volumen o quitar) y se cambia o se quita desde Propiedades.
      - Comprobado en Linux: arrastrar, ajustar, quitar y deshacer en la app; reproducir a
        través de la transición; exportar (V1 con Zoom In y V2 con un fundido que deja ver
-       V1). Pendiente de validar en el PC de Kyo, también cómo suenan los efectos.
+       V1).
+     - Validada en el PC de Kyo con VODs reales: las transiciones se añaden, se ajustan y
+       se exportan en orden, con su efecto de sonido.
+   - **Fase 3 terminada.** Se monta un short con facecam, música y transiciones sin salir
+     de la pestaña Editor.
      - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
        transiciones sin salir de la pestaña Editor).
 

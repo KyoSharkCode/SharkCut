@@ -441,6 +441,7 @@ ctest --preset windows-debug
 4. Fase 0: cimientos.
    - [x] Etapa 1: proyecto CMake, CI, núcleo de tiempo con tests, ventana Qt Quick
      con diagnóstico (API gráfica, fps).
+     Validada en el PC de Kyo (Windows 11 25H2, RTX 3060): Direct3D 11, render fluido.
    - [ ] Etapa 2: FFmpeg + decodificación por hardware y visor de video.
    - [ ] Etapa 3: audio sincronizado, play/pausa y búsqueda precisa.
 5. Fase 1: transiciones.

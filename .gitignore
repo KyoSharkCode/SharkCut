@@ -1,0 +1,15 @@
+# Compilación
+/build/
+/out/
+/dist/
+/.deps/
+
+# Configuración local
+CMakeUserPresets.json
+.vs/
+*.user
+
+# Proyectos de prueba y cachés de SharkCut
+*.sharkp.cache/
+*.sharkp.autosave
+aqtinstall.log

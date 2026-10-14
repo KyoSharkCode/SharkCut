@@ -2,6 +2,7 @@
 /build/
 /out/
 /dist/
+/.deps/
 
 # Configuración local
 CMakeUserPresets.json

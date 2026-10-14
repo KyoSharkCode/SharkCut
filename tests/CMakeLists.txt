@@ -13,9 +13,23 @@ FetchContent_MakeAvailable(Catch2)
 # nombre a Catch2 con otra codificación y el test no se encontraría.
 add_executable(sharkcut_tests
     test_time.cpp
+    test_media.cpp
+    test_color.cpp
+    test_clip.h
+    test_clip.cpp
 )
-target_link_libraries(sharkcut_tests PRIVATE sharkcut_core sharkcut_warnings Catch2::Catch2WithMain)
+target_link_libraries(sharkcut_tests PRIVATE
+    sharkcut_core
+    sharkcut_media
+    sharkcut_warnings
+    Catch2::Catch2WithMain
+    # El generador de clips de prueba usa FFmpeg directamente.
+    FFmpeg::avformat FFmpeg::avcodec FFmpeg::avutil
+)
+sharkcut_copy_runtime_dlls(sharkcut_tests)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
-catch_discover_tests(sharkcut_tests)
+# PRE_TEST: la lista de tests se obtiene al ejecutar ctest, cuando las DLL de FFmpeg
+# ya están junto al ejecutable.
+catch_discover_tests(sharkcut_tests DISCOVERY_MODE PRE_TEST)

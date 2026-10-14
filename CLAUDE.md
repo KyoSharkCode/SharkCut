@@ -8,7 +8,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - C++20 + Qt 6.10.3, interfaz en Qt Quick / QML.
 - Render: QRhi (backend Direct3D 11 en Windows) + shaders GLSL 440 compilados
   con qsb. Vista previa y exportación usan el MISMO compositor.
-- Medios: FFmpeg enlazado como biblioteca (libavformat/libavcodec), con
+- Medios: FFmpeg enlazado como biblioteca (libavformat/libavcodec; Windows: build
+  de Gyan 9.0.2 descargada por cmake/FFmpeg.cmake; Linux: pkg-config), con
   NVDEC (D3D11VA) para decodificar y NVENC para codificar. Los fotogramas se
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio (WASAPI) + mezclador propio; el audio es el reloj maestro.
@@ -18,8 +19,11 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   nunca segundos en coma flotante.
 
 ## Arquitectura
-- src/core no depende de Qt Quick ni de la interfaz; debe poder probarse sin
-  ventanas.
+- src/core y src/media no dependen de Qt; deben poder probarse sin ventanas.
+  src/media: análisis (probeMedia), VideoDecoder, DecodeWorker (hilo + cola), color.
+  src/app: Player (reloj y estado) y VideoViewer (QQuickRhiItem + shaders).
+- El código debe compilar con FFmpeg 6.1 (Ubuntu) y 9.x (Windows): solo API moderna
+  (nada de key_frame, avcodec_close ni av_err2str).
 - Código específico de Windows/NVIDIA solo en src/media/platform/win/, detrás
   de interfaces, con un camino por software que compila en Linux.
 - Toda modificación del proyecto pasa por un comando (deshacer/rehacer).

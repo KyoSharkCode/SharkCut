@@ -52,7 +52,9 @@ Extensiones (VS Code las sugiere al abrir el proyecto):
 1. Abre la carpeta `C:\Dev\SharkCut` en VS Code.
 2. CMake Tools preguntará por un **preset de configuración**: elige **Windows · Debug**.
    (Si no pregunta: `Ctrl + Shift + P` → **CMake: Select Configure Preset**.)
-   La primera vez descarga Catch2 (biblioteca de tests) y tarda un poco.
+   La primera vez descarga Catch2 (biblioteca de tests) y **FFmpeg 9.0.2 precompilado**
+   (unos 60 MB, versión y huella fijadas en `cmake/FFmpeg.cmake`). Se guarda en la carpeta
+   `.deps` del proyecto y solo se descarga una vez.
 3. Compilar: **F7** o el botón **Build** de la barra inferior.
 4. Ejecutar: `Shift + F5`, o el botón ▶ de la barra inferior (objetivo **SharkCut**).
 5. Tests: `Ctrl + Shift + P` → **CMake: Run Tests**, o en la terminal:
@@ -68,7 +70,25 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 2. Escribe `cd C:\Dev\SharkCut` y luego `code .`
 3. VS Code se abre con el entorno del compilador ya cargado.
 
-## 6. Qué comprobar (fase 0, etapa 1)
+## 6. Qué comprobar
+
+### Etapa 2: reproducir un clip de OBS
+
+1. Abre SharkCut y pulsa **Abrir video…** (o `Ctrl + O`), o arrastra un MP4 al visor.
+   También funciona `SharkCut.exe ruta\al\clip.mp4`.
+2. En el panel **Clip** comprueba:
+   - [ ] **Video:** códec y resolución correctos (p. ej. `H264 · 1920×1080`).
+   - [ ] **Fotogramas por segundo:** `60`, sin la palabra "(variables)".
+   - [ ] **Decodificación:** `GPU (d3d11va)` **en verde**. Si sale `CPU (software)` en
+     amarillo, la GPU no se está usando: avisar.
+3. Reproducción:
+   - [ ] **Espacio** reproduce y pausa; el video va fluido y a velocidad real.
+   - [ ] **← / →** avanzan o retroceden un fotograma; **Mayús + ← / →**, diez.
+   - [ ] Al hacer clic en la barra salta a ese punto al instante.
+   - [ ] Los colores se ven igual que en Premiere u OBS (ni lavados ni saturados).
+4. Envía una captura con el panel **Clip** visible.
+
+### Etapa 1: ventana y diagnóstico (validada)
 
 Al ejecutar SharkCut debe abrirse una ventana oscura con el visor y el panel
 **Diagnóstico**:

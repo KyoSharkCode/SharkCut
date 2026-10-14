@@ -46,7 +46,7 @@ una base sólida sobre la rapidez.
 | Interfaz | **Qt 6.10.3** con **Qt Quick / QML** (versión fijada en todo el proyecto) | Interfaz acelerada por GPU y totalmente personalizable (Marea Nocturna); Qt es lo que usa DaVinci |
 | GPU / render | **QRhi** (capa gráfica de Qt) con backend **Direct3D 11** en Windows | Un solo código de render; en Windows habla D3D11 directamente; permite compilar y probar en otros sistemas con Vulkan/OpenGL |
 | Shaders | GLSL estilo Vulkan (`#version 440`), compilados con `qsb` a HLSL/SPIR-V | Se escriben una vez y Qt los traduce a cada backend |
-| Decodificación | **FFmpeg (libavformat/libavcodec)** enlazado como biblioteca, con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
+| Decodificación | **FFmpeg 9 (libavformat/libavcodec)** enlazado como biblioteca (build precompilada de Gyan), con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
 | Codificación | **FFmpeg + NVENC** (`h264_nvenc` / `hevc_nvenc`) recibiendo texturas D3D11; fallback a `libx264` | Exportación sin pasar los píxeles por la CPU |
 | Audio | **miniaudio** (WASAPI) + mezclador propio | Biblioteca ligera, baja latencia; el audio marca el reloj de reproducción |
 | GPU de referencia | NVIDIA **RTX 3060 12 GB** | PC de trabajo de Kyo; NVENC/NVDEC por defecto |
@@ -442,8 +442,13 @@ ctest --preset windows-debug
    - [x] Etapa 1: proyecto CMake, CI, núcleo de tiempo con tests, ventana Qt Quick
      con diagnóstico (API gráfica, fps).
      Validada en el PC de Kyo (Windows 11 25H2, RTX 3060): Direct3D 11, render fluido.
-   - [ ] Etapa 2: FFmpeg + decodificación por hardware y visor de video.
-   - [ ] Etapa 3: audio sincronizado, play/pausa y búsqueda precisa.
+   - [x] Etapa 2: FFmpeg + decodificación por hardware (D3D11VA/NVDEC) y visor de video
+     QRhi con conversión YUV→RGB en shader; reproducción de video, búsqueda precisa
+     por fotograma, paso a paso. Probada en Linux (camino por software); pendiente de
+     validar en el PC de Kyo.
+   - [ ] Etapa 2b: sin copias: la textura D3D11 de NVDEC pasa directamente al visor
+     (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
+   - [ ] Etapa 3: audio sincronizado (el audio pasa a ser el reloj maestro).
 5. Fase 1: transiciones.
 
 ### Decisiones tomadas
@@ -458,12 +463,14 @@ ctest --preset windows-debug
 - [x] Kyo Estudio: SharkCut se hace desde cero; conexión eventual más adelante.
 - [x] Lenguaje: C++ (Rust descartado por la madurez de sus bibliotecas de interfaz).
 - [x] Estilo visual del editor: tema "Marea Profunda" (sección 15).
+- [x] FFmpeg en Windows: binarios precompilados de Gyan (build "full shared", con NVENC,
+      NVDEC y D3D11VA), versión 9.0.2 con hash fijado, descargados por CMake. En Linux,
+      las bibliotecas del sistema. Cambiable sin tocar el código (`cmake/FFmpeg.cmake`).
 
 ### Decisiones pendientes
 - [ ] Atajos de teclado: copiar el mapa de Premiere tal cual o uno propio.
 - [ ] Instalador: Inno Setup o NSIS (decidir al llegar a la fase 2).
-- [ ] FFmpeg en Windows: vcpkg (compila desde código) o binarios precompilados
-      (decidir en la etapa 2 de la fase 0).
+
 
 ---
 

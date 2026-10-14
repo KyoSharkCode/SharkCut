@@ -1,0 +1,71 @@
+#pragma once
+
+#include "media/media_info.h"
+#include "media/video_decoder.h"
+#include "media/video_frame.h"
+
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace sharkcut {
+
+// Decodifica un clip en un hilo propio y mantiene una pequeña cola de fotogramas
+// preparados por adelantado. Así la interfaz nunca espera a disco ni a la GPU.
+//
+// Las funciones de rellamada se invocan desde el hilo de decodificación.
+class DecodeWorker {
+public:
+    struct Callbacks {
+        std::function<void(const VideoStreamInfo&)> opened;
+        std::function<void(const std::string& message)> failed;
+        std::function<void()> framesAvailable;
+    };
+
+    DecodeWorker(std::string path, HwAccel hwAccel, Callbacks callbacks, std::size_t capacity = 8);
+    ~DecodeWorker();
+
+    DecodeWorker(const DecodeWorker&) = delete;
+    DecodeWorker& operator=(const DecodeWorker&) = delete;
+
+    // Vacía la cola y continúa decodificando a partir del fotograma `index`.
+    void seek(std::int64_t index);
+
+    // Saca de la cola los fotogramas con índice <= `index` y devuelve el último de
+    // ellos (el que corresponde mostrar), o nullptr si aún no hay ninguno.
+    std::shared_ptr<const VideoFrame> takeUpTo(std::int64_t index);
+
+    // true si el fotograma `index` está en la cola (entre el primero y el último).
+    bool hasFrame(std::int64_t index) const;
+
+    // true si se llegó al final del clip y ya no quedan fotogramas en la cola.
+    bool finished() const;
+
+    // Aceleración por hardware del último fotograma ("" = por software).
+    std::string hwAccelName() const;
+
+private:
+    void run();
+
+    const std::string m_path;
+    const HwAccel m_hwAccel;
+    const Callbacks m_callbacks;
+    const std::size_t m_capacity;
+
+    mutable std::mutex m_mutex;
+    std::condition_variable m_wake;
+    std::deque<std::shared_ptr<const VideoFrame>> m_queue;
+    std::int64_t m_seekTarget = -1; // búsqueda pendiente (-1 = ninguna)
+    bool m_endOfStream = false;
+    bool m_stop = false;
+    std::string m_hwAccelName;
+
+    std::thread m_thread; // último miembro: arranca cuando todo lo demás existe
+};
+
+} // namespace sharkcut

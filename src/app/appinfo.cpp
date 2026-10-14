@@ -1,5 +1,7 @@
 #include "appinfo.h"
 
+#include <QCoreApplication>
+#include <QFileInfo>
 #include <QSysInfo>
 #include <QtGlobal>
 
@@ -23,4 +25,12 @@ QString AppInfo::buildType() const {
 #else
     return QStringLiteral("Debug");
 #endif
+}
+
+QString AppInfo::initialFile() const {
+    const QStringList args = QCoreApplication::arguments();
+    if (args.size() < 2) {
+        return {};
+    }
+    return QFileInfo(args.at(1)).absoluteFilePath();
 }

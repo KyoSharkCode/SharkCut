@@ -14,6 +14,7 @@ class AppInfo : public QObject {
     Q_PROPERTY(QString qtVersion READ qtVersion CONSTANT)
     Q_PROPERTY(QString operatingSystem READ operatingSystem CONSTANT)
     Q_PROPERTY(QString buildType READ buildType CONSTANT)
+    Q_PROPERTY(QString initialFile READ initialFile CONSTANT)
 
 public:
     explicit AppInfo(QObject* parent = nullptr);
@@ -22,4 +23,6 @@ public:
     QString qtVersion() const;
     QString operatingSystem() const;
     QString buildType() const;
+    // Archivo pasado al abrir la app (p. ej. "SharkCut.exe clip.mp4"), o vacío.
+    QString initialFile() const;
 };

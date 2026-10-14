@@ -28,6 +28,13 @@ jobs:
       - name: Entorno de MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      # FFmpeg precompilado (~60 MB): se guarda en caché entre ejecuciones.
+      - name: Caché de FFmpeg
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ hashFiles('cmake/FFmpeg.cmake') }}
+
       - name: Configurar
         run: cmake --preset windows-release
 
@@ -55,7 +62,8 @@ jobs:
       - name: Dependencias del sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgl1-mesa-dev libxkbcommon-dev
+          sudo apt-get install -y ninja-build pkg-config libgl1-mesa-dev libxkbcommon-dev \
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
 
       - name: Instalar Qt
         uses: jurplel/install-qt-action@v4

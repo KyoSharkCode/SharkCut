@@ -20,10 +20,17 @@ else()
     target_compile_options(sharkcut_warnings INTERFACE -Wall -Wextra -Wpedantic)
 endif()
 
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+include(FFmpeg)
+
 add_subdirectory(src/core)
+add_subdirectory(src/media)
 
 if(SHARKCUT_BUILD_APP)
-    find_package(Qt6 6.10 REQUIRED COMPONENTS Quick)
+    # GuiPrivate: cabeceras de QRhi (rhi/qrhi.h), la capa gráfica que usa el visor.
+    # Su uso es intencionado (API documentada con compatibilidad limitada): sin aviso.
+    set(QT_NO_PRIVATE_MODULE_WARNING ON)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS Quick ShaderTools GuiPrivate)
     qt_standard_project_setup(REQUIRES 6.10)
     add_subdirectory(src/app)
 endif()

@@ -369,28 +369,35 @@ resultado exportado es idéntico a la vista previa.
 - Interfaz con el tema Marea Profunda.
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
 
-### Fase 3 — Lo propio
-- Transiciones integradas en la línea de tiempo (arrastrar entre clips).
-- Biblioteca de efectos de sonido y emparejamiento transición ↔ sonido.
-- Textos, títulos y overlays con la marca.
-- Presets de exportación 16:9, 9:16 y 1:1 (con reencuadre).
-**Hecho cuando:** se puede producir un short típico de principio a fin.
+### Fase 3 — Interfaz definitiva y montaje real
+Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
+- Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
+  (también para lo que llegará después: efectos, transiciones, propiedades del
+  clip), iconos de herramientas y cursores, y logo de la app. Primero una maqueta
+  para aprobar; después, la implementación con el tema Marea Profunda.
+- Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
+  onda del audio dibujada en la línea de tiempo.
+- Transiciones integradas en la línea de tiempo (arrastrar entre clips y
+  ajustarlas ahí mismo) y efectos de sonido emparejados con cada transición.
+**Hecho cuando:** se monta un short con facecam o música encima y transiciones
+sin salir de la pestaña Editor.
 
 ### Fase 4 — VODs y uso diario
-- Varias pistas de video y audio.
+- Textos, títulos y overlays con la marca.
+- Presets de exportación 16:9, 9:16 y 1:1 (con reencuadre).
 - Visor sin copias: la textura D3D11 de NVDEC pasa directamente al compositor
   (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
-- Rendimiento con proyectos largos: caché de fotogramas, miniaturas y ondas
-  en segundo plano, proxies, línea de tiempo virtualizada.
-- Edición rápida tipo Premiere: ripple delete, atajos (C, V, Q, W, J/K/L…),
-  marcadores, zoom de línea de tiempo.
+- Rendimiento con proyectos largos: caché de fotogramas, miniaturas en segundo
+  plano, proxies, línea de tiempo virtualizada.
+- Edición rápida tipo Premiere: ripple delete, atajos (Q, W, J/K/L…), marcadores.
 - Autoguardado y recuperación tras cierre inesperado.
+- Instalador, icono de los archivos .sharkp y asociación con SharkCut.
 **Hecho cuando:** se edita un VOD de 40+ minutos de principio a fin con
 fluidez y no se echa de menos Premiere.
 
 ### Fase 5 — Lo pro
-- Keyframes en posición, escala, rotación y opacidad.
-- Más transiciones y efectos (glitch, spin, LUTs básicas, máscaras simples).
+- Keyframes en posición, escala, rotación y opacidad (zoom y movimiento en un clip).
+- Más transiciones y efectos (glitch, spin, LUTs básicas, máscaras simples, croma).
 - Subtítulos automáticos en local con **whisper.cpp** (C++, usa la GPU).
 - Herramientas para VODs: detección de silencios y marcadores automáticos.
 
@@ -502,18 +509,25 @@ ctest --preset windows-debug
      corta, mueve y reproduce sin tirones, audio perfecto, exportación con h264_nvenc.
    - Comentarios de Kyo tras probarla (lo que echa de menos frente a Premiere), con la
      fase donde encaja cada uno según el plan actual:
-     - Rediseñar la interfaz (la de ahora es provisional, para probar) → por decidir.
+     - Rediseñar la interfaz (la de ahora es provisional, para probar) → fase 3.
      - Iconos de herramientas y cursores, logo de la app e icono de los `.sharkp`
-       (se pueden diseñar en Figma) → por decidir; el icono de archivo, con el instalador.
-     - Ver la onda del audio en la línea de tiempo → fase 4 (ondas en segundo plano).
-     - Poner videos uno encima de otro (varias pistas de video) → fase 4.
+       (se pueden diseñar en Figma) → fase 3; el icono de archivo, con el instalador (fase 4).
+     - Ver la onda del audio en la línea de tiempo → fase 3.
+     - Poner videos uno encima de otro (varias pistas de video) → fase 3.
      - Añadir pistas de audio (música, etc.) arrastrando un archivo a la línea de tiempo
-       o desde Medios → fase 4 (varias pistas de audio).
+       o desde Medios → fase 3.
      - Aplicar la transición directamente entre dos clips de la línea de tiempo, sin pasar
        por Origen y el laboratorio → fase 3.
      - Keyframes para hacer zoom y movimiento dentro de un clip → fase 5.
      - Croma (pantalla verde) → fase 5 (efectos).
      - Subtítulos automáticos → fase 5 (whisper.cpp).
+   - Con esos comentarios se reordenaron las fases 3 y 4 (sección 11): la fase 3 empieza
+     por el rediseño de la interfaz, sigue con varias pistas y ondas, y termina con las
+     transiciones en la línea de tiempo.
+7. Fase 3: interfaz definitiva y montaje real.
+   - [ ] Etapa 1: rediseño de la interfaz (maqueta aprobada por Kyo → implementación).
+   - [ ] Etapa 2: varias pistas de video y audio, onda del audio.
+   - [ ] Etapa 3: transiciones y efectos de sonido en la línea de tiempo.
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

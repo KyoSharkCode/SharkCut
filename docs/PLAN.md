@@ -444,8 +444,8 @@ ctest --preset windows-debug
      Validada en el PC de Kyo (Windows 11 25H2, RTX 3060): Direct3D 11, render fluido.
    - [x] Etapa 2: FFmpeg + decodificación por hardware (D3D11VA/NVDEC) y visor de video
      QRhi con conversión YUV→RGB en shader; reproducción de video, búsqueda precisa
-     por fotograma, paso a paso. Probada en Linux (camino por software); pendiente de
-     validar en el PC de Kyo.
+     por fotograma, paso a paso. Validada en el PC de Kyo con un clip real de OBS
+     (H.264 1920×1080 a 60 fps, 3:35): decodificación por GPU (d3d11va), Direct3D 11.
    - [ ] Etapa 2b: sin copias: la textura D3D11 de NVDEC pasa directamente al visor
      (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
    - [ ] Etapa 3: audio sincronizado (el audio pasa a ser el reloj maestro).

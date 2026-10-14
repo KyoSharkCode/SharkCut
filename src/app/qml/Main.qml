@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import SharkCut
@@ -6,15 +7,32 @@ import SharkCut
 Window {
     id: ventana
 
-    width: 1280
-    height: 760
-    minimumWidth: 900
-    minimumHeight: 560
+    width: 1600
+    height: 940
+    minimumWidth: 1180
+    minimumHeight: 760
     visible: true
-    title: reproductor.fileName.length > 0
-           ? reproductor.fileName + " — SharkCut " + AppInfo.appVersion
-           : "SharkCut " + AppInfo.appVersion
+    title: (modo === "origen" && reproductor.fileName.length > 0
+            ? reproductor.fileName
+            : editor.projectName + (editor.modified ? " •" : ""))
+           + " — SharkCut " + AppInfo.appVersion
     color: Theme.fondo
+
+    // "editor": línea de tiempo · "origen": ver un video y marcar tramos ·
+    // "transicion": probar la transición A → B
+    property string modo: "editor"
+    readonly property bool enEditor: modo === "editor"
+    readonly property bool enOrigen: modo === "origen"
+    readonly property bool enTransicion: modo === "transicion"
+
+    function cambiarModo(nuevo) {
+        if (nuevo === modo)
+            return
+        editor.pause()
+        reproductor.pause()
+        laboratorio.pause()
+        modo = nuevo
+    }
 
     // Nombre legible de la API gráfica que usa Qt Quick en esta ventana.
     readonly property string apiGrafica: {
@@ -32,15 +50,25 @@ Window {
     readonly property bool apiEsperada: !esWindows
                                         || contenido.GraphicsInfo.api === GraphicsInfo.Direct3D11
 
+    Editor {
+        id: editor
+    }
     Player {
         id: reproductor
+    }
+    TransitionLab {
+        id: laboratorio
     }
 
     // Una vez por refresco de pantalla: avanza la reproducción y mide los fps.
     FrameAnimation {
         id: reloj
         running: true
-        onTriggered: reproductor.advance()
+        onTriggered: {
+            editor.advance()
+            reproductor.advance()
+            laboratorio.advance()
+        }
     }
     readonly property real fpsVisor: reloj.smoothFrameTime > 0 ? 1 / reloj.smoothFrameTime : 0
 
@@ -49,27 +77,226 @@ Window {
         title: "Abrir video"
         nameFilters: ["Videos (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts)",
                       "Todos los archivos (*)"]
-        onAccepted: reproductor.open(selectedFile)
+        onAccepted: {
+            ventana.cambiarModo("origen")
+            reproductor.open(selectedFile)
+        }
     }
 
+    FileDialog {
+        id: dialogoExportar
+        title: "Exportar prueba de transición"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "mp4"
+        nameFilters: ["Video MP4 (*.mp4)"]
+        onAccepted: laboratorio.exportTo(selectedFile)
+    }
+
+    FileDialog {
+        id: dialogoImportar
+        title: "Importar medios"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: ["Videos y audio (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts *.mp3 *.wav *.m4a *.aac *.flac *.ogg)",
+                      "Todos los archivos (*)"]
+        onAccepted: editor.importFiles(selectedFiles)
+    }
+
+    FileDialog {
+        id: dialogoAbrirProyecto
+        title: "Abrir proyecto"
+        nameFilters: ["Proyectos de SharkCut (*.sharkp)"]
+        onAccepted: editor.openProject(selectedFile)
+    }
+    FileDialog {
+        id: dialogoGuardarProyecto
+        title: "Guardar proyecto"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "sharkp"
+        nameFilters: ["Proyectos de SharkCut (*.sharkp)"]
+        onAccepted: editor.saveAs(selectedFile)
+        onRejected: ventana.accionPendiente = ""
+    }
+    DialogoExportar {
+        id: dialogoExportarLinea
+        editor: editor
+    }
+    DialogoNuevoProyecto {
+        id: dialogoNuevo
+        onCrear: (nombre, ancho, alto, fps) => editor.newProject(nombre, ancho, alto, fps)
+    }
+
+    // --- Proyecto: guardar, abrir y cambios sin guardar ---
+
+    // Acción que espera a que se guarden (o descarten) los cambios: "nuevo", "abrir" o "cerrar".
+    property string accionPendiente: ""
+    property bool cerrarSinPreguntar: false
+
+    function guardar() {
+        if (!editor.save())
+            dialogoGuardarProyecto.open()
+    }
+    function siGuardado(accion) {
+        if (!editor.modified) {
+            ejecutar(accion)
+            return
+        }
+        accionPendiente = accion
+        dialogoCambios.open()
+    }
+    function ejecutar(accion) {
+        accionPendiente = ""
+        if (accion === "nuevo") {
+            dialogoNuevo.open()
+        } else if (accion === "abrir") {
+            dialogoAbrirProyecto.open()
+        } else if (accion === "cerrar") {
+            cerrarSinPreguntar = true
+            Qt.callLater(ventana.close)
+        }
+    }
+
+    // ¿Guardar los cambios? (propio, para que los botones estén en español y con el tema)
+    Popup {
+        id: dialogoCambios
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        padding: 20
+        closePolicy: Popup.CloseOnEscape
+        property bool respondido: false
+        onOpened: respondido = false
+        onClosed: {
+            if (!respondido)
+                ventana.accionPendiente = "" // Esc: como cancelar
+        }
+        function responder(respuesta) {
+            respondido = true
+            close()
+            if (respuesta === "guardar")
+                ventana.guardar() // la acción sigue al terminar de guardar
+            else if (respuesta === "descartar")
+                ventana.ejecutar(ventana.accionPendiente)
+            else
+                ventana.accionPendiente = ""
+        }
+        background: Rectangle {
+            color: Theme.panel
+            radius: Theme.radio
+            border.color: Theme.borde
+        }
+        Overlay.modal: Rectangle { color: Theme.velo }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "¿Guardar los cambios de «" + editor.projectName + "»?"
+                color: Theme.texto
+                font.pixelSize: 16
+                font.bold: true
+            }
+            Text {
+                text: "Si no los guardas, se perderán."
+                color: Theme.textoSecundario
+                font.pixelSize: Theme.tamTexto
+            }
+            RowLayout {
+                Layout.topMargin: 6
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                Boton { texto: "Cancelar"; onPulsado: dialogoCambios.responder("cancelar") }
+                Boton { texto: "No guardar"; onPulsado: dialogoCambios.responder("descartar") }
+                Boton {
+                    texto: "Guardar"
+                    acentuado: true
+                    onPulsado: dialogoCambios.responder("guardar")
+                }
+            }
+        }
+    }
+    Connections {
+        target: editor
+        function onSaved(ok) {
+            if (ok && ventana.accionPendiente.length > 0)
+                ventana.ejecutar(ventana.accionPendiente)
+            else if (!ok)
+                ventana.accionPendiente = ""
+        }
+    }
+    onClosing: (cierre) => {
+        if (editor.modified && !cerrarSinPreguntar) {
+            cierre.accepted = false
+            siGuardado("cerrar")
+        }
+    }
+
+    // Archivos al abrir (p. ej. "SharkCut.exe a.mp4 b.mp4"): un proyecto .sharkp se abre;
+    // los videos se importan y se colocan en la línea de tiempo, uno detrás de otro.
     Component.onCompleted: {
-        if (AppInfo.initialFile.length > 0)
-            reproductor.openPath(AppInfo.initialFile)
+        const archivos = AppInfo.initialFiles
+        if (archivos.length === 0)
+            return
+        if (archivos[0].toLowerCase().endsWith(".sharkp"))
+            editor.openProjectPath(archivos[0])
+        else
+            editor.importPaths(archivos, 0)
     }
 
-    // Atajos de teclado (estilo Premiere).
-    Shortcut { sequence: "Space"; onActivated: reproductor.togglePlay() }
-    Shortcut { sequence: "Left"; onActivated: reproductor.step(-1) }
-    Shortcut { sequence: "Right"; onActivated: reproductor.step(1) }
-    Shortcut { sequence: "Shift+Left"; onActivated: reproductor.step(-10) }
-    Shortcut { sequence: "Shift+Right"; onActivated: reproductor.step(10) }
-    Shortcut { sequence: "Home"; onActivated: { reproductor.pause(); reproductor.seek(0) } }
+    // Atajos de teclado (estilo Premiere). Actúan sobre la pestaña visible.
+    readonly property var activo: enEditor ? editor : enOrigen ? reproductor : laboratorio
+    Shortcut { sequence: "Space"; onActivated: ventana.activo.togglePlay() }
+    Shortcut { sequence: "Left"; onActivated: ventana.activo.step(-1) }
+    Shortcut { sequence: "Right"; onActivated: ventana.activo.step(1) }
+    Shortcut { sequence: "Shift+Left"; onActivated: ventana.activo.step(-10) }
+    Shortcut { sequence: "Shift+Right"; onActivated: ventana.activo.step(10) }
+    Shortcut {
+        sequence: "Home"
+        onActivated: { ventana.activo.pause(); ventana.activo.seek(0) }
+    }
     Shortcut {
         sequence: "End"
-        onActivated: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
+        onActivated: { ventana.activo.pause(); ventana.activo.seek(ventana.activo.frameCount - 1) }
     }
-    Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrir.open() }
-    Shortcut { sequence: "M"; onActivated: reproductor.muted = !reproductor.muted }
+    Shortcut { sequence: "M"; onActivated: ventana.activo.muted = !ventana.activo.muted }
+    Shortcut {
+        sequences: [StandardKey.Open]
+        onActivated: ventana.enEditor ? ventana.siGuardado("abrir") : dialogoAbrir.open()
+    }
+    Shortcut { sequences: [StandardKey.New]; onActivated: ventana.siGuardado("nuevo") }
+    Shortcut { sequences: [StandardKey.Save]; onActivated: ventana.guardar() }
+    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: dialogoGuardarProyecto.open() }
+    Shortcut {
+        sequence: "Ctrl+M"
+        enabled: ventana.enEditor && editor.frameCount > 0 && !editor.exporting
+        onActivated: dialogoExportarLinea.open()
+    }
+    Shortcut { sequence: "I"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkIn() }
+    Shortcut { sequence: "O"; enabled: ventana.enOrigen; onActivated: reproductor.setMarkOut() }
+    Shortcut { sequence: "T"; enabled: ventana.enTransicion; onActivated: laboratorio.playTransition() }
+    Shortcut { sequence: "1"; onActivated: ventana.cambiarModo("editor") }
+    Shortcut { sequence: "2"; onActivated: ventana.cambiarModo("origen") }
+    Shortcut { sequence: "3"; onActivated: ventana.cambiarModo("transicion") }
+
+    // Edición (pestaña Editor)
+    Shortcut { sequence: "Ctrl+K"; enabled: ventana.enEditor; onActivated: editor.splitAtPlayhead() }
+    Shortcut {
+        sequences: ["Delete", "Backspace"]
+        enabled: ventana.enEditor
+        onActivated: editor.removeSelection()
+    }
+    Shortcut { sequences: [StandardKey.Undo]; enabled: ventana.enEditor; onActivated: editor.undo() }
+    Shortcut {
+        sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
+        enabled: ventana.enEditor
+        onActivated: editor.redo()
+    }
+    Shortcut { sequence: "V"; enabled: ventana.enEditor; onActivated: lineaTiempo.herramienta = "seleccion" }
+    Shortcut { sequence: "C"; enabled: ventana.enEditor; onActivated: lineaTiempo.herramienta = "cuchilla" }
+    Shortcut { sequence: "S"; enabled: ventana.enEditor; onActivated: lineaTiempo.iman = !lineaTiempo.iman }
+    Shortcut { sequences: ["+", "="]; enabled: ventana.enEditor; onActivated: lineaTiempo.acercar() }
+    Shortcut { sequence: "-"; enabled: ventana.enEditor; onActivated: lineaTiempo.alejar() }
+    Shortcut { sequence: "\\"; enabled: ventana.enEditor; onActivated: lineaTiempo.encajar() }
+    Shortcut { sequence: "Ctrl+I"; enabled: ventana.enEditor; onActivated: dialogoImportar.open() }
 
     ColumnLayout {
         id: contenido
@@ -77,29 +304,94 @@ Window {
         anchors.margins: Theme.margen
         spacing: Theme.margen
 
-        // Barra superior
+        // Barra superior: marca, pestañas de trabajo y proyecto
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
 
+            Rectangle {
+                implicitWidth: 26
+                implicitHeight: 26
+                radius: 7
+                color: Theme.marca.abisal
+                border.color: Theme.marca.aleta
+                Icono {
+                    anchors.centerIn: parent
+                    nombre: "aleta"
+                    tam: 16
+                    color: Theme.cabezal
+                }
+            }
             Text {
                 text: "SharkCut"
                 color: Theme.texto
                 font.pixelSize: Theme.tamTitulo
                 font.bold: true
             }
-            Chip {
-                texto: "FASE 0 · REPRODUCTOR"
+
+            Item { implicitWidth: 12 }
+            Pestana {
+                texto: "1 · Editor"
+                activa: ventana.enEditor
+                onPulsada: ventana.cambiarModo("editor")
             }
+            Pestana {
+                texto: "2 · Origen"
+                activa: ventana.enOrigen
+                onPulsada: ventana.cambiarModo("origen")
+            }
+            Pestana {
+                texto: "3 · Transición"
+                activa: ventana.enTransicion
+                onPulsada: ventana.cambiarModo("transicion")
+            }
+
             Item { Layout.fillWidth: true }
-            Boton {
-                texto: "Abrir video…"
-                onPulsado: dialogoAbrir.open()
-            }
             Text {
-                text: "v" + AppInfo.appVersion
-                color: Theme.textoSecundario
+                visible: ventana.enEditor
+                text: editor.projectName
+                color: Theme.texto
                 font.pixelSize: Theme.tamTexto
+                elide: Text.ElideMiddle
+                Layout.maximumWidth: 280
+            }
+            Rectangle {
+                visible: ventana.enEditor && editor.modified
+                implicitWidth: 7
+                implicitHeight: 7
+                radius: 4
+                color: Theme.acento
+                Layout.rightMargin: 4
+            }
+            BotonIcono {
+                visible: ventana.enEditor
+                icono: "nuevo"
+                texto: "Nuevo"
+                ayuda: "Nuevo proyecto (Ctrl+N)"
+                onPulsado: ventana.siGuardado("nuevo")
+            }
+            BotonIcono {
+                visible: ventana.enEditor
+                icono: "abrir"
+                texto: "Abrir"
+                ayuda: "Abrir proyecto (Ctrl+O)"
+                onPulsado: ventana.siGuardado("abrir")
+            }
+            BotonIcono {
+                visible: ventana.enEditor
+                icono: "guardar"
+                texto: "Guardar"
+                ayuda: "Guardar (Ctrl+S) · Guardar como: Ctrl+Mayús+S"
+                acentuado: editor.modified
+                enabled: !editor.fileBusy
+                onPulsado: ventana.guardar()
+            }
+            BotonIcono {
+                visible: !ventana.enEditor
+                icono: "abrir"
+                texto: "Abrir video…"
+                ayuda: "Abrir un video en Origen (Ctrl+O)"
+                onPulsado: dialogoAbrir.open()
             }
         }
 
@@ -108,7 +400,22 @@ Window {
             Layout.fillHeight: true
             spacing: Theme.margen
 
-            // Visor + controles de reproducción
+            // Editor: medios, transiciones, efectos y propiedades a la izquierda
+            PanelMedios {
+                visible: ventana.enEditor
+                Layout.preferredWidth: 430
+                Layout.fillHeight: true
+                editor: editor
+                fantasma: fantasma
+                transiciones: laboratorio.transitionNames
+                onImportar: dialogoImportar.open()
+                onAbrirEnOrigen: (ruta) => {
+                    ventana.cambiarModo("origen")
+                    reproductor.openPath(ruta)
+                }
+            }
+
+            // Visor + controles
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -122,39 +429,207 @@ Window {
                     anchors.margins: Theme.margen
                     spacing: Theme.margen
 
+                    RowLayout {
+                        visible: ventana.enEditor
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        spacing: 8
+                        Text {
+                            text: "Programa"
+                            color: Theme.texto
+                            font.pixelSize: Theme.tamTexto
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Chip {
+                            texto: "LIENZO " + editor.canvasLabel
+                            colorTexto: Theme.texto
+                        }
+                        Text {
+                            text: editor.projectDescription
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                        }
+                    }
+
                     VideoViewer {
                         id: visor
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        player: reproductor
+                        source: ventana.activo
                         backgroundColor: Theme.visorFondo
 
                         Column {
                             anchors.centerIn: parent
                             spacing: 6
-                            visible: !reproductor.loaded
+                            visible: ventana.enEditor ? editor.frameCount === 0
+                                     : ventana.enOrigen ? !reproductor.loaded : !laboratorio.ready
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: reproductor.busy ? "Abriendo…" : "Visor"
+                                text: ventana.enEditor ? "Línea de tiempo vacía"
+                                      : ventana.enOrigen
+                                      ? (reproductor.busy ? "Abriendo…" : "Origen")
+                                      : "Transición"
                                 color: Theme.texto
                                 font.pixelSize: Theme.tamTitulo
                                 font.bold: true
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                visible: !reproductor.busy
-                                text: "Arrastra un video aquí o pulsa «Abrir video…» (Ctrl+O)."
+                                visible: !reproductor.busy || !ventana.enOrigen
+                                horizontalAlignment: Text.AlignHCenter
+                                text: ventana.enEditor
+                                      ? "Importa medios (Ctrl+I) y arrástralos a la línea de tiempo."
+                                      : ventana.enOrigen
+                                      ? "Arrastra un video aquí o pulsa «Abrir video…» (Ctrl+O)."
+                                      : "En la pestaña Origen, marca un tramo y envíalo como clip A\n"
+                                        + "y otro como clip B. Después vuelve aquí."
                                 color: Theme.textoSecundario
                                 font.pixelSize: Theme.tamTexto
                             }
                         }
                     }
 
-                    ControlesReproduccion {
+                    // Controles de la pestaña Editor
+                    RowLayout {
                         Layout.fillWidth: true
+                        visible: ventana.enEditor
+                        enabled: editor.frameCount > 0
+                        opacity: enabled ? 1 : 0.4
+                        spacing: 6
+
+                        BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { editor.pause(); editor.seek(0) } }
+                        BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: editor.step(-1) }
+                        BotonIcono {
+                            icono: editor.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
+                            acentuado: true
+                            implicitWidth: 52
+                            onPulsado: editor.togglePlay()
+                        }
+                        BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: editor.step(1) }
+                        BotonIcono {
+                            icono: "final"
+                            ayuda: "Al final (Fin)"
+                            onPulsado: { editor.pause(); editor.seek(editor.frameCount - 1) }
+                        }
+                        Item { implicitWidth: 8 }
+                        BotonIcono {
+                            icono: editor.muted ? "silencio" : "sonido"
+                            ayuda: editor.muted ? "Activar el sonido (M)" : "Silenciar (M)"
+                            onPulsado: editor.muted = !editor.muted
+                        }
+                        Item { Layout.fillWidth: true }
+                        CodigoTiempo {
+                            actual: editor.timecode
+                            total: editor.durationTimecode
+                        }
+                    }
+
+                    // Controles de la pestaña Origen
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: ventana.enOrigen
                         enabled: reproductor.loaded
                         opacity: enabled ? 1 : 0.4
+                        spacing: 6
+
+                        BarraTiempo {
+                            Layout.fillWidth: true
+                            actual: reproductor.currentFrame
+                            total: reproductor.frameCount
+                            entrada: reproductor.markIn
+                            salida: reproductor.markOut
+                            onBuscar: (f) => reproductor.seek(f)
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { reproductor.pause(); reproductor.seek(0) } }
+                            BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: reproductor.step(-1) }
+                            BotonIcono {
+                            icono: reproductor.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
+                            acentuado: true
+                            implicitWidth: 52
+                            onPulsado: reproductor.togglePlay()
+                        }
+                            BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: reproductor.step(1) }
+                            BotonIcono {
+                            icono: "final"
+                            ayuda: "Al final (Fin)"
+                            onPulsado: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
+                        }
+                            Item { implicitWidth: 8 }
+                            Boton { texto: "Entrada (I)"; onPulsado: reproductor.setMarkIn() }
+                            Boton { texto: "Salida (O)"; onPulsado: reproductor.setMarkOut() }
+                            Boton {
+                                texto: "Borrar marcas"
+                                enabled: reproductor.markIn >= 0 || reproductor.markOut >= 0
+                                onPulsado: reproductor.clearMarks()
+                            }
+                            Boton {
+                                texto: reproductor.muted ? "Sin sonido" : "Sonido"
+                                visible: reproductor.hasAudio
+                                onPulsado: reproductor.muted = !reproductor.muted
+                            }
+                            Item { Layout.fillWidth: true }
+                            CodigoTiempo {
+                                actual: reproductor.timecode
+                                total: reproductor.durationTimecode
+                            }
+                        }
+                    }
+
+                    // Controles de la pestaña Transición
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: ventana.enTransicion
+                        enabled: laboratorio.ready
+                        opacity: enabled ? 1 : 0.4
+                        spacing: 6
+
+                        BarraTiempo {
+                            Layout.fillWidth: true
+                            segmentos: true
+                            actual: laboratorio.currentFrame
+                            total: laboratorio.frameCount
+                            inicioTransicion: laboratorio.transitionStart
+                            finTransicion: laboratorio.transitionEnd
+                            onBuscar: (f) => laboratorio.seek(f)
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { laboratorio.pause(); laboratorio.seek(0) } }
+                            BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: laboratorio.step(-1) }
+                            BotonIcono {
+                            icono: laboratorio.playing ? "pausa" : "reproducir"
+                            ayuda: "Reproducir / pausa (Espacio)"
+                            acentuado: true
+                            implicitWidth: 52
+                            onPulsado: laboratorio.togglePlay()
+                        }
+                            BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: laboratorio.step(1) }
+                            Item { implicitWidth: 8 }
+                            Boton {
+                                texto: "Ver transición (T)"
+                                acentuado: true
+                                onPulsado: laboratorio.playTransition()
+                            }
+                            Boton {
+                                texto: laboratorio.muted ? "Sin sonido" : "Sonido"
+                                onPulsado: laboratorio.muted = !laboratorio.muted
+                            }
+                            Item { Layout.fillWidth: true }
+                            CodigoTiempo {
+                                actual: laboratorio.timecode
+                                total: laboratorio.durationTimecode
+                            }
+                        }
                     }
                 }
 
@@ -163,17 +638,23 @@ Window {
                     anchors.fill: parent
                     keys: ["text/uri-list"]
                     onDropped: (drop) => {
-                        if (drop.hasUrls && drop.urls.length > 0) {
+                        if (!drop.hasUrls || drop.urls.length === 0)
+                            return
+                        if (ventana.enEditor) {
+                            editor.importFiles(drop.urls)
+                        } else {
+                            ventana.cambiarModo("origen")
                             reproductor.open(drop.urls[0])
-                            drop.acceptProposedAction()
                         }
+                        drop.acceptProposedAction()
                     }
                 }
             }
 
-            // Panel de diagnóstico
+            // Panel lateral (Origen y Transición)
             Rectangle {
-                Layout.preferredWidth: 300
+                visible: !ventana.enEditor
+                Layout.preferredWidth: 320
                 Layout.fillHeight: true
                 color: Theme.panel
                 radius: Theme.radio
@@ -182,20 +663,88 @@ Window {
                 Flickable {
                     anchors.fill: parent
                     anchors.margins: 16
-                    contentHeight: columnaDatos.implicitHeight
+                    visible: !ventana.enEditor
+                    contentHeight: ventana.enOrigen ? panelOrigen.implicitHeight
+                                                    : panelTransicion.implicitHeight
                     clip: true
 
+                    // --- Pestaña Origen: clip, marcas y diagnóstico ---
                     ColumnLayout {
-                        id: columnaDatos
+                        id: panelOrigen
+                        visible: ventana.enOrigen
                         width: parent.width
                         spacing: 12
 
-                        Text {
-                            text: "Clip"
-                            color: Theme.texto
-                            font.pixelSize: 16
-                            font.bold: true
+                        Titulo { texto: "Tramo marcado" }
+                        FilaDato {
+                            etiqueta: "Entrada → salida"
+                            valor: reproductor.markInTimecode + "  →  " + reproductor.markOutTimecode
                         }
+                        FilaDato {
+                            etiqueta: "Duración del tramo"
+                            valor: reproductor.loaded ? reproductor.markedDurationTimecode : "—"
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                            text: "Coloca el cabezal y pulsa I para marcar la entrada y O para la "
+                                  + "salida. Sin marcas se usa el clip entero."
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Enviar el tramo a la línea de tiempo:"
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Al final"
+                                acentuado: true
+                                enabled: reproductor.loaded
+                                onPulsado: editor.addFromSource(reproductor, false)
+                            }
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "En el cabezal"
+                                enabled: reproductor.loaded
+                                onPulsado: editor.addFromSource(reproductor, true)
+                            }
+                        }
+                        Separador {}
+                        Titulo { texto: "Prueba de transición" }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Usar como clip A"
+                                acentuado: true
+                                enabled: reproductor.loaded
+                                onPulsado: laboratorio.setClipA(reproductor)
+                            }
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Usar como clip B"
+                                acentuado: true
+                                enabled: reproductor.loaded
+                                onPulsado: laboratorio.setClipB(reproductor)
+                            }
+                        }
+                        ResumenClips {}
+                        Boton {
+                            Layout.fillWidth: true
+                            visible: laboratorio.ready
+                            texto: "Ir a la transición →"
+                            onPulsado: ventana.cambiarModo("transicion")
+                        }
+
+                        Separador {}
+                        Titulo { texto: "Clip" }
                         FilaDato {
                             etiqueta: "Archivo"
                             valor: reproductor.fileName.length > 0 ? reproductor.fileName : "—"
@@ -218,31 +767,17 @@ Window {
                                      + " fotogramas)"
                                    : "—"
                         }
-                        FilaDato {
-                            etiqueta: "Audio"
-                            valor: reproductor.audioDescription
-                        }
+                        FilaDato { etiqueta: "Audio"; valor: reproductor.audioDescription }
                         FilaDato {
                             etiqueta: "Decodificación"
                             valor: reproductor.decoderText
                             colorValor: !reproductor.loaded ? Theme.texto
                                         : reproductor.hardwareDecoding ? Theme.ok
-                                        : esWindows ? Theme.aviso : Theme.texto
+                                        : ventana.esWindows ? Theme.aviso : Theme.texto
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 4
-                            implicitHeight: 1
-                            color: Theme.borde
-                        }
-
-                        Text {
-                            text: "Sistema"
-                            color: Theme.texto
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
+                        Separador {}
+                        Titulo { texto: "Sistema" }
                         FilaDato {
                             etiqueta: "API gráfica"
                             valor: ventana.apiGrafica
@@ -264,186 +799,291 @@ Window {
                             valor: AppInfo.appVersion + " (" + AppInfo.buildType + ")"
                         }
                     }
+
+                    // --- Pestaña Transición: clips y parámetros ---
+                    ColumnLayout {
+                        id: panelTransicion
+                        visible: ventana.enTransicion
+                        width: parent.width
+                        spacing: 14
+
+                        ResumenClips {}
+                        Boton {
+                            Layout.fillWidth: true
+                            texto: "Intercambiar A ↔ B"
+                            enabled: laboratorio.hasClipA && laboratorio.hasClipB
+                            onPulsado: laboratorio.swapClips()
+                        }
+
+                        Separador {}
+                        Titulo { texto: "Transición" }
+                        Selector {
+                            etiqueta: "Tipo"
+                            model: laboratorio.transitionNames
+                            indice: laboratorio.transitionIndex
+                            onElegido: (i) => laboratorio.transitionIndex = i
+                        }
+                        Deslizador {
+                            etiqueta: "Duración"
+                            textoValor: laboratorio.durationText
+                            from: 4
+                            to: 120
+                            stepSize: 1
+                            valor: laboratorio.durationFrames
+                            onCambiado: (v) => laboratorio.durationFrames = Math.round(v)
+                        }
+                        Deslizador {
+                            etiqueta: "Intensidad"
+                            textoValor: Math.round(laboratorio.intensity * 100) + " %"
+                            from: 0
+                            to: 1
+                            stepSize: 0.01
+                            valor: laboratorio.intensity
+                            onCambiado: (v) => laboratorio.intensity = v
+                        }
+                        Deslizador {
+                            etiqueta: "Desenfoque de movimiento"
+                            textoValor: Math.round(laboratorio.blur * 100) + " %"
+                            from: 0
+                            to: 1
+                            stepSize: 0.01
+                            valor: laboratorio.blur
+                            onCambiado: (v) => laboratorio.blur = v
+                        }
+                        Selector {
+                            etiqueta: "Curva de movimiento"
+                            model: laboratorio.easingNames
+                            indice: laboratorio.easingIndex
+                            onElegido: (i) => laboratorio.easingIndex = i
+                        }
+                        Boton {
+                            Layout.fillWidth: true
+                            texto: "Restablecer valores de esta transición"
+                            onPulsado: laboratorio.resetParams()
+                        }
+                        Separador {}
+                        Titulo { texto: "Exportar" }
+                        Boton {
+                            Layout.fillWidth: true
+                            visible: !laboratorio.exporting
+                            enabled: laboratorio.ready
+                            acentuado: true
+                            texto: "Exportar prueba a MP4…"
+                            onPulsado: dialogoExportar.open()
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: laboratorio.exporting
+                            spacing: 6
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 6
+                                radius: 3
+                                color: Theme.panelElevado
+                                Rectangle {
+                                    width: parent.width * laboratorio.exportProgress
+                                    height: parent.height
+                                    radius: 3
+                                    color: Theme.acento
+                                }
+                            }
+                            Boton {
+                                Layout.fillWidth: true
+                                texto: "Cancelar exportación"
+                                onPulsado: laboratorio.cancelExport()
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: laboratorio.exportMessage.length > 0
+                            wrapMode: Text.WrapAnywhere
+                            color: laboratorio.exportMessage.startsWith("No se") ? Theme.aviso
+                                                                                 : Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                            text: laboratorio.exportMessage
+                        }
+
+                        Separador {}
+                        Text {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                            text: "Pulsa «Ver transición» (T) para reproducir desde un segundo antes "
+                                  + "hasta un segundo después. Los cambios se ven al instante, "
+                                  + "también en pausa: avanza fotograma a fotograma con ← y →."
+                        }
+                    }
                 }
             }
         }
 
-        // Barra de estado
-        Text {
+        RowLayout {
+            visible: ventana.enEditor
             Layout.fillWidth: true
-            text: reproductor.errorString.length > 0 ? "Error: " + reproductor.errorString
-                  : reproductor.busy ? "Cargando…"
-                  : "Listo"
-            color: reproductor.errorString.length > 0 ? Theme.error : Theme.textoSecundario
-            font.pixelSize: Theme.tamTextoPequeno
-            elide: Text.ElideRight
+            Layout.fillHeight: false // su altura es la de la línea de tiempo, no se estira
+            Layout.preferredHeight: lineaTiempo.implicitHeight
+            spacing: Theme.margen
+            LineaTiempo {
+                id: lineaTiempo
+                editor: editor
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+            Medidor {
+                Layout.fillHeight: true
+                izquierdo: editor.meterLeft
+                derecho: editor.meterRight
+            }
         }
-    }
 
-    // Botones, código de tiempo y barra de búsqueda bajo el visor.
-    component ControlesReproduccion: ColumnLayout {
-        spacing: 6
-
-        BarraBusqueda {
-            Layout.fillWidth: true
-        }
-
+        // Pie: estado y, en el editor, exportar en la esquina inferior derecha
         RowLayout {
             Layout.fillWidth: true
-            spacing: 6
-
-            Boton { texto: "|◀"; onPulsado: { reproductor.pause(); reproductor.seek(0) } }
-            Boton { texto: "◀"; onPulsado: reproductor.step(-1) }
-            Boton {
-                texto: reproductor.playing ? "❚❚" : "▶"
-                acentuado: true
-                implicitWidth: 56
-                onPulsado: reproductor.togglePlay()
-            }
-            Boton { texto: "▶"; onPulsado: reproductor.step(1) }
-            Boton {
-                texto: "▶|"
-                onPulsado: { reproductor.pause(); reproductor.seek(reproductor.frameCount - 1) }
-            }
-
-            Boton {
-                texto: reproductor.muted ? "Sin sonido" : "Sonido"
-                visible: reproductor.hasAudio
-                onPulsado: reproductor.muted = !reproductor.muted
-            }
-
-            Item { Layout.fillWidth: true }
+            spacing: 12
 
             Text {
-                text: reproductor.timecode
-                color: Theme.texto
-                font.pixelSize: Theme.tamTexto
-                font.family: "Consolas, monospace"
+                Layout.fillWidth: true
+                readonly property string error: ventana.activo.errorString
+                readonly property bool ocupado: ventana.activo.busy || (ventana.enEditor && editor.importing)
+                text: error.length > 0 ? "Aviso: " + error
+                      : ventana.enEditor && editor.fileBusy ? "Leyendo o guardando el proyecto…"
+                      : ventana.enEditor && editor.importing ? "Importando…"
+                      : ocupado ? "Cargando…" : "Listo"
+                color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+                elide: Text.ElideRight
             }
+
+            // Exportación en curso o terminada
             Text {
-                text: "/ " + reproductor.durationTimecode
-                color: Theme.textoSecundario
-                font.pixelSize: Theme.tamTexto
-                font.family: "Consolas, monospace"
+                visible: ventana.enEditor && editor.exportMessage.length > 0
+                Layout.maximumWidth: 520
+                text: editor.exportMessage
+                color: editor.exportMessage.startsWith("No se") ? Theme.aviso : Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+                elide: Text.ElideMiddle
             }
-        }
-    }
-
-    // Barra para saltar a cualquier punto del clip.
-    component BarraBusqueda: Item {
-        id: barra
-        implicitHeight: 20
-
-        readonly property real progreso: reproductor.frameCount > 1
-                                          ? reproductor.currentFrame / (reproductor.frameCount - 1)
-                                          : 0
-
-        Rectangle {
-            id: pista
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width
-            height: 4
-            radius: 2
-            color: Theme.panelElevado
-
             Rectangle {
-                width: pista.width * barra.progreso
-                height: parent.height
-                radius: parent.radius
-                color: Theme.acento
+                visible: ventana.enEditor && editor.exporting
+                implicitWidth: 160
+                implicitHeight: 6
+                radius: 3
+                color: Theme.panelElevado
+                Rectangle {
+                    width: parent.width * editor.exportProgress
+                    height: parent.height
+                    radius: 3
+                    color: Theme.acento
+                }
+            }
+            BotonIcono {
+                visible: ventana.enEditor && editor.exporting
+                icono: "cerrar"
+                texto: "Cancelar"
+                onPulsado: editor.cancelExport()
+            }
+            BotonIcono {
+                visible: ventana.enEditor
+                icono: "exportar"
+                texto: "Exportar"
+                ayuda: "Exportar la línea de tiempo (Ctrl+M)"
+                acentuado: true
+                implicitHeight: 36
+                implicitWidth: 132
+                enabled: editor.frameCount > 0 && !editor.exporting
+                onPulsado: dialogoExportarLinea.open()
             }
         }
-        Rectangle {
-            x: pista.width * barra.progreso - width / 2
-            anchors.verticalCenter: parent.verticalCenter
-            width: 4
-            height: 16
-            radius: 2
-            color: Theme.cabezal
-        }
-        MouseArea {
-            anchors.fill: parent
-            function buscar(mouseX) {
-                const fraccion = Math.max(0, Math.min(1, mouseX / width))
-                reproductor.seek(Math.round(fraccion * (reproductor.frameCount - 1)))
-            }
-            onPressed: (mouse) => buscar(mouse.x)
-            onPositionChanged: (mouse) => { if (pressed) buscar(mouse.x) }
-        }
     }
 
-    // Botón sencillo con el estilo del tema.
-    component Boton: Rectangle {
-        id: boton
-        property string texto
-        property bool acentuado: false
-        signal pulsado()
-
-        implicitWidth: Math.max(36, etiquetaBoton.implicitWidth + 20)
-        implicitHeight: 30
-        radius: Theme.radio
-        color: zonaBoton.pressed ? Theme.borde
-               : zonaBoton.containsMouse ? Theme.panelElevado
-               : acentuado ? Theme.panelElevado : "transparent"
-        border.color: acentuado ? Theme.acento : Theme.borde
-
-        Text {
-            id: etiquetaBoton
-            anchors.centerIn: parent
-            text: boton.texto
-            color: boton.acentuado ? Theme.acento : Theme.texto
-            font.pixelSize: Theme.tamTexto
-        }
-        MouseArea {
-            id: zonaBoton
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: boton.pulsado()
-        }
-    }
-
-    // Etiqueta discreta en mayúsculas con borde de acento.
-    component Chip: Rectangle {
-        property string texto
-
-        implicitWidth: etiquetaChip.implicitWidth + 14
-        implicitHeight: etiquetaChip.implicitHeight + 6
-        radius: height / 2
-        color: Theme.panelElevado
-        border.color: Theme.borde
-
-        Text {
-            id: etiquetaChip
-            anchors.centerIn: parent
-            text: parent.texto
-            color: Theme.acento
-            font.pixelSize: Theme.tamTextoPequeno
-            font.bold: true
-            font.letterSpacing: 1
-        }
-    }
-
-    // Fila "etiqueta: valor" del panel de diagnóstico.
-    component FilaDato: ColumnLayout {
-        property string etiqueta
-        property string valor
-        property color colorValor: Theme.texto
-
+    // Resumen de los clips A y B del laboratorio.
+    component ResumenClips: ColumnLayout {
         Layout.fillWidth: true
-        spacing: 2
+        spacing: 10
 
+        FilaDato {
+            etiqueta: "Clip A"
+            valor: laboratorio.hasClipA ? laboratorio.clipAName : "Sin asignar"
+            colorValor: laboratorio.hasClipA ? Theme.texto : Theme.textoDesactivado
+        }
         Text {
-            text: parent.etiqueta.toUpperCase()
+            visible: laboratorio.hasClipA
+            text: laboratorio.clipARange
             color: Theme.textoSecundario
             font.pixelSize: Theme.tamTextoPequeno
-            font.letterSpacing: 1
+        }
+        FilaDato {
+            etiqueta: "Clip B"
+            valor: laboratorio.hasClipB ? laboratorio.clipBName : "Sin asignar"
+            colorValor: laboratorio.hasClipB ? Theme.texto : Theme.textoDesactivado
         }
         Text {
-            Layout.fillWidth: true
-            text: parent.valor
-            color: parent.colorValor
+            visible: laboratorio.hasClipB
+            text: laboratorio.clipBRange
+            color: Theme.textoSecundario
+            font.pixelSize: Theme.tamTextoPequeno
+        }
+    }
+
+    component Titulo: Text {
+        property string texto
+        text: texto
+        color: Theme.texto
+        font.pixelSize: 16
+        font.bold: true
+    }
+
+    component Separador: Rectangle {
+        Layout.fillWidth: true
+        Layout.topMargin: 2
+        implicitHeight: 1
+        color: Theme.borde
+    }
+
+    component CodigoTiempo: Row {
+        property string actual
+        property string total
+        spacing: 6
+        Text {
+            text: parent.actual
+            color: Theme.texto
             font.pixelSize: Theme.tamTexto
-            elide: Text.ElideMiddle
+            font.family: "Consolas, monospace"
+        }
+        Text {
+            text: "/ " + parent.total
+            color: Theme.textoSecundario
+            font.pixelSize: Theme.tamTexto
+            font.family: "Consolas, monospace"
+        }
+    }
+
+    // Lo que se ve al arrastrar un medio de la biblioteca a la línea de tiempo.
+    Rectangle {
+        id: fantasma
+        property var mediaId: undefined
+        property string nombre
+        visible: Drag.active
+        z: 100
+        width: Math.min(220, textoFantasma.implicitWidth + 20)
+        height: 28
+        radius: Theme.radio
+        color: Theme.panelElevado
+        border.color: Theme.acento
+        opacity: 0.9
+        Drag.keys: ["sharkcut/medio"]
+        Drag.hotSpot.x: 10
+        Drag.hotSpot.y: 14
+        Text {
+            id: textoFantasma
+            anchors.verticalCenter: parent.verticalCenter
+            x: 10
+            width: parent.width - 20
+            text: fantasma.nombre
+            color: Theme.texto
+            font.pixelSize: Theme.tamTextoPequeno
+            elide: Text.ElideRight
         }
     }
 }

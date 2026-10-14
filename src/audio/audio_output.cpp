@@ -4,7 +4,9 @@
 
 #include <miniaudio.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -37,6 +39,17 @@ struct AudioOutput::Impl {
     std::atomic<std::int64_t> consumed{0};
     std::atomic<std::uint64_t> requestId{0};
 
+    // Picos acumulados hasta que alguien los lee (takePeakLevels).
+    std::atomic<float> peakLeft{0.0f};
+    std::atomic<float> peakRight{0.0f};
+
+    static void raisePeak(std::atomic<float>& peak, float value) {
+        float current = peak.load(std::memory_order_relaxed);
+        while (value > current &&
+               !peak.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+        }
+    }
+
     static void onData(ma_device* device, void* output, const void*, ma_uint32 frames) {
         auto* self = static_cast<Impl*>(device->pUserData);
         auto* out = static_cast<float*>(output);
@@ -51,6 +64,15 @@ struct AudioOutput::Impl {
         std::size_t got = self->buffer.read(out, wanted);
         got -= got % kAudioChannels;
         std::memset(out + got, 0, (wanted - got) * sizeof(float)); // falta de datos: silencio
+
+        float left = 0.0f;
+        float right = 0.0f;
+        for (std::size_t i = 0; i + 1 < got; i += kAudioChannels) {
+            left = std::max(left, std::fabs(out[i]));
+            right = std::max(right, std::fabs(out[i + 1]));
+        }
+        raisePeak(self->peakLeft, left);
+        raisePeak(self->peakRight, right);
 
         const float gain = self->volume.load(std::memory_order_relaxed);
         if (gain != 1.0f) {
@@ -156,6 +178,11 @@ AudioOutput::Clock AudioOutput::clock() const {
             return {base + played, id};
         }
     }
+}
+
+AudioOutput::Levels AudioOutput::takePeakLevels() {
+    return {d->peakLeft.exchange(0.0f, std::memory_order_relaxed),
+            d->peakRight.exchange(0.0f, std::memory_order_relaxed)};
 }
 
 } // namespace sharkcut

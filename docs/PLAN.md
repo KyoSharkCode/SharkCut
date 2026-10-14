@@ -351,44 +351,56 @@ Whoosh, Impacto / Hit, Riser, Pop / Click, Glitch, Swoosh, Transición musical.
 **Hecho cuando:** un clip real de OBS 1080p60 se reproduce fluido y sin
 desincronía en SharkCut, y se puede saltar a cualquier fotograma.
 
-### Fase 1 — Transiciones
+### Fase 1 — Transiciones ✅
 - Compositor con dos clips y las siete transiciones de prioridad 1.
 - Panel de prueba con controles de intensidad, duración y easing.
+- Marcas de entrada y salida (I/O) para elegir los tramos A y B dentro de un video,
+  sin tener que cortar archivos aparte (la línea de tiempo completa es la fase 2).
 - Exportación de prueba de esa mezcla con NVENC.
 **Hecho cuando:** la calidad visual convence frente a Premiere Composer y el
 resultado exportado es idéntico a la vista previa.
 
-### Fase 2 — Editor básico
+### Fase 2 — Editor básico ✅
 - Biblioteca de medios (arrastrar y soltar archivos).
 - Línea de tiempo: 1 pista de video + 1 de audio; cortar, recortar, mover,
   dividir, eliminar. Comandos + deshacer/rehacer desde el inicio.
 - Guardar y abrir `.sharkp`.
 - Exportar a MP4 1080p60 con NVENC.
-- Interfaz con el tema Marea Nocturna.
+- Interfaz con el tema Marea Profunda.
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
 
-### Fase 3 — Lo propio
-- Transiciones integradas en la línea de tiempo (arrastrar entre clips).
-- Biblioteca de efectos de sonido y emparejamiento transición ↔ sonido.
-- Textos, títulos y overlays con la marca.
-- Presets de exportación 16:9, 9:16 y 1:1 (con reencuadre).
-**Hecho cuando:** se puede producir un short típico de principio a fin.
+### Fase 3 — Interfaz definitiva y montaje real
+Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
+- ✅ Rediseño de la interfaz: distribución de paneles con un lugar para cada cosa
+  (también para lo que llegará después: efectos, transiciones, propiedades del
+  clip) e iconos de herramientas. Primero una maqueta aprobada; después, la
+  implementación con el tema Marea Profunda. (El logo definitivo, los cursores y el
+  icono de los .sharkp se diseñan con el instalador, en la fase 4.)
+- Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
+  onda del audio dibujada en la línea de tiempo, y posición y escala de cada clip
+  (facecam encima, reencuadrar un video 16:9 en un lienzo vertical).
+- Transiciones integradas en la línea de tiempo (arrastrar entre clips y
+  ajustarlas ahí mismo) y efectos de sonido emparejados con cada transición.
+**Hecho cuando:** se monta un short con facecam o música encima y transiciones
+sin salir de la pestaña Editor.
 
 ### Fase 4 — VODs y uso diario
-- Varias pistas de video y audio.
+- Textos, títulos y overlays con la marca.
+- "Duplicar como vertical": copia de un proyecto horizontal en un lienzo 9:16 para
+  reencuadrarlo (el lienzo es del proyecto: se edita y se exporta en él).
 - Visor sin copias: la textura D3D11 de NVDEC pasa directamente al compositor
   (hoy se copia a memoria y se vuelve a subir; suficiente para 1080p60).
-- Rendimiento con proyectos largos: caché de fotogramas, miniaturas y ondas
-  en segundo plano, proxies, línea de tiempo virtualizada.
-- Edición rápida tipo Premiere: ripple delete, atajos (C, V, Q, W, J/K/L…),
-  marcadores, zoom de línea de tiempo.
+- Rendimiento con proyectos largos: caché de fotogramas, miniaturas en segundo
+  plano, proxies, línea de tiempo virtualizada.
+- Edición rápida tipo Premiere: ripple delete, atajos (Q, W, J/K/L…), marcadores.
 - Autoguardado y recuperación tras cierre inesperado.
+- Instalador, icono de los archivos .sharkp y asociación con SharkCut.
 **Hecho cuando:** se edita un VOD de 40+ minutos de principio a fin con
 fluidez y no se echa de menos Premiere.
 
 ### Fase 5 — Lo pro
-- Keyframes en posición, escala, rotación y opacidad.
-- Más transiciones y efectos (glitch, spin, LUTs básicas, máscaras simples).
+- Keyframes en posición, escala, rotación y opacidad (zoom y movimiento en un clip).
+- Más transiciones y efectos (glitch, spin, LUTs básicas, máscaras simples, croma).
 - Subtítulos automáticos en local con **whisper.cpp** (C++, usa la GPU).
 - Herramientas para VODs: detección de silencios y marcadores automáticos.
 
@@ -458,6 +470,100 @@ ctest --preset windows-debug
    - **Fase 0 terminada.** La optimización "sin copias" (textura de NVDEC directa al
      visor) pasa a la fase 4, donde importa (4K, varias pistas, VODs).
 5. Fase 1: transiciones.
+   - [x] Etapa 1: laboratorio de transiciones. Núcleo (curvas de suavizado, catálogo
+     de transiciones, secuencia A → transición → B), compositor QRhi de cuatro
+     pasadas (capa A, capa B, transición, presentación) compartido por visor y
+     exportación, las 7 transiciones en un shader con desenfoques radial, de giro y
+     direccional y bordes en espejo, audio de la secuencia con fundido cruzado de
+     potencia constante, pestañas Origen (marcas I/O) y Transición (parámetros en
+     directo, "Ver transición"). Herramienta `sharkcut_filmstrip` para revisar las
+     transiciones fuera de la interfaz. Validada en el PC de Kyo con grabaciones de
+     OBS (21 min + 3:35) y con clips verticales cortos (13 s y 1 min): las 7
+     transiciones se ven igual que en Premiere Composer y el audio no se corta.
+   - [x] Etapa 2: exportar la secuencia de prueba a MP4. SequenceExporter compone cada
+     fotograma fuera de pantalla con el mismo Compositor (instancia QRhi propia en un
+     hilo: D3D11 en Windows), lo lee de la GPU y Mp4Writer lo codifica en H.264 (NVENC,
+     AMF, QuickSync o x264, el primero que funcione; BT.709 rango limitado) con audio
+     AAC de la mezcla A/B. Comprobado en Linux que el fotograma exportado coincide con
+     la vista previa. Validada en el PC de Kyo: exporta con h264_nvenc (56 s) y el
+     MP4 se ve y se oye igual que en SharkCut.
+   - **Fase 1 terminada.** Lo único que falta frente a Composer son los efectos de
+     sonido de cada transición, previstos en la fase 3 (sección 7).
+6. Fase 2: editor básico.
+   - [x] Etapa 1: núcleo de la línea de tiempo, sin interfaz. Proyecto (ajustes,
+     biblioteca de medios, pistas V1 y A1), clips enlazados video + audio, operaciones
+     de edición (colocar sobrescribiendo, dividir, recortar inicio/final, mover,
+     quitar dejando hueco), historial de deshacer/rehacer por instantáneas del proyecto
+     y archivo `.sharkp` (JSON con `version`, rutas absolutas y relativas, guardado
+     atómico). Todo con tests.
+   - [x] Etapa 2: la línea de tiempo en la interfaz. Pestaña Editor con biblioteca de
+     medios (importar en segundo plano, arrastrar y soltar), línea de tiempo V1/A1 con
+     regla, zoom e imán, herramientas Selección (mover, recortar bordes) y Cuchilla,
+     dividir en el cabezal, quitar, deshacer/rehacer. Reproducción: dos hilos de video
+     (el clip actual y el siguiente preparado en su primer fotograma) y audio de la línea
+     de tiempo con fundidos de 2 ms en los cortes. Desde Origen se envía el tramo marcado
+     al final o al cabezal. Pendiente de validar en el PC de Kyo.
+   - [x] Etapa 3: proyectos y exportación. Nuevo, Abrir, Guardar y Guardar como (lectura y
+     escritura en segundo plano, aviso de medios que faltan, pregunta antes de perder
+     cambios) y exportación de la línea de tiempo a MP4 con el mismo exportador de la
+     fase 1, ahora genérico (prueba de transición o línea de tiempo). Comprobado en Linux
+     que cada fotograma exportado coincide con su origen (cortes y huecos incluidos).
+   - **Fase 2 terminada.** Validada en el PC de Kyo con dos VODs largos (40 y 21 min):
+     corta, mueve y reproduce sin tirones, audio perfecto, exportación con h264_nvenc.
+   - Comentarios de Kyo tras probarla (lo que echa de menos frente a Premiere), con la
+     fase donde encaja cada uno según el plan actual:
+     - Rediseñar la interfaz (la de ahora es provisional, para probar) → fase 3.
+     - Iconos de herramientas y cursores, logo de la app e icono de los `.sharkp`
+       (se pueden diseñar en Figma) → fase 3; el icono de archivo, con el instalador (fase 4).
+     - Ver la onda del audio en la línea de tiempo → fase 3.
+     - Poner videos uno encima de otro (varias pistas de video) → fase 3.
+     - Añadir pistas de audio (música, etc.) arrastrando un archivo a la línea de tiempo
+       o desde Medios → fase 3.
+     - Aplicar la transición directamente entre dos clips de la línea de tiempo, sin pasar
+       por Origen y el laboratorio → fase 3.
+     - Keyframes para hacer zoom y movimiento dentro de un clip → fase 5.
+     - Croma (pantalla verde) → fase 5 (efectos).
+     - Subtítulos automáticos → fase 5 (whisper.cpp).
+   - Con esos comentarios se reordenaron las fases 3 y 4 (sección 11): la fase 3 empieza
+     por el rediseño de la interfaz, sigue con varias pistas y ondas, y termina con las
+     transiciones en la línea de tiempo.
+7. Fase 3: interfaz definitiva y montaje real.
+   - [x] Etapa 1: rediseño de la interfaz, según la maqueta aprobada por Kyo. Panel
+     izquierdo con pestañas (Medios con lista o cuadrícula de miniaturas y buscador,
+     Transiciones, Efectos, Propiedades), visor de Programa a la derecha con el lienzo,
+     línea de tiempo alta (V2, V1, A1, A2; V2 y A2 llegan en la etapa 2) con las
+     herramientas en vertical a su izquierda y el medidor de la mezcla (L/R en dB) a su
+     derecha, iconos vectoriales propios, Exportar en la esquina inferior derecha con
+     su ventana (nombre, ubicación, calidad) y "Nuevo proyecto" con el lienzo (16:9,
+     9:16, 1:1) y los fps: el lienzo es del proyecto y se exporta tal cual se edita.
+     Validada en el PC de Kyo (proyecto vertical 1080×1920 con clips de OBS): "se ve
+     de maravilla". Las pestañas Transiciones, Efectos y Propiedades muestran de
+     momento lo que llegará; la onda del audio en los clips llega en la etapa 2.
+   - [ ] Etapa 2: varias pistas y reencuadre.
+     - Modelo: pistas de video y audio en número variable (V1, V2… encima; A1, A2…),
+       añadir y quitar pistas, clips enlazados entre su pista de video y la de audio.
+       Archivo `.sharkp` versión 2, que abre los de la versión 1.
+     - Compositor con N capas apiladas (V2 sobre V1…) y transformación por clip:
+       posición, escala (y opacidad). Igual en vista previa y exportación.
+     - Propiedades del clip editables en su pestaña y arrastrando en el visor para
+       reencuadrar (un video 16:9 en un lienzo 9:16, la facecam en una esquina).
+     - Audio: mezcla de todas las pistas, volumen por clip; ocultar, silenciar y
+       bloquear pistas desde su cabecera (los iconos pasan a funcionar).
+     - Onda del audio de cada clip, calculada en segundo plano y guardada en la caché
+       del proyecto (nunca junto a los medios originales).
+     - Música: arrastrar un archivo de audio a A2 (o a cualquier pista de audio).
+     - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
+       en V2 y música en A2 se ve, se oye y se exporta igual.
+   - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.
+     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips:
+       los clips se solapan lo que dura la transición (como en el laboratorio).
+     - Ajustarla ahí mismo: duración arrastrando sus bordes; tipo, intensidad,
+       desenfoque y curva en Propiedades. Se reproduce y exporta con el compositor.
+     - Biblioteca de efectos de sonido con licencia libre (registrados en
+       presets/sfx/LICENCIAS.md) y emparejamiento: al poner una transición se coloca
+       su sonido (whoosh, impacto…) en una pista de audio, ajustable o quitable.
+     - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
+       transiciones sin salir de la pestaña Editor).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

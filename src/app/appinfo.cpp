@@ -28,9 +28,15 @@ QString AppInfo::buildType() const {
 }
 
 QString AppInfo::initialFile() const {
+    const QStringList files = initialFiles();
+    return files.isEmpty() ? QString() : files.first();
+}
+
+QStringList AppInfo::initialFiles() const {
+    QStringList files;
     const QStringList args = QCoreApplication::arguments();
-    if (args.size() < 2) {
-        return {};
+    for (qsizetype i = 1; i < args.size(); ++i) {
+        files << QFileInfo(args.at(i)).absoluteFilePath();
     }
-    return QFileInfo(args.at(1)).absoluteFilePath();
+    return files;
 }

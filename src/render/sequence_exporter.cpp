@@ -1,0 +1,311 @@
+#include "render/sequence_exporter.h"
+
+#include "media/audio_decoder.h"
+#include "media/mp4_writer.h"
+#include "media/sequence_audio.h"
+#include "media/timeline_audio.h"
+#include "media/video_decoder.h"
+#include "render/compositor.h"
+
+#include <QOffscreenSurface>
+#include <rhi/qrhi.h>
+
+#include <algorithm>
+#include <exception>
+#include <filesystem>
+#include <memory>
+#include <stdexcept>
+#include <vector>
+
+namespace sharkcut {
+
+namespace {
+
+std::unique_ptr<QRhi> createOffscreenRhi(QOffscreenSurface* fallbackSurface) {
+#ifdef Q_OS_WIN
+    Q_UNUSED(fallbackSurface);
+    QRhiD3D11InitParams params;
+    return std::unique_ptr<QRhi>(QRhi::create(QRhi::D3D11, &params));
+#else
+    QRhiGles2InitParams params;
+    params.fallbackSurface = fallbackSurface;
+    return std::unique_ptr<QRhi>(QRhi::create(QRhi::OpenGLES2, &params));
+#endif
+}
+
+// Lee fotogramas de un archivo, normalmente en orden: avanza solo lo necesario y
+// vuelve a buscar si se le pide un fotograma anterior o muy lejano (otro tramo).
+class MediaReader {
+public:
+    explicit MediaReader(const std::string& path) : m_decoder(path, HwAccel::Auto) {}
+
+    // Último fotograma con índice <= `index` (el que corresponde mostrar). Si el
+    // archivo se acaba antes, se repite su último fotograma.
+    std::shared_ptr<const VideoFrame> at(std::int64_t index) {
+        const bool needSeek =
+            (!m_current && !m_finished) ||
+            (m_current && (index < m_current->index || index > m_current->index + kMaxSkip));
+        if (needSeek) {
+            m_decoder.seekToFrame(index);
+            m_current.reset();
+            m_pending.reset();
+            m_finished = false;
+        }
+        if (m_pending && m_pending->index <= index) {
+            m_current = std::move(m_pending);
+        }
+        while (!m_finished && !m_pending && (!m_current || m_current->index < index)) {
+            auto next = m_decoder.nextFrame();
+            if (!next) {
+                m_finished = true;
+                break;
+            }
+            auto frame = std::make_shared<const VideoFrame>(std::move(*next));
+            if (frame->index > index && m_current) {
+                m_pending = std::move(frame); // hueco en el archivo: se guarda para después
+                break;
+            }
+            m_current = std::move(frame);
+        }
+        return m_current;
+    }
+
+private:
+    // Más allá de esto es más rápido buscar (ir al fotograma clave) que decodificar todo.
+    static constexpr std::int64_t kMaxSkip = 120;
+
+    VideoDecoder m_decoder;
+    std::shared_ptr<const VideoFrame> m_current;
+    std::shared_ptr<const VideoFrame> m_pending;
+    bool m_finished = false;
+};
+
+// Qué componer en cada fotograma y con qué audio.
+class FrameSource {
+public:
+    virtual ~FrameSource() = default;
+    virtual std::int64_t length() const = 0;
+    virtual CompositorInput at(std::int64_t frame) = 0;
+    virtual std::unique_ptr<AudioSource> openAudio() = 0; // nullptr: sin audio
+};
+
+// Prueba de transición de la fase 1. Mismo reparto que TransitionLab::composition.
+class TransitionFrames : public FrameSource {
+public:
+    TransitionFrames(const TransitionTest& test, FrameRate rate)
+        : m_test(test), m_rate(rate), m_a(test.pathA), m_b(test.pathB) {}
+
+    std::int64_t length() const override { return m_test.layout.length(); }
+
+    CompositorInput at(std::int64_t frame) override {
+        const auto at = m_test.layout.at(frame);
+        CompositorInput input;
+        std::shared_ptr<const VideoFrame> a = at.aFrame ? m_a.at(*at.aFrame) : nullptr;
+        std::shared_ptr<const VideoFrame> b = at.bFrame ? m_b.at(*at.bFrame) : nullptr;
+        if (at.transitionFrame && a && b) {
+            input.a = a;
+            input.b = b;
+            input.transition = m_test.params;
+            input.state = evaluateTransition(m_test.params, *at.transitionFrame);
+        } else {
+            input.a = a ? a : b;
+        }
+        return input;
+    }
+
+    std::unique_ptr<AudioSource> openAudio() override {
+        try {
+            return std::make_unique<SequenceAudioSource>(m_test.layout, m_rate, m_test.pathA,
+                                                         m_test.pathB);
+        } catch (const std::exception&) {
+            return nullptr; // ningún clip tiene audio
+        }
+    }
+
+private:
+    TransitionTest m_test;
+    FrameRate m_rate;
+    MediaReader m_a;
+    MediaReader m_b;
+};
+
+// Línea de tiempo de un proyecto: la pista de video, negro en los huecos.
+class TimelineFrames : public FrameSource {
+public:
+    explicit TimelineFrames(Project project) : m_project(std::move(project)) {}
+
+    std::int64_t length() const override { return m_project.length(); }
+
+    CompositorInput at(std::int64_t frame) override {
+        CompositorInput input;
+        const Clip* clip = m_project.clipAt(kVideoTrack, frame);
+        const MediaItem* item = clip ? m_project.findMedia(clip->media) : nullptr;
+        if (!item) {
+            return input;
+        }
+        const std::int64_t index =
+            microsecondsToFrame(m_project.mediaTimeUs(*clip, frame), item->frameRate);
+        input.a = reader(*item).at(index);
+        return input;
+    }
+
+    std::unique_ptr<AudioSource> openAudio() override {
+        try {
+            return std::make_unique<TimelineAudioSource>(m_project);
+        } catch (const std::exception&) {
+            return nullptr; // la línea de tiempo no tiene audio
+        }
+    }
+
+private:
+    // Un lector por archivo, con un máximo abierto a la vez (se cierra el menos usado).
+    MediaReader& reader(const MediaItem& item) {
+        ++m_clock;
+        for (Entry& entry : m_readers) {
+            if (entry.media == item.id) {
+                entry.lastUse = m_clock;
+                return *entry.reader;
+            }
+        }
+        if (m_readers.size() >= kMaxOpen) {
+            const auto oldest = std::min_element(
+                m_readers.begin(), m_readers.end(),
+                [](const Entry& a, const Entry& b) { return a.lastUse < b.lastUse; });
+            m_readers.erase(oldest);
+        }
+        m_readers.push_back({item.id, std::make_unique<MediaReader>(item.path), m_clock});
+        return *m_readers.back().reader;
+    }
+
+    struct Entry {
+        ObjectId media = 0;
+        std::unique_ptr<MediaReader> reader;
+        std::uint64_t lastUse = 0;
+    };
+    static constexpr std::size_t kMaxOpen = 4;
+
+    Project m_project;
+    std::vector<Entry> m_readers;
+    std::uint64_t m_clock = 0;
+};
+
+} // namespace
+
+SequenceExporter::SequenceExporter(ExportJob job, Callbacks callbacks)
+    : m_job(std::move(job)), m_callbacks(std::move(callbacks)), m_thread([this] { run(); }) {}
+
+SequenceExporter::~SequenceExporter() {
+    cancel();
+    m_thread.join();
+}
+
+void SequenceExporter::cancel() {
+    m_cancel.store(true, std::memory_order_release);
+}
+
+void SequenceExporter::run() {
+    auto finish = [this](bool ok, const std::string& message, const std::string& encoder) {
+        if (m_callbacks.finished) {
+            m_callbacks.finished(ok, message, encoder);
+        }
+    };
+    const std::filesystem::path output(
+        std::u8string(m_job.outputPath.begin(), m_job.outputPath.end()));
+    auto removeOutput = [&output] {
+        std::error_code ignored;
+        std::filesystem::remove(output, ignored);
+    };
+
+    std::string encoder;
+    try {
+        std::unique_ptr<QRhi> rhi = createOffscreenRhi(m_job.fallbackSurface);
+        if (!rhi) {
+            finish(false, "No se pudo iniciar la GPU para exportar", {});
+            return;
+        }
+        Compositor compositor;
+        compositor.initialize(rhi.get());
+        compositor.setCanvasSize(m_job.canvasSize);
+
+        std::unique_ptr<FrameSource> source;
+        if (const auto* test = std::get_if<TransitionTest>(&m_job.content)) {
+            source = std::make_unique<TransitionFrames>(*test, m_job.rate);
+        } else {
+            source = std::make_unique<TimelineFrames>(std::get<Project>(m_job.content));
+        }
+        const std::unique_ptr<AudioSource> audio = source->openAudio(); // nullptr: solo video
+
+        EncoderSettings settings;
+        settings.width = m_job.canvasSize.width();
+        settings.height = m_job.canvasSize.height();
+        settings.rate = m_job.rate;
+        settings.audio = audio != nullptr;
+        settings.videoBitrate = m_job.videoBitrate;
+        Mp4Writer writer(m_job.outputPath, settings);
+        encoder = writer.videoEncoderName();
+
+        const std::int64_t total = source->length();
+        if (total <= 0) {
+            throw std::runtime_error("No hay nada que exportar");
+        }
+        const bool flipRows = rhi->isYUpInFramebuffer(); // OpenGL: filas de abajo arriba
+        std::vector<float> samples;
+        std::int64_t audioWritten = 0;
+
+        for (std::int64_t frame = 0; frame < total; ++frame) {
+            if (m_cancel.load(std::memory_order_acquire)) {
+                writer.finish();
+                removeOutput();
+                finish(false, "Exportación cancelada", encoder);
+                return;
+            }
+
+            const CompositorInput input = source->at(frame);
+
+            QRhiCommandBuffer* cb = nullptr;
+            if (rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess) {
+                throw std::runtime_error("La GPU no pudo componer el fotograma");
+            }
+            compositor.render(cb, input);
+            QRhiReadbackResult readback;
+            QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+            batch->readBackTexture({compositor.canvas()}, &readback);
+            cb->resourceUpdate(batch);
+            rhi->endOffscreenFrame(); // espera a la GPU: los píxeles ya están en `readback`
+
+            const int stride = readback.pixelSize.width() * 4;
+            const auto* pixels = reinterpret_cast<const std::uint8_t*>(readback.data.constData());
+            if (flipRows) {
+                writer.writeVideo(pixels + static_cast<std::ptrdiff_t>(stride) *
+                                               (readback.pixelSize.height() - 1),
+                                  -stride);
+            } else {
+                writer.writeVideo(pixels, stride);
+            }
+
+            // Audio hasta el final de este fotograma.
+            if (audio) {
+                const std::int64_t until =
+                    rescale(frame + 1, m_job.rate.frameDuration(), kAudioSampleDuration);
+                const auto count = static_cast<std::size_t>(until - audioWritten);
+                samples.resize(count * kAudioChannels);
+                const std::size_t got = audio->read(samples.data(), count);
+                std::fill(samples.begin() + static_cast<std::ptrdiff_t>(got * kAudioChannels),
+                          samples.end(), 0.0f);
+                writer.writeAudio(samples.data(), count);
+                audioWritten = until;
+            }
+
+            if (m_callbacks.progress && (frame % 10 == 0 || frame == total - 1)) {
+                m_callbacks.progress(frame + 1, total);
+            }
+        }
+        writer.finish();
+        finish(true, {}, encoder);
+    } catch (const std::exception& e) {
+        removeOutput();
+        finish(false, e.what(), encoder);
+    }
+}
+
+} // namespace sharkcut

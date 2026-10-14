@@ -1,11 +1,13 @@
 #pragma once
 
+#include "media/audio_source.h"
 #include "media/media_info.h"
 
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -14,8 +16,8 @@ namespace sharkcut {
 
 class AudioOutput;
 
-// Decodifica el audio de un clip en un hilo propio y mantiene lleno el búfer de la
-// salida de audio. Las rellamadas se invocan desde ese hilo.
+// Lee una fuente de audio (un clip o una mezcla) en un hilo propio y mantiene lleno
+// el búfer de la salida de audio. Las rellamadas se invocan desde ese hilo.
 class AudioWorker {
 public:
     struct Callbacks {
@@ -23,7 +25,11 @@ public:
         std::function<void(const std::string& message)> failed; // incluye "sin audio"
     };
 
-    AudioWorker(std::string path, AudioOutput& output, Callbacks callbacks);
+    // La fuente se crea dentro del hilo (abrir archivos no bloquea la interfaz).
+    // Si `makeSource` lanza una excepción se informa con `failed`.
+    using SourceFactory = std::function<std::unique_ptr<AudioSource>()>;
+
+    AudioWorker(SourceFactory makeSource, AudioOutput& output, Callbacks callbacks);
     ~AudioWorker();
 
     AudioWorker(const AudioWorker&) = delete;
@@ -41,7 +47,7 @@ public:
 private:
     void run();
 
-    const std::string m_path;
+    const SourceFactory m_makeSource;
     AudioOutput& m_output;
     const Callbacks m_callbacks;
 

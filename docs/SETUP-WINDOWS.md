@@ -72,7 +72,124 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Etapa 3: audio sincronizado
+### Fase 3, etapa 1: la interfaz nueva (validada)
+
+La pestaña **1 · Editor** tiene ya la distribución de la maqueta.
+
+- [ ] **Izquierda**, panel con pestañas: **Medios** (buscador, botón lista/cuadrícula,
+  Importar…), **Transiciones**, **Efectos** y **Propiedades** (las tres últimas
+  muestran lo que llegará; Propiedades enseña el clip seleccionado).
+- [ ] En **cuadrícula**, cada video muestra una **miniatura** (tarda un momento la primera
+  vez) con su duración. Arrastrar y el botón **+** funcionan igual que en la lista.
+- [ ] **Derecha**, el visor **Programa** con la etiqueta del lienzo (`LIENZO 16:9`).
+- [ ] **Abajo**, la línea de tiempo con las pistas **V2, V1, A1, A2** (V2 y A2 atenuadas:
+  llegan en la etapa 2) y las **herramientas en vertical** a la izquierda. Al pasar el
+  ratón por cada icono aparece su nombre y su atajo.
+- [ ] A la derecha de la línea de tiempo, el medidor **Mezcla**: al reproducir, las barras
+  L y R suben y bajan con el volumen (verde, amarillo cerca del máximo, rojo si satura).
+- [ ] **Exportar** está abajo a la derecha. Abre una ventana con el formato (el lienzo
+  del proyecto), **nombre**, **ubicación** (Elegir…) y **calidad**. El progreso se ve
+  abajo, junto al botón, y se puede cancelar.
+- [ ] **Nuevo** pide nombre, **lienzo** (16:9, 9:16 o 1:1) y fps. Con 9:16 el visor
+  muestra el lienzo vertical; un video de OBS entra ajustado (con franjas negras):
+  moverlo y escalarlo para reencuadrar llega en la etapa 2.
+- [ ] ¿La distribución se ve bien en tu pantalla? ¿Algo que cambiarías?
+
+### Fase 2: editor básico (línea de tiempo, proyectos y exportación) (validada)
+
+SharkCut abre ahora en la pestaña **1 · Editor**: visor arriba, biblioteca de medios a
+la derecha y línea de tiempo abajo, con una pista de video (**V1**) y una de audio (**A1**).
+Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
+
+**Montar:**
+
+- [ ] **Importar…** (o `Ctrl + I`, o arrastrar archivos desde el explorador a la
+  biblioteca) añade los videos a **Medios**, con su duración y formato.
+- [ ] Arrastra un medio de la biblioteca a la línea de tiempo: aparece una línea donde va a
+  caer y, al soltar, el clip se coloca ahí (video en V1 y audio en A1, enlazados).
+  El botón **+** lo añade al final.
+- [ ] El primer clip fija el formato del proyecto (panel **Proyecto**: `1920×1080 · 60 fps`).
+- [ ] Doble clic en un medio lo abre en **Origen**: marca un tramo con I y O y envíalo con
+  **Al final** o **En el cabezal**.
+- [ ] También puedes arrastrar archivos del explorador directamente a las pistas.
+
+**Editar** (con la herramienta **Selección**, tecla `V`):
+
+- [ ] Clic en un clip lo selecciona (también su audio); `Ctrl`/`Mayús` + clic suma clips.
+- [ ] Arrastrar un clip lo mueve. Si cae encima de otro, lo **sobrescribe** (como en
+  Premiere). El hueco que deja no se cierra solo (la eliminación con rizo llega en la fase 4).
+- [ ] Arrastrar el **borde** izquierdo o derecho de un clip lo recorta. No deja pasar del
+  principio o final del video ni pisar el clip vecino.
+- [ ] Con el **Imán** (`S`) activado, los clips y los recortes se pegan a los bordes de
+  otros clips y al cabezal.
+- [ ] `Ctrl + K` divide los clips bajo el cabezal. La **Cuchilla** (`C`) divide donde haces clic.
+- [ ] `Supr` (o Retroceso) quita los clips seleccionados.
+- [ ] `Ctrl + Z` deshace y `Ctrl + Mayús + Z` (o `Ctrl + Y`) rehace, también varias veces.
+
+**Ver:**
+
+- [ ] Espacio reproduce la línea de tiempo con su audio. Al pasar por un corte la imagen
+  y el sonido siguen fluidos (sin parones ni chasquidos). En los huecos se ve negro.
+- [ ] Clic o arrastre en la regla (arriba de las pistas) mueve el cabezal.
+- [ ] `Ctrl + rueda` hace zoom; la rueda sola desplaza. `+`, `-` y **Ajustar** (`\`) también.
+- [ ] Prueba con un VOD largo (40 min) cortado en muchos trozos: ¿va fluido?
+
+**Proyecto** (botones arriba a la derecha):
+
+- [ ] **Guardar** (`Ctrl + S`) pide un nombre la primera vez y crea un archivo `.sharkp`.
+  Mientras hay cambios sin guardar, el nombre del proyecto lleva un punto (•).
+- [ ] Cierra SharkCut con cambios sin guardar: pregunta si quieres guardarlos.
+  Lo mismo con **Nuevo** (`Ctrl + N`) y **Abrir…** (`Ctrl + O`).
+- [ ] **Abrir…** el proyecto guardado: vuelve todo tal cual (clips, cortes, biblioteca).
+  También vale hacer doble clic en el `.sharkp` si lo asocias a SharkCut, o
+  `SharkCut.exe proyecto.sharkp`.
+- [ ] Mueve la carpeta del proyecto junto con sus videos a otro sitio y ábrelo: los
+  encuentra solo. Si falta un video, la barra de estado dice cuál.
+- [ ] `Ctrl + Mayús + S` guarda con otro nombre.
+
+**Exportar** (`Ctrl + M` o el botón **Exportar** de abajo a la derecha):
+
+- [ ] Exporta la línea de tiempo entera a MP4. El panel derecho muestra el progreso, se
+  puede cancelar y al final dice el tiempo y el códec (**h264_nvenc**).
+- [ ] El MP4 se ve y se oye igual que en SharkCut: cortes, huecos en negro y audio en su sitio.
+- [ ] Monta un short sencillo de principio a fin sin abrir Premiere. ¿Qué echas de menos?
+
+### Fase 1: laboratorio de transiciones y exportación (validada)
+
+Pestañas **2 · Origen** y **3 · Transición** (antes 1 y 2).
+
+**Marcas de entrada y salida (como el monitor de origen de Premiere).** En vez de cortar
+los videos en archivos separados, eliges un tramo dentro de un video:
+
+1. En **Origen**, abre un video y lleva el cabezal al punto donde quieres que empiece
+   el tramo. Pulsa **I** (entrada).
+2. Lleva el cabezal al punto donde quieres que termine y pulsa **O** (salida). El tramo
+   queda resaltado en la barra. Sin marcas se usa el video entero.
+3. Pulsa **Usar como clip A**.
+4. Marca otro tramo (del mismo video o de otro) y pulsa **Usar como clip B**.
+5. Ve a **3 · Transición** (o pulsa **Ir a la transición →**, o la tecla **3**).
+
+> La transición solapa el **final de A** con el **principio de B**: deja un poco de
+> margen al final del tramo A y al principio del B.
+
+Atajo: `SharkCut.exe a.mp4 b.mp4` importa los videos y los coloca en la línea de tiempo.
+
+**En la pestaña Transición:**
+
+- [ ] La barra muestra A (azul), B (verde) y la zona de transición (morado).
+- [ ] **Ver transición (T)** reproduce desde 1 s antes hasta 1 s después y se detiene.
+- [ ] Prueba las 7 transiciones del selector **Tipo**: cada una carga sus valores por defecto.
+- [ ] **Duración**, **Intensidad**, **Desenfoque** y **Curva** cambian el resultado al
+  instante (también en pausa: avanza fotograma a fotograma con ← y →).
+- [ ] El audio hace un fundido cruzado suave durante la transición.
+- [ ] **Intercambiar A ↔ B** funciona.
+- [ ] **Exportar prueba a MP4…** guarda la secuencia. El mensaje final indica el tiempo y
+  el códec: debe ser **h264_nvenc** (tu RTX 3060). Ábrelo en otro reproductor y comprueba
+  que se ve igual que en SharkCut, con el audio.
+- [ ] Compara con Composer: anota qué transiciones se parecen y cuáles no, y qué cambiarías
+  (más rápida, más desenfoque, otra curva…). ¡Capturas o videos del móvil ayudan mucho!
+
+### Fase 0, etapa 3: audio sincronizado (validada)
 
 Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmadas).
 
@@ -87,7 +204,7 @@ Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmad
    - [ ] Reproduce el clip hasta el final: al terminar se detiene sola.
 4. Si notas desfase, di si la voz va **adelantada** o **retrasada** respecto a la imagen.
 
-### Etapa 2: reproducir un clip de OBS (validada)
+### Fase 0, etapa 2: reproducir un clip de OBS (validada)
 
 1. Abre SharkCut y pulsa **Abrir video…** (o `Ctrl + O`), o arrastra un MP4 al visor.
    También funciona `SharkCut.exe ruta\al\clip.mp4`.
@@ -103,7 +220,7 @@ Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmad
    - [ ] Los colores se ven igual que en Premiere u OBS (ni lavados ni saturados).
 4. Envía una captura con el panel **Clip** visible.
 
-### Etapa 1: ventana y diagnóstico (validada)
+### Fase 0, etapa 1: ventana y diagnóstico (validada)
 
 Al ejecutar SharkCut debe abrirse una ventana oscura con el visor y el panel
 **Diagnóstico**:

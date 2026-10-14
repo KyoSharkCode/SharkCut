@@ -1,5 +1,6 @@
 #pragma once
 
+#include "media/audio_source.h"
 #include "media/media_info.h"
 
 #include <cstddef>
@@ -19,23 +20,23 @@ inline constexpr Rational kAudioSampleDuration{1, kAudioSampleRate};
 // si el audio empieza más tarde se rellena con silencio y si empieza antes se recorta.
 //
 // No es seguro usar una misma instancia desde varios hilos a la vez.
-class AudioDecoder {
+class AudioDecoder : public AudioSource {
 public:
     // Abre `path` (UTF-8). Lanza MediaError si no se puede abrir o no tiene audio.
     explicit AudioDecoder(const std::string& path);
-    ~AudioDecoder();
+    ~AudioDecoder() override;
 
     AudioDecoder(const AudioDecoder&) = delete;
     AudioDecoder& operator=(const AudioDecoder&) = delete;
 
-    const AudioStreamInfo& info() const;
+    const AudioStreamInfo& info() const override;
 
     // Escribe hasta `frames` muestras por canal (frames × 2 floats) en `out`.
     // Devuelve cuántas escribió; 0 significa fin del audio.
-    std::size_t read(float* out, std::size_t frames);
+    std::size_t read(float* out, std::size_t frames) override;
 
     // Coloca el decodificador para que read() empiece exactamente en `sample`.
-    void seekToSample(std::int64_t sample);
+    void seekToSample(std::int64_t sample) override;
 
     // Muestra que devolverá la próxima llamada a read().
     std::int64_t position() const;

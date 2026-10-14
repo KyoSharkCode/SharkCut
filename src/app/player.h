@@ -1,10 +1,11 @@
 #pragma once
 
+#include "compositionsource.h"
 #include "core/time.h"
 #include "media/decode_worker.h"
 #include "media/video_frame.h"
+#include "playbackclock.h"
 
-#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -23,7 +24,7 @@ class AudioWorker;
 // Si el clip tiene audio, el reloj es el de la salida de audio (las muestras que ya
 // han sonado) y el video lo sigue. Sin audio, o sin tarjeta de sonido, se usa un
 // temporizador.
-class Player : public QObject {
+class Player : public CompositionSource {
     Q_OBJECT
     QML_ELEMENT
 
@@ -35,6 +36,13 @@ class Player : public QObject {
     Q_PROPERTY(QString timecode READ timecode NOTIFY currentFrameChanged)
     Q_PROPERTY(QString durationTimecode READ durationTimecode NOTIFY loadedChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY loadedChanged)
+    Q_PROPERTY(QString filePath READ filePath NOTIFY loadedChanged)
+    // Marcas de entrada y salida (-1 = sin marca). La salida es el último fotograma incluido.
+    Q_PROPERTY(qint64 markIn READ markIn NOTIFY marksChanged)
+    Q_PROPERTY(qint64 markOut READ markOut NOTIFY marksChanged)
+    Q_PROPERTY(QString markInTimecode READ markInTimecode NOTIFY marksChanged)
+    Q_PROPERTY(QString markOutTimecode READ markOutTimecode NOTIFY marksChanged)
+    Q_PROPERTY(QString markedDurationTimecode READ markedDurationTimecode NOTIFY marksChanged)
     Q_PROPERTY(QString videoDescription READ videoDescription NOTIFY loadedChanged)
     Q_PROPERTY(QString frameRateText READ frameRateText NOTIFY loadedChanged)
     Q_PROPERTY(bool variableFrameRate READ variableFrameRate NOTIFY loadedChanged)
@@ -59,6 +67,16 @@ public:
     QString timecode() const;
     QString durationTimecode() const;
     QString fileName() const { return m_fileName; }
+    QString filePath() const { return m_filePath; }
+    qint64 markIn() const { return m_markIn; }
+    qint64 markOut() const { return m_markOut; }
+    // Tramo marcado efectivo [in, out] (sin marcas: el clip entero).
+    qint64 rangeIn() const { return m_markIn >= 0 ? m_markIn : 0; }
+    qint64 rangeOut() const { return m_markOut >= 0 ? m_markOut : m_frameCount - 1; }
+    QString markInTimecode() const;
+    QString markOutTimecode() const;
+    QString markedDurationTimecode() const;
+    sharkcut::FrameRate frameRate() const { return m_rate; }
     QString videoDescription() const { return m_videoDescription; }
     QString frameRateText() const { return m_frameRateText; }
     bool variableFrameRate() const { return m_variableFrameRate; }
@@ -72,8 +90,8 @@ public:
     void setMuted(bool muted);
     QString errorString() const { return m_errorString; }
 
-    // Fotograma que se debe mostrar ahora (lo lee el visor).
-    std::shared_ptr<const sharkcut::VideoFrame> videoFrame() const { return m_frame; }
+    sharkcut::CompositorInput composition() const override;
+    QSize canvasSize() const override;
 
     Q_INVOKABLE void open(const QUrl& url);
     Q_INVOKABLE void openPath(const QString& path);
@@ -82,6 +100,9 @@ public:
     Q_INVOKABLE void togglePlay();
     Q_INVOKABLE void seek(qint64 frame);
     Q_INVOKABLE void step(int frames);
+    Q_INVOKABLE void setMarkIn();  // en el fotograma actual (tecla I)
+    Q_INVOKABLE void setMarkOut(); // en el fotograma actual (tecla O)
+    Q_INVOKABLE void clearMarks();
 
     // Avanza la reproducción según el reloj; se llama una vez por refresco de pantalla.
     Q_INVOKABLE void advance();
@@ -95,7 +116,7 @@ signals:
     void audioChanged();
     void mutedChanged();
     void errorStringChanged();
-    void frameChanged(); // hay un fotograma nuevo para el visor
+    void marksChanged();
 
 private:
     void onOpened(const sharkcut::VideoStreamInfo& info);
@@ -108,11 +129,6 @@ private:
     void setPlaying(bool playing);
     void setError(const QString& message);
     void updateDecoder();
-
-    // Coloca el reloj en `frame` y, si hay audio, pide que suene desde ahí.
-    void startClockAt(qint64 frame);
-    // Posición actual de la reproducción, en microsegundos del clip.
-    qint64 clockUs();
 
     std::unique_ptr<sharkcut::AudioOutput> m_audioOutput; // nullptr si no hay salida
     QString m_audioOutputText;
@@ -130,6 +146,9 @@ private:
     qint64 m_pendingFrame = -1; // fotograma pedido en pausa que aún no ha llegado
     sharkcut::FrameRate m_rate;
     QString m_fileName;
+    QString m_filePath;
+    qint64 m_markIn = -1;
+    qint64 m_markOut = -1;
     QString m_videoDescription;
     QString m_frameRateText;
     bool m_variableFrameRate = false;
@@ -138,11 +157,7 @@ private:
     sharkcut::AudioStreamInfo m_audioInfo;
     QString m_errorString;
 
-    // Reloj: se ancla en un instante del clip y avanza con el audio o con el temporizador.
-    QElapsedTimer m_clock;
-    qint64 m_clockAnchorUs = 0;
-    bool m_audioClock = false;  // el reloj lo marca el audio
-    quint64 m_audioRequest = 0; // petición de audio a la que corresponde el reloj
+    PlaybackClock m_clock;
 
     std::shared_ptr<const sharkcut::VideoFrame> m_frame;
 };

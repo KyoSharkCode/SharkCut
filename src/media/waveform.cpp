@@ -55,7 +55,10 @@ double Waveform::level(std::uint8_t value, double gainDb) {
         return 0.0;
     }
     const double db = kFloorDb + (static_cast<double>(value) / 255.0) * -kFloorDb + gainDb;
-    return std::clamp((db - kFloorDb) / -kFloorDb, 0.0, 1.0);
+    if (db <= kFloorDb) {
+        return 0.0;
+    }
+    return std::clamp(std::sqrt(std::pow(10.0, db / 20.0)), 0.0, 1.0);
 }
 
 Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel) {

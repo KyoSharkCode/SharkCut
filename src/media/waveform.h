@@ -25,7 +25,9 @@ struct Waveform {
 
     // Valor guardado para un pico lineal (0–1 o más).
     static std::uint8_t encode(float peak);
-    // Pico en 0–1 de la escala logarítmica (0 = suelo, 1 = 0 dB) con `gainDb` aplicada.
+    // Altura para dibujar (0–1) con `gainDb` aplicada: raíz de la amplitud, un punto medio
+    // entre la escala lineal (la voz casi no se ve) y la de dB (todo parece lleno).
+    // 0 = −60 dB o menos, 1 = 0 dB; −12 dB llega a la mitad.
     static double level(std::uint8_t value, double gainDb = 0.0);
 
     friend bool operator==(const Waveform&, const Waveform&) = default;

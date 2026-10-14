@@ -302,6 +302,11 @@ std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId) {
     return m_waveforms.get(QString::fromStdString(item->path));
 }
 
+bool Editor::waveformLoading(qint64 mediaId) const {
+    const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
+    return item && m_waveforms.pending(QString::fromStdString(item->path));
+}
+
 void Editor::updateWaveformDirectory() {
     m_waveforms.setDirectory(
         m_projectPath.isEmpty() ? QString() : m_projectPath + QStringLiteral(".cache/ondas"));

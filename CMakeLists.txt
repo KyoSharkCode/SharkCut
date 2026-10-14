@@ -18,6 +18,9 @@ if(MSVC)
     target_compile_options(sharkcut_warnings INTERFACE /W4 /permissive- /utf-8)
 else()
     target_compile_options(sharkcut_warnings INTERFACE -Wall -Wextra -Wpedantic)
+    # En Debug, la biblioteca estándar comprueba los accesos (optional vacío, índices
+    # fuera de rango…) como hace MSVC en Windows: los fallos salen también en Linux.
+    target_compile_definitions(sharkcut_warnings INTERFACE $<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)

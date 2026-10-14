@@ -102,6 +102,11 @@ void WaveformCache::setDirectory(const QString& directory) {
     }
 }
 
+bool WaveformCache::pending(const QString& mediaPath) const {
+    const auto it = m_entries.find(mediaPath);
+    return it != m_entries.end() && it->second.pending;
+}
+
 void WaveformCache::save(const QString& path, std::shared_ptr<const sharkcut::Waveform> waveform) {
     const QString directory = m_directory;
     m_pool.start([path, directory, waveform] {
@@ -144,6 +149,11 @@ void WaveformView::setEditor(Editor* editor) {
 
 void WaveformView::refresh() {
     m_waveform = m_editor ? m_editor->waveform(m_mediaId) : nullptr;
+    const bool loading = !m_waveform && m_editor && m_editor->waveformLoading(m_mediaId);
+    if (loading != m_loading) {
+        m_loading = loading;
+        emit loadingChanged();
+    }
     update();
 }
 
@@ -178,11 +188,12 @@ void WaveformView::paint(QPainter* painter) {
     const auto& peaks = waveform->peaks;
     const auto count = static_cast<std::int64_t>(peaks.size());
     const double blocksPerFrame = sharkcut::Waveform::kBlocksPerSecond / m_fps;
-    const double middle = height() / 2.0;
-    const double maxHalf = std::max(0.0, middle - 1.0);
+    // De abajo arriba: silencio = nada, 0 dB = toda la altura.
+    const double bottom = height();
+    const double maxHeight = std::max(0.0, height() - 1.0);
     const int columns = static_cast<int>(std::ceil(width()));
 
-    // Una línea vertical por columna de píxeles, simétrica: el pico del tramo que cubre.
+    // Una línea vertical por columna de píxeles: el pico del tramo que cubre.
     std::vector<QLineF> lines;
     lines.reserve(static_cast<std::size_t>(std::max(columns, 0)));
     for (int x = 0; x < columns; ++x) {
@@ -196,11 +207,11 @@ void WaveformView::paint(QPainter* painter) {
             continue;
         }
         const std::uint8_t peak = *std::max_element(peaks.begin() + first, peaks.begin() + last);
-        const double half = sharkcut::Waveform::level(peak, m_gainDb) * maxHalf;
-        if (half < 0.5) {
+        const double level = sharkcut::Waveform::level(peak, m_gainDb) * maxHeight;
+        if (level < 0.5) {
             continue;
         }
-        lines.emplace_back(x + 0.5, middle - half, x + 0.5, middle + half);
+        lines.emplace_back(x + 0.5, bottom, x + 0.5, bottom - level);
     }
     painter->setPen(QPen(m_color, 1.0));
     painter->drawLines(lines.data(), static_cast<int>(lines.size()));

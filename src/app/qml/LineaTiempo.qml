@@ -443,7 +443,7 @@ Rectangle {
                                     x: izquierda
                                     y: 15
                                     width: Math.max(0, derecha - izquierda)
-                                    height: elemento.height - 17
+                                    height: elemento.height - 16
                                     editor: raiz.editor
                                     mediaId: elemento.modelData.media
                                     firstFrame: elemento.entradaVista + izquierda / raiz.escala
@@ -451,7 +451,40 @@ Rectangle {
                                     fps: raiz.editor.fps
                                     gainDb: elemento.modelData.volumeDb
                                     color: Theme.clipAudioClaro
-                                    opacity: 0.8
+
+                                    // Mientras se calcula la onda (un VOD largo tarda unos segundos).
+                                    Row {
+                                        id: cargandoOnda
+                                        visible: parent.loading && parent.width > 40
+                                        x: 6
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 6
+                                        Repeater {
+                                            model: 3
+                                            delegate: Rectangle {
+                                                required property int index
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 3
+                                                height: 12
+                                                radius: 1
+                                                color: Theme.clipAudioClaro
+                                                SequentialAnimation on height {
+                                                    running: cargandoOnda.visible
+                                                    loops: Animation.Infinite
+                                                    PauseAnimation { duration: index * 120 }
+                                                    NumberAnimation { from: 4; to: 14; duration: 300; easing.type: Easing.InOutQuad }
+                                                    NumberAnimation { from: 14; to: 4; duration: 300; easing.type: Easing.InOutQuad }
+                                                    PauseAnimation { duration: (2 - index) * 120 }
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "Calculando la onda…"
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                        }
+                                    }
                                 }
 
                                 RowLayout {

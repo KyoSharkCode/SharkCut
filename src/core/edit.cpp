@@ -464,12 +464,17 @@ bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_
     };
     std::vector<Moving> moving;
     for (std::size_t t = 0; t < project.tracks.size(); ++t) {
+        auto& trackClips = project.tracks[t].clips;
+        if (std::none_of(trackClips.begin(), trackClips.end(),
+                         [&group](const Clip& clip) { return contains(group, clip.id); })) {
+            continue; // en esta pista no se mueve nada (y quizá no tiene pista de destino)
+        }
+        // limitTrackShift() ya comprobó que la pista de destino existe.
         std::size_t destination = t;
         if (trackShift != 0 && project.tracks[t].kind == shiftKind) {
             const auto number = static_cast<int>(project.trackNumber(t)) + trackShift;
-            destination = *project.trackIndex(shiftKind, static_cast<std::size_t>(number));
+            destination = project.trackIndex(shiftKind, static_cast<std::size_t>(number)).value();
         }
-        auto& trackClips = project.tracks[t].clips;
         for (const Clip& clip : trackClips) {
             if (contains(group, clip.id)) {
                 Clip moved = clip;

@@ -109,6 +109,7 @@ public:
 
     // Forma de onda de un medio (nullptr mientras se calcula; llega waveformsChanged).
     std::shared_ptr<const sharkcut::Waveform> waveform(qint64 mediaId);
+    bool waveformLoading(qint64 mediaId) const;
 
     QString projectName() const;
     QString canvasLabel() const;

@@ -382,6 +382,7 @@ TEST_CASE("Waveform peaks follow the audio and survive the disk cache", "[audio]
     CHECK(Waveform::level(255) == 1.0);
     CHECK(Waveform::level(255, -60.0) == 0.0);
     CHECK(Waveform::level(0, 12.0) == 0.0);
+    CHECK(Waveform::level(255, -12.0) == Catch::Approx(0.5).margin(0.01));
 
     const std::filesystem::path file = tempClipPath("ondas") / "prueba.onda";
     REQUIRE(saveWaveform(waveform, file));

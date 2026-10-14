@@ -36,6 +36,9 @@ public:
     // también en la nueva carpeta.
     void setDirectory(const QString& directory);
 
+    // true mientras se lee de la caché o se calcula.
+    bool pending(const QString& mediaPath) const;
+
 signals:
     void ready(const QString& mediaPath);
 
@@ -68,6 +71,8 @@ class WaveformView : public QQuickPaintedItem {
     Q_PROPERTY(double fps READ fps WRITE setFps NOTIFY changed)
     Q_PROPERTY(double gainDb READ gainDb WRITE setGainDb NOTIFY changed)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY changed)
+    // true mientras la onda se calcula (la interfaz muestra un aviso).
+    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
 
 public:
     explicit WaveformView(QQuickItem* parent = nullptr);
@@ -87,10 +92,13 @@ public:
     QColor color() const { return m_color; }
     void setColor(const QColor& color);
 
+    bool loading() const { return m_loading; }
+
     void paint(QPainter* painter) override;
 
 signals:
     void changed();
+    void loadingChanged();
 
 private:
     template <typename T> void set(T& member, const T& value);
@@ -99,6 +107,7 @@ private:
 
     QPointer<Editor> m_editor;
     std::shared_ptr<const sharkcut::Waveform> m_waveform;
+    bool m_loading = false;
     qint64 m_mediaId = 0;
     double m_firstFrame = 0.0;
     double m_framesPerPixel = 1.0;

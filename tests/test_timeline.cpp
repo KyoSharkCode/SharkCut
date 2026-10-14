@@ -533,3 +533,31 @@ TEST_CASE("Transform and volume values are limited", "[timeline][tracks]") {
     CHECK(gainFromDb(0.0) == 1.0);
     CHECK(gainFromDb(-6.0) == Catch::Approx(0.501).margin(0.001));
 }
+
+TEST_CASE("Moving to the top or bottom track keeps the other tracks", "[timeline][tracks]") {
+    // V1 y V2 (V2 vacía): subir un trozo de un clip partido a V2 y volver a bajarlo.
+    Project p;
+    addTrack(p, TrackKind::Video);
+    addTrack(p, TrackKind::Audio);
+    const ObjectId m = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId v = placeClip(p, m, 0);
+    REQUIRE(splitAt(p, 300));
+    const ObjectId right = trackClips(p, TrackKind::Video, 0)[1].id;
+    REQUIRE(moveClips(p, {right}, 0, 1, TrackKind::Video));
+    CHECK(trackClips(p, TrackKind::Video, 1).size() == 1);
+    CHECK(trackClips(p, TrackKind::Video, 0).size() == 1);
+    CHECK(p.clip(v) != nullptr);
+    checkInvariants(p);
+    REQUIRE(moveClips(p, {right}, 0, -1, TrackKind::Video));
+    CHECK(trackClips(p, TrackKind::Video, 1).empty());
+    CHECK(trackClips(p, TrackKind::Video, 0).size() == 2);
+    checkInvariants(p);
+
+    // Lo mismo con el audio: A1 → A2 → A1.
+    const ObjectId audioRight = trackClips(p, TrackKind::Audio, 0)[1].id;
+    REQUIRE(moveClips(p, {audioRight}, 0, 1, TrackKind::Audio));
+    CHECK(trackClips(p, TrackKind::Audio, 1).size() == 1);
+    REQUIRE(moveClips(p, {audioRight}, 0, -1, TrackKind::Audio));
+    CHECK(trackClips(p, TrackKind::Audio, 1).empty());
+    checkInvariants(p);
+}

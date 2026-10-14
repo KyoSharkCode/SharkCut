@@ -31,7 +31,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - No copiar código ni recursos de Premiere Composer ni de otros productos de pago.
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.
 - Respetar las fases del plan; no adelantar funciones de fases posteriores.
-- Comentarios y textos de la interfaz en español.
+- Comentarios y textos de la interfaz en español. Excepción: nombres de
+  TEST_CASE solo en ASCII (sin acentos ni ñ), porque ctest en Windows no los encuentra.
 - Estilo visual del editor: tema "Marea Profunda" (docs/PLAN.md, sección 15),
   definido en src/app/qml/Theme.qml. No usar colores sueltos fuera del tema.
 

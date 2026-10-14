@@ -24,7 +24,7 @@ TEST_CASE("mulDiv calcula productos exactos", "[time]") {
     CHECK(mulDiv(-10, -3, 2) == 15);
 }
 
-TEST_CASE("mulDiv redondea según el modo", "[time]") {
+TEST_CASE("mulDiv redondea segun el modo", "[time]") {
     // 7 / 2 = 3,5
     CHECK(mulDiv(7, 1, 2, Rounding::Nearest) == 4);
     CHECK(mulDiv(7, 1, 2, Rounding::Down) == 3);
@@ -48,7 +48,7 @@ TEST_CASE("mulDiv usa 128 bits intermedios sin desbordar", "[time]") {
     CHECK(mulDiv(kMin, 3, 3) == kMin);
 }
 
-TEST_CASE("mulDiv detecta resultados que no caben y divisores inválidos", "[time]") {
+TEST_CASE("mulDiv detecta resultados que no caben y divisores invalidos", "[time]") {
     CHECK_THROWS_AS(mulDiv(kMax, 2, 1), std::overflow_error);
     CHECK_THROWS_AS(mulDiv(kMin, -1, 1), std::overflow_error);
     CHECK_THROWS_AS(mulDiv(1, 1, 0), std::invalid_argument);
@@ -97,7 +97,7 @@ TEST_CASE("rescale convierte entre bases de tiempo", "[time]") {
     CHECK(rescale(1, k60.frameDuration(), kMicroseconds, Rounding::Down) == 16'666);
 }
 
-TEST_CASE("rescale rechaza bases de tiempo inválidas", "[time]") {
+TEST_CASE("rescale rechaza bases de tiempo invalidas", "[time]") {
     CHECK_THROWS_AS(rescale(1, {0, 1}, kMicroseconds), std::invalid_argument);
     CHECK_THROWS_AS(rescale(1, {1, 0}, kMicroseconds), std::invalid_argument);
     CHECK_THROWS_AS(rescale(1, {-1, 60}, kMicroseconds), std::invalid_argument);

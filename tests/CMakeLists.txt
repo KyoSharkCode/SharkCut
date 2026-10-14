@@ -9,6 +9,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
+# Los nombres de TEST_CASE deben ir sin acentos ni ñ: en Windows, ctest pasa el
+# nombre a Catch2 con otra codificación y el test no se encontraría.
 add_executable(sharkcut_tests
     test_time.cpp
 )

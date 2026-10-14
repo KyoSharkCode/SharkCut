@@ -70,12 +70,15 @@ else()
 endif()
 
 # Copia las DLL de FFmpeg junto al ejecutable tras compilarlo (solo Windows).
+# Solo las de FFmpeg: las de Qt se cargan desde la instalación de Qt (PATH), porque
+# Qt busca sus plugins junto a su propia DLL y una copia suelta no los encontraría.
 function(sharkcut_copy_runtime_dlls target)
     if(WIN32)
-        add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_RUNTIME_DLLS:${target}> $<TARGET_FILE_DIR:${target}>
-            COMMAND_EXPAND_LISTS
-        )
+        foreach(lib IN LISTS SHARKCUT_FFMPEG_LIBS ITEMS swresample)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:FFmpeg::${lib}> $<TARGET_FILE_DIR:${target}>
+            )
+        endforeach()
     endif()
 endfunction()

@@ -26,6 +26,7 @@ Rectangle {
     property var arrastre: null
     property real marcaSoltar: -1 // fotograma donde caería lo que se arrastra encima
     property int pistaSoltar: -1  // pista donde caería
+    property var corteSoltar: null // {track, cut} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
     readonly property real escalaMaxima: 24
@@ -95,6 +96,30 @@ Rectangle {
                 return f.pista
         }
         return null
+    }
+
+    // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a la x del
+    // contenido, a menos de 60 píxeles: {track, cut}, o null.
+    function corteCercano(pista, xContenido) {
+        const finales = {}
+        const lista = editor.clips
+        for (let i = 0; i < lista.length; ++i) {
+            if (lista[i].track === pista)
+                finales[lista[i].start + lista[i].length] = true
+        }
+        let mejor = null
+        let distancia = 60
+        for (let i = 0; i < lista.length; ++i) {
+            const c = lista[i]
+            if (c.track !== pista || !finales[c.start])
+                continue
+            const d = Math.abs(c.start * escala - xContenido)
+            if (d < distancia) {
+                distancia = d
+                mejor = { track: pista, cut: c.start }
+            }
+        }
+        return mejor
     }
 
     // Índice de la pista `desplazamiento` posiciones más allá dentro de su tipo.
@@ -660,6 +685,128 @@ Rectangle {
                             }
                         }
 
+                        // Transiciones: sobre el corte, entre los dos clips. Clic para
+                        // seleccionarla (Propiedades), bordes para cambiar su duración.
+                        Repeater {
+                            model: raiz.editor.transitions
+                            delegate: Rectangle {
+                                id: transicion
+                                required property var modelData
+                                readonly property bool seleccionada:
+                                    raiz.editor.selectedTransition.id === modelData.id
+                                readonly property bool enArrastre: raiz.arrastre !== null
+                                    && raiz.arrastre.tipo === "transicion"
+                                    && raiz.arrastre.id === modelData.id
+                                readonly property real antes: enArrastre ? raiz.arrastre.antes
+                                                                         : modelData.before
+                                readonly property real despues: enArrastre ? raiz.arrastre.despues
+                                                                           : modelData.after
+                                readonly property real ancho: (antes + despues) * raiz.escala
+                                // Con poco zoom, al menos 8 píxeles centrados en el corte.
+                                x: ancho >= 8 ? (modelData.cut - antes) * raiz.escala
+                                              : modelData.cut * raiz.escala - 4
+                                width: Math.max(8, ancho)
+                                y: raiz.yDePista(modelData.track) + 8
+                                height: raiz.alturaPista - 16
+                                z: 3
+                                radius: 4
+                                color: seleccionada ? Qt.lighter(Theme.clipTransicion, 1.25)
+                                                    : Theme.clipTransicion
+                                border.color: seleccionada ? Theme.acento : Qt.lighter(color, 1.3)
+                                border.width: seleccionada ? 2 : 1
+                                opacity: modelData.locked ? 0.6 : 0.95
+                                clip: true
+
+                                // Línea del corte
+                                Rectangle {
+                                    x: (transicion.modelData.cut * raiz.escala) - transicion.x - 0.5
+                                    width: 1
+                                    height: parent.height
+                                    color: Theme.texto
+                                    opacity: 0.35
+                                }
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    visible: transicion.width > 44
+                                    Icono {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        nombre: "transicion"
+                                        tam: 12
+                                        color: Theme.texto
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: (transicion.modelData.sound ? "♪ " : "")
+                                              + transicion.modelData.name
+                                        color: Theme.texto
+                                        font.pixelSize: 10
+                                        visible: transicion.width > 110
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: !transicion.modelData.locked
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onPressed: (m) => {
+                                        raiz.editor.selectTransition(transicion.modelData.id)
+                                        if (m.button === Qt.RightButton)
+                                            menuTransicion.abrir(transicion.modelData)
+                                    }
+                                }
+
+                                // Bordes: cambiar lo que dura antes y después del corte.
+                                Repeater {
+                                    model: ["antes", "despues"]
+                                    delegate: MouseArea {
+                                        id: bordeTransicion
+                                        required property string modelData
+                                        readonly property string lado: modelData
+                                        width: Math.min(7, transicion.width / 3)
+                                        height: transicion.height
+                                        anchors.left: lado === "antes" ? transicion.left : undefined
+                                        anchors.right: lado === "despues" ? transicion.right : undefined
+                                        visible: !transicion.modelData.locked
+                                        preventStealing: true
+                                        hoverEnabled: true
+                                        cursorShape: Qt.SizeHorCursor
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: Theme.acento
+                                            opacity: bordeTransicion.containsMouse || bordeTransicion.pressed ? 0.6 : 0
+                                        }
+                                        onPressed: raiz.editor.selectTransition(transicion.modelData.id)
+                                        onPositionChanged: (m) => {
+                                            if (!pressed)
+                                                return
+                                            const t = transicion.modelData
+                                            const f = raiz.frameEn(mapToItem(contenido, m.x, 0).x)
+                                            let antes = t.before
+                                            let despues = t.after
+                                            if (lado === "antes")
+                                                antes = Math.max(0, Math.min(t.maxBefore, t.cut - f))
+                                            else
+                                                despues = Math.max(0, Math.min(t.maxAfter, f - t.cut))
+                                            if (antes + despues < 2)
+                                                return
+                                            raiz.arrastre = { tipo: "transicion", id: t.id, grupo: [],
+                                                              antes: antes, despues: despues,
+                                                              delta: 0, valor: 0, pistas: 0 }
+                                        }
+                                        onReleased: {
+                                            const a = raiz.arrastre
+                                            raiz.arrastre = null
+                                            if (a !== null && a.tipo === "transicion")
+                                                Qt.callLater(raiz.editor.setTransitionLength, a.id,
+                                                             a.antes, a.despues)
+                                        }
+                                        onCanceled: raiz.arrastre = null
+                                    }
+                                }
+                            }
+                        }
+
                         // Dónde caerá lo que se arrastra desde la biblioteca o el explorador.
                         Rectangle {
                             visible: raiz.marcaSoltar >= 0
@@ -670,16 +817,36 @@ Rectangle {
                             color: Theme.acento
                             z: 4
                         }
+                        // Dónde caerá una transición: el corte más cercano.
+                        Rectangle {
+                            visible: raiz.corteSoltar !== null
+                            x: raiz.corteSoltar ? raiz.corteSoltar.cut * raiz.escala - 12 : 0
+                            y: raiz.corteSoltar ? raiz.yDePista(raiz.corteSoltar.track) + 4 : 0
+                            width: 24
+                            height: raiz.alturaPista - 8
+                            radius: 4
+                            color: Theme.clipTransicion
+                            border.color: Theme.acento
+                            border.width: 2
+                            z: 4
+                        }
 
                         DropArea {
                             id: zonaSoltar
                             y: raiz.yPrimeraFila - raiz.separacion
                             width: parent.width
                             height: raiz.altoPistas + 2 * raiz.separacion
-                            keys: ["sharkcut/medio", "text/uri-list"]
+                            keys: ["sharkcut/medio", "sharkcut/transicion", "text/uri-list"]
+                            function esTransicion(d) {
+                                return d.keys.indexOf("sharkcut/transicion") >= 0
+                            }
                             function actualizar(d) {
-                                raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
                                 const p = raiz.pistaEnY(d.y + y)
+                                if (esTransicion(d)) {
+                                    raiz.corteSoltar = p && p.video ? raiz.corteCercano(p.index, d.x) : null
+                                    return
+                                }
+                                raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
                                 raiz.pistaSoltar = p ? p.index : -1
                             }
                             onPositionChanged: (d) => actualizar(d)
@@ -687,14 +854,22 @@ Rectangle {
                             onExited: {
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
+                                raiz.corteSoltar = null
                             }
                             onDropped: (d) => {
                                 const f = raiz.ajustar(raiz.frameEn(d.x), [])
                                 const p = raiz.pistaEnY(d.y + y)
                                 const pista = p ? p.index : -1
+                                const corte = raiz.corteSoltar
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
-                                if (d.hasUrls && d.urls.length > 0) {
+                                raiz.corteSoltar = null
+                                if (esTransicion(d)) {
+                                    if (corte !== null && d.source)
+                                        Qt.callLater(raiz.editor.addTransition, corte.track, corte.cut,
+                                                     d.source.transicion)
+                                    d.accept()
+                                } else if (d.hasUrls && d.urls.length > 0) {
                                     raiz.editor.importFiles(d.urls, f, pista)
                                     d.acceptProposedAction()
                                 } else if (d.source && d.source.mediaId !== undefined) {
@@ -887,6 +1062,27 @@ Rectangle {
         Action {
             text: "Quitar"
             onTriggered: raiz.editor.removeSelection()
+        }
+    }
+
+    MenuTema {
+        id: menuTransicion
+        property var transicionMenu: null
+        function abrir(t) {
+            transicionMenu = t
+            popup()
+        }
+        Action {
+            text: "Quitar el sonido de la transición"
+            enabled: menuTransicion.transicionMenu !== null && menuTransicion.transicionMenu.sound
+            onTriggered: raiz.editor.setTransitionSound(menuTransicion.transicionMenu.id, 0)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: "Quitar la transición"
+            onTriggered: raiz.editor.removeTransition(menuTransicion.transicionMenu.id)
         }
     }
 

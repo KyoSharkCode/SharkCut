@@ -131,7 +131,7 @@ private:
 };
 
 // Línea de tiempo de un proyecto: las pistas de video visibles, una encima de otra,
-// sobre negro.
+// sobre negro, con sus transiciones.
 class TimelineFrames : public FrameSource {
 public:
     explicit TimelineFrames(Project project) : m_project(std::move(project)) {}
@@ -142,8 +142,14 @@ public:
         CompositorInput input;
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
             CompositorLayer& out = input.layers.emplace_back();
-            out.a = reader(layer.track, *layer.media).at(layer.mediaFrame);
+            out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
             out.transform = layer.clip->transform;
+            if (layer.transition) {
+                out.b = reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
+                out.transformB = layer.clipB->transform;
+                out.transition = layer.transition->params;
+                out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);
+            }
         }
         return input;
     }
@@ -157,12 +163,14 @@ public:
     }
 
 private:
-    // Un lector por pista y archivo (dos pistas con el mismo video no se pisan), con un
-    // máximo abierto a la vez (se cierra el menos usado).
-    MediaReader& reader(std::size_t track, const MediaItem& item) {
+    // Un lector por pista, archivo y papel (0: el clip que se ve o el saliente de una
+    // transición; 1: el entrante). Así dos pistas con el mismo video, o una transición
+    // entre dos trozos del mismo VOD, no obligan a saltar de un sitio a otro del archivo
+    // en cada fotograma. Hay un máximo abierto a la vez (se cierra el menos usado).
+    MediaReader& reader(std::size_t track, const MediaItem& item, int role) {
         ++m_clock;
         for (Entry& entry : m_readers) {
-            if (entry.track == track && entry.media == item.id) {
+            if (entry.track == track && entry.media == item.id && entry.role == role) {
                 entry.lastUse = m_clock;
                 return *entry.reader;
             }
@@ -173,17 +181,19 @@ private:
                 [](const Entry& a, const Entry& b) { return a.lastUse < b.lastUse; });
             m_readers.erase(oldest);
         }
-        m_readers.push_back({track, item.id, std::make_unique<MediaReader>(item.path), m_clock});
+        m_readers.push_back(
+            {track, item.id, role, std::make_unique<MediaReader>(item.path), m_clock});
         return *m_readers.back().reader;
     }
 
     struct Entry {
         std::size_t track = 0;
         ObjectId media = 0;
+        int role = 0;
         std::unique_ptr<MediaReader> reader;
         std::uint64_t lastUse = 0;
     };
-    static constexpr std::size_t kMaxOpen = 6;
+    static constexpr std::size_t kMaxOpen = 8;
 
     Project m_project;
     std::vector<Entry> m_readers;

@@ -407,7 +407,6 @@ Window {
                 Layout.fillHeight: true
                 editor: editor
                 fantasma: fantasma
-                transiciones: laboratorio.transitionNames
                 onImportar: dialogoImportar.open()
                 onAbrirEnOrigen: (ruta) => {
                     ventana.cambiarModo("origen")
@@ -1272,10 +1271,12 @@ Window {
         }
     }
 
-    // Lo que se ve al arrastrar un medio de la biblioteca a la línea de tiempo.
+    // Lo que se ve al arrastrar un medio de la biblioteca (o una transición) a la línea
+    // de tiempo.
     Rectangle {
         id: fantasma
         property var mediaId: undefined
+        property int transicion: -1 // índice del catálogo si se arrastra una transición
         property string nombre
         visible: Drag.active
         z: 100
@@ -1283,7 +1284,8 @@ Window {
         height: 28
         radius: Theme.radio
         color: Theme.panelElevado
-        border.color: Theme.acento
+        border.color: transicion >= 0 ? Theme.clipTransicion : Theme.acento
+        border.width: 2
         opacity: 0.9
         Drag.keys: ["sharkcut/medio"]
         Drag.hotSpot.x: 10

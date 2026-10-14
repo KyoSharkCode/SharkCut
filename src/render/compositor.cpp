@@ -400,14 +400,17 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
         if (layer.transition && layer.a && layer.b) {
             // Los dos clips, cada uno en su textura (sobre negro), antes de la pasada
             // del lienzo; la transición los mezcla ahí.
+            // Sobre transparente: en una pista superior, lo que no cubren los clips deja
+            // ver las pistas de debajo.
             TransitionTargets& targets = transitionTargets(transitionCount++);
             const std::shared_ptr<const VideoFrame> frames[2] = {layer.a, layer.b};
+            const ClipTransform* transforms[2] = {&layer.transform, &layer.transformB};
             for (int i = 0; i < 2; ++i) {
                 Source& s = source(sourceCount++);
                 QRhiResourceUpdateBatch* updates = m_rhi->nextResourceUpdateBatch();
-                prepareSource(s, *frames[i], layer.transform, 1.0, updates);
+                prepareSource(s, *frames[i], *transforms[i], transforms[i]->opacity, updates);
                 s.uploaded = frames[i];
-                cb->beginPass(targets.target[i].get(), Qt::black, {1.0f, 0}, updates);
+                cb->beginPass(targets.target[i].get(), Qt::transparent, {1.0f, 0}, updates);
                 drawSource(cb, s, m_layerPipeline.get());
                 cb->endPass();
             }

@@ -32,7 +32,8 @@ struct CompositorLayer {
     std::shared_ptr<const VideoFrame> b; // clip entrante (solo durante una transición)
     std::optional<TransitionParams> transition;
     TransitionState state;
-    ClipTransform transform;
+    ClipTransform transform;  // de `a`
+    ClipTransform transformB; // de `b`
 };
 
 // Lo que hay que dibujar en un fotograma: las capas, de abajo arriba, sobre negro.

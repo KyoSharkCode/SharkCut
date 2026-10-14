@@ -117,7 +117,73 @@ std::int64_t Project::mediaTimeUs(const Clip& clip, std::int64_t frame) const {
 
 std::int64_t Project::mediaFrameIndex(const Clip& clip, std::int64_t frame) const {
     const MediaItem* item = findMedia(clip.media);
-    return item ? microsecondsToFrame(mediaTimeUs(clip, frame), item->frameRate) : 0;
+    if (!item) {
+        return 0;
+    }
+    const std::int64_t index = microsecondsToFrame(mediaTimeUs(clip, frame), item->frameRate);
+    const std::int64_t last =
+        std::max<std::int64_t>(0, microsecondsToFrame(item->durationUs, item->frameRate) - 1);
+    return std::clamp<std::int64_t>(index, 0, last);
+}
+
+std::optional<Project::TransitionRef> Project::findTransition(ObjectId id) const {
+    if (id == 0) {
+        return std::nullopt;
+    }
+    for (std::size_t t = 0; t < tracks.size(); ++t) {
+        const auto& list = tracks[t].transitions;
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            if (list[i].id == id) {
+                return TransitionRef{t, i};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+const Transition* Project::transition(ObjectId id) const {
+    const auto ref = findTransition(id);
+    return ref ? &tracks[ref->track].transitions[ref->index] : nullptr;
+}
+
+std::int64_t Project::cutOf(const Transition& t) const {
+    const Clip* b = clip(t.to);
+    return b ? b->start : -1;
+}
+
+const Transition* Project::transitionAt(std::size_t track, std::int64_t frame) const {
+    if (track >= tracks.size()) {
+        return nullptr;
+    }
+    for (const Transition& t : tracks[track].transitions) {
+        const std::int64_t cut = cutOf(t);
+        if (cut >= 0 && frame >= cut - t.before && frame < cut + t.after) {
+            return &t;
+        }
+    }
+    return nullptr;
+}
+
+const Transition* Project::transitionInto(ObjectId clipId) const {
+    for (const Track& track : tracks) {
+        for (const Transition& t : track.transitions) {
+            if (t.to == clipId) {
+                return &t;
+            }
+        }
+    }
+    return nullptr;
+}
+
+const Transition* Project::transitionOutOf(ObjectId clipId) const {
+    for (const Track& track : tracks) {
+        for (const Transition& t : track.transitions) {
+            if (t.from == clipId) {
+                return &t;
+            }
+        }
+    }
+    return nullptr;
 }
 
 std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
@@ -126,10 +192,35 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
         if (tracks[t].kind != TrackKind::Video || tracks[t].hidden) {
             continue;
         }
+        if (const Transition* tr = transitionAt(t, frame)) {
+            const Clip* a = clip(tr->from);
+            const Clip* b = clip(tr->to);
+            const MediaItem* itemA = a ? findMedia(a->media) : nullptr;
+            const MediaItem* itemB = b ? findMedia(b->media) : nullptr;
+            if (itemA && itemB) {
+                Layer layer;
+                layer.track = t;
+                layer.clip = a;
+                layer.media = itemA;
+                layer.mediaFrame = mediaFrameIndex(*a, frame);
+                layer.transition = tr;
+                layer.clipB = b;
+                layer.mediaB = itemB;
+                layer.mediaFrameB = mediaFrameIndex(*b, frame);
+                layer.transitionFrame = frame - (b->start - tr->before);
+                layers.push_back(layer);
+                continue;
+            }
+        }
         const Clip* c = clipAt(t, frame);
         const MediaItem* item = c ? findMedia(c->media) : nullptr;
         if (item) {
-            layers.push_back({t, c, item, mediaFrameIndex(*c, frame)});
+            Layer layer;
+            layer.track = t;
+            layer.clip = c;
+            layer.media = item;
+            layer.mediaFrame = mediaFrameIndex(*c, frame);
+            layers.push_back(layer);
         }
     }
     return layers;

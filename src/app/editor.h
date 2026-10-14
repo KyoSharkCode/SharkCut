@@ -47,6 +47,14 @@ class Editor : public CompositionSource {
     // Pistas en el orden de `tracks` del proyecto: {index, name, kind, number, hidden,
     // muted, locked}
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY projectChanged)
+    // Transiciones de la línea de tiempo: {id, track, cut, before, after, name, sound}
+    Q_PROPERTY(QVariantList transitions READ transitions NOTIFY projectChanged)
+    // Catálogos para la interfaz: transiciones, curvas y efectos de sonido ("Ninguno" el 0)
+    Q_PROPERTY(QStringList transitionNames READ transitionNames CONSTANT)
+    Q_PROPERTY(QStringList easingNames READ easingNames CONSTANT)
+    Q_PROPERTY(QStringList soundNames READ soundNames CONSTANT)
+    // Sonido que lleva por defecto cada transición ("" = ninguno), en el orden de transitionNames
+    Q_PROPERTY(QStringList transitionSounds READ transitionSounds CONSTANT)
     Q_PROPERTY(qint64 frameCount READ frameCount NOTIFY projectChanged)
     Q_PROPERTY(double fps READ fps NOTIFY projectChanged)
     Q_PROPERTY(QString projectDescription READ projectDescription NOTIFY projectChanged)
@@ -61,6 +69,8 @@ class Editor : public CompositionSource {
     // El clip seleccionado (su parte de video y la de audio), para Propiedades y el visor:
     // vacío si no hay uno solo. Ver selectedClip().
     Q_PROPERTY(QVariantMap selectedClip READ selectedClip NOTIFY selectedClipChanged)
+    // La transición seleccionada (vacío si no hay): ver selectedTransition().
+    Q_PROPERTY(QVariantMap selectedTransition READ selectedTransition NOTIFY selectedClipChanged)
     // Archivo del proyecto
     Q_PROPERTY(QString projectName READ projectName NOTIFY fileChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
@@ -95,6 +105,12 @@ public:
     QVariantList mediaItems() const;
     QVariantList clips() const;
     QVariantList tracks() const;
+    QVariantList transitions() const;
+    QStringList transitionNames() const;
+    QStringList easingNames() const;
+    QStringList soundNames() const;
+    QStringList transitionSounds() const;
+    QVariantMap selectedTransition() const;
     qint64 frameCount() const { return project().length(); }
     double fps() const;
     QString projectDescription() const;
@@ -205,6 +221,20 @@ public:
     Q_INVOKABLE void setClipVolume(qint64 clipId, double volumeDb);
     // Separa el video y el audio de los clips seleccionados.
     Q_INVOKABLE void unlinkSelection();
+
+    // --- Transiciones ---
+    // Pone la transición `typeIndex` (de transitionNames) en el corte `cut` de la pista
+    // de video `track`, con su duración y su efecto de sonido por defecto.
+    Q_INVOKABLE void addTransition(int track, qint64 cut, int typeIndex);
+    Q_INVOKABLE void removeTransition(qint64 id);
+    Q_INVOKABLE void selectTransition(qint64 id);
+    // Cambia el tipo (con sus valores y su sonido por defecto).
+    Q_INVOKABLE void setTransitionType(qint64 id, int typeIndex);
+    // `key`: "intensity" o "blur" (0–1), "easing" (índice de easingNames).
+    Q_INVOKABLE void setTransitionValue(qint64 id, const QString& key, double value);
+    Q_INVOKABLE void setTransitionLength(qint64 id, qint64 before, qint64 after);
+    // `soundIndex`: índice de soundNames (0 = ninguno).
+    Q_INVOKABLE void setTransitionSound(qint64 id, int soundIndex);
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -251,12 +281,30 @@ private:
         sharkcut::ObjectId clip = 0; // clip para el que está colocado
         std::int64_t seekIndex = -1; // fotograma del medio al que se colocó
     };
-    // Reproducción de una pista de video: el clip que se ve y el siguiente preparado.
+    // Reproducción de una pista de video: dos hilos, para el clip que se ve y el
+    // siguiente preparado, o para los dos clips de una transición.
     struct TrackVideo {
         std::array<VideoSlot, 2> decoders;
-        int current = -1; // hueco con el clip que se ve
-        std::shared_ptr<const sharkcut::VideoFrame> frame;
-        sharkcut::ObjectId frameClip = 0; // clip al que pertenece `frame`
+        struct Shown {
+            sharkcut::ObjectId clip = 0;
+            std::shared_ptr<const sharkcut::VideoFrame> frame;
+        };
+        std::array<Shown, 2> shown; // último fotograma de cada clip que se ve
+        // El más reciente: se sigue mostrando mientras llega el de otro clip.
+        std::shared_ptr<const sharkcut::VideoFrame> last;
+        std::shared_ptr<const sharkcut::VideoFrame> frameOf(sharkcut::ObjectId clip) const {
+            for (const Shown& s : shown) {
+                if (s.clip == clip && s.frame) {
+                    return s.frame;
+                }
+            }
+            return nullptr;
+        }
+    };
+    // Un clip que hay que mostrar y su fotograma del medio.
+    struct Need {
+        const sharkcut::Clip* clip = nullptr;
+        std::int64_t index = 0;
     };
 
     // Aplica una edición registrándola en el historial.
@@ -266,12 +314,14 @@ private:
     void resetVideoSlots();
     std::vector<std::size_t> playedVideoTracks() const; // pistas de video visibles
 
-    std::int64_t sourceIndex(const sharkcut::Clip& clip, std::int64_t frame) const;
+    std::vector<Need> needsAt(std::size_t track, std::int64_t frame) const;
+    // El próximo clip que habrá que mostrar después de `frame` (para prepararlo).
+    std::optional<Need> upcoming(std::size_t track, std::int64_t frame) const;
     int slotFor(std::size_t track, const sharkcut::Clip& clip, int avoid);
-    void placeSlot(std::size_t track, int slot, const sharkcut::Clip& clip, std::int64_t frame,
-                   bool force);
-    const sharkcut::Clip* nextVideoClip(std::size_t track, std::int64_t frame) const;
-    void prepareNext(std::size_t track, std::int64_t frame);
+    int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
+    void placeSlot(std::size_t track, int slot, std::int64_t index, bool force);
+    // Coloca los hilos de la pista para `frame`. `seeking`: tras un salto (no avanzando).
+    void assignTrack(std::size_t track, std::int64_t frame, bool seeking);
     void requestFrames(qint64 frame); // colocar los hilos para mostrar `frame`
     bool takeFrames(qint64 frame);    // recoger los fotogramas de `frame`; true si están
     bool takeTrackFrame(std::size_t track, qint64 frame);
@@ -288,6 +338,9 @@ private:
     };
     CanvasBox canvasBox(const sharkcut::Clip& clip, const sharkcut::ClipTransform& t) const;
     void updateWaveformDirectory();
+    // Coloca el efecto de sonido en el corte de la transición (dentro de una edición).
+    static bool placeSound(sharkcut::Project& p, sharkcut::ObjectId transition,
+                           std::string_view soundId);
 
     void setCurrentFrame(qint64 frame);
     void setPlaying(bool playing);
@@ -306,6 +359,7 @@ private:
     QString m_projectPath; // vacío: proyecto sin guardar
     bool m_fileBusy = false;
     std::vector<sharkcut::ObjectId> m_selection;
+    sharkcut::ObjectId m_selectedTransition = 0; // excluye la selección de clips
     int m_importing = 0;
 
     std::vector<TrackVideo> m_video; // por índice de pista (las de audio no se usan)

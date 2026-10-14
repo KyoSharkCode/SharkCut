@@ -2,8 +2,10 @@
 #include "audio/audio_worker.h"
 #include "audio/ring_buffer.h"
 #include "core/edit.h"
+#include "core/sfx.h"
 #include "media/audio_decoder.h"
 #include "media/media_error.h"
+#include "media/media_info.h"
 #include "media/sequence_audio.h"
 #include "media/timeline_audio.h"
 #include "media/waveform.h"
@@ -397,4 +399,24 @@ TEST_CASE("Waveform peaks follow the audio and survive the disk cache", "[audio]
 
     std::atomic<bool> cancel{true};
     CHECK_THROWS_AS(computeWaveform(clip.path.string(), &cancel), MediaError);
+}
+
+TEST_CASE("Sound effects in the catalog exist and match their duration", "[audio][sfx]") {
+    const std::filesystem::path folder =
+        std::filesystem::path(SHARKCUT_SOURCE_DIR) / "presets" / "sfx";
+    for (const SoundEffect& effect : kSoundEffects) {
+        CAPTURE(effect.file);
+        const auto path = folder / std::string(effect.file);
+        REQUIRE(std::filesystem::exists(path));
+        const MediaInfo info = probeMedia(path.string());
+        REQUIRE(info.audio.size() == 1);
+        CHECK(std::abs(info.durationUs - effect.durationUs) < 2'000);
+        CHECK(effect.hitUs <= effect.durationUs);
+    }
+    // Cada transición tiene un sonido por defecto que existe (o ninguno).
+    for (const TransitionInfo& info : kTransitions) {
+        const std::string_view id = defaultSoundFor(info.type);
+        CHECK((id.empty() || soundEffect(id) != nullptr));
+    }
+    CHECK(soundEffect("no-existe") == nullptr);
 }

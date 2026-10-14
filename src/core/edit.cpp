@@ -84,8 +84,88 @@ bool sameRange(const Clip& a, const Clip& b) {
     return a.media == b.media && a.start == b.start && a.in == b.in && a.length == b.length;
 }
 
+const Clip* clipInTrack(const Track& track, ObjectId id) {
+    for (const Clip& clip : track.clips) {
+        if (clip.id == id) {
+            return &clip;
+        }
+    }
+    return nullptr;
+}
+
+TransitionLimits limitsIn(const Project& project, const Transition& t) {
+    TransitionLimits limits;
+    const Clip* a = project.clip(t.from);
+    const Clip* b = project.clip(t.to);
+    if (!a || !b) {
+        return limits;
+    }
+    const Transition* intoA = project.transitionInto(a->id);
+    const Transition* outOfB = project.transitionOutOf(b->id);
+    limits.maxBefore = std::max<std::int64_t>(0, a->length - (intoA ? intoA->after : 0));
+    limits.maxAfter = std::max<std::int64_t>(0, b->length - (outOfB ? outOfB->before : 0));
+    return limits;
+}
+
+// Reparte `length` fotogramas alrededor del corte (centrado) sin pasar de los límites.
+std::pair<std::int64_t, std::int64_t> centered(std::int64_t length, TransitionLimits limits) {
+    std::int64_t before = std::min(length / 2, limits.maxBefore);
+    std::int64_t after = std::min(length - before, limits.maxAfter);
+    before = std::min(length - after, limits.maxBefore); // lo que no cupo detrás, delante
+    return {before, after};
+}
+
+constexpr std::int64_t kMinTransition = 2;
+
+// Tras una edición: las transiciones siguen al clip saliente si se partió, y se quitan
+// las que ya no están en un corte (o no caben); se limita su duración a lo que cabe.
+void fixTransitions(Project& project, const Splits& splits) {
+    for (Track& track : project.tracks) {
+        if (track.kind != TrackKind::Video) {
+            track.transitions.clear();
+            continue;
+        }
+        for (Transition& t : track.transitions) {
+            // Si el clip saliente se partió, el corte queda al final de su parte derecha.
+            for (int guard = 0; guard < 64; ++guard) {
+                const auto it = splits.find(t.from);
+                if (it == splits.end()) {
+                    break;
+                }
+                t.from = it->second.right;
+            }
+        }
+        std::erase_if(track.transitions, [&track](const Transition& t) {
+            const Clip* a = clipInTrack(track, t.from);
+            const Clip* b = clipInTrack(track, t.to);
+            return !a || !b || a->end() != b->start;
+        });
+        std::sort(track.transitions.begin(), track.transitions.end(),
+                  [&track](const Transition& x, const Transition& y) {
+                      return clipInTrack(track, x.to)->start < clipInTrack(track, y.to)->start;
+                  });
+    }
+    for (Track& track : project.tracks) {
+        for (std::size_t i = 0; i < track.transitions.size();) {
+            Transition& t = track.transitions[i];
+            const TransitionLimits limits = limitsIn(project, t);
+            t.before = std::min(t.before, limits.maxBefore);
+            t.after = std::min(t.after, limits.maxAfter);
+            t.params.durationFrames = t.length();
+            if (t.sound != 0 && !project.clip(t.sound)) {
+                t.sound = 0;
+            }
+            if (t.length() < kMinTransition) {
+                track.transitions.erase(track.transitions.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            ++i;
+        }
+    }
+}
+
 // Tras una edición: enlaza las partes derechas de los pares que se partieron juntos y
-// deshace los enlaces que ya no son válidos.
+// deshace los enlaces que ya no son válidos (y pone al día las transiciones).
 void fixLinks(Project& project, const Splits& splits) {
     for (const auto& [original, info] : splits) {
         if (Clip* right = findMutable(project, info.right)) {
@@ -132,6 +212,17 @@ void fixLinks(Project& project, const Splits& splits) {
     for (ObjectId id : broken) {
         all[id].clip->link = 0;
     }
+    fixTransitions(project, splits);
+}
+
+Transition* findTransitionMutable(Project& project, ObjectId id) {
+    const auto ref = project.findTransition(id);
+    return ref ? &project.tracks[ref->track].transitions[ref->index] : nullptr;
+}
+
+bool transitionLocked(const Project& project, ObjectId id) {
+    const auto ref = project.findTransition(id);
+    return !ref || project.tracks[ref->track].locked;
 }
 
 } // namespace
@@ -556,6 +647,163 @@ bool unlinkClips(Project& project, const std::vector<ObjectId>& clips) {
         changed = true;
     }
     return changed;
+}
+
+// --- Transiciones -------------------------------------------------------------------
+
+TransitionLimits transitionLimits(const Project& project, ObjectId transition) {
+    const Transition* t = project.transition(transition);
+    return t ? limitsIn(project, *t) : TransitionLimits{};
+}
+
+ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
+                       const TransitionParams& params) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||
+        project.tracks[track].locked) {
+        return 0;
+    }
+    Track& target = project.tracks[track];
+    const Clip* a = nullptr;
+    const Clip* b = nullptr;
+    for (const Clip& clip : target.clips) {
+        if (clip.end() == cut) {
+            a = &clip;
+        }
+        if (clip.start == cut) {
+            b = &clip;
+        }
+    }
+    if (!a || !b) {
+        return 0;
+    }
+    for (Transition& existing : target.transitions) {
+        if (existing.to == b->id) {
+            TransitionParams changed = params;
+            changed.durationFrames = existing.length();
+            existing.params = changed;
+            const auto [before, after] = centered(std::max(params.durationFrames, kMinTransition),
+                                                  limitsIn(project, existing));
+            existing.before = before;
+            existing.after = after;
+            existing.params.durationFrames = existing.length();
+            return existing.id;
+        }
+    }
+    Transition t;
+    t.id = newId(project);
+    t.from = a->id;
+    t.to = b->id;
+    t.params = params;
+    const auto [before, after] =
+        centered(std::max(params.durationFrames, kMinTransition), limitsIn(project, t));
+    if (before + after < kMinTransition) {
+        return 0;
+    }
+    t.before = before;
+    t.after = after;
+    t.params.durationFrames = t.length();
+    target.transitions.push_back(t);
+    fixTransitions(project, {});
+    return project.transition(t.id) ? t.id : 0;
+}
+
+bool removeTransition(Project& project, ObjectId transition, bool withSound) {
+    const auto ref = project.findTransition(transition);
+    if (!ref || project.tracks[ref->track].locked) {
+        return false;
+    }
+    Track& track = project.tracks[ref->track];
+    const ObjectId sound = track.transitions[ref->index].sound;
+    track.transitions.erase(track.transitions.begin() + static_cast<std::ptrdiff_t>(ref->index));
+    if (withSound && sound != 0) {
+        removeClips(project, {sound}); // si su pista está bloqueada, se queda
+    }
+    return true;
+}
+
+bool setTransitionParams(Project& project, ObjectId transition, const TransitionParams& params) {
+    Transition* t = findTransitionMutable(project, transition);
+    if (!t || transitionLocked(project, transition)) {
+        return false;
+    }
+    TransitionParams changed = params;
+    changed.durationFrames = t->length();
+    changed.intensity = std::clamp(changed.intensity, 0.0, 1.0);
+    changed.blur = std::clamp(changed.blur, 0.0, 1.0);
+    if (t->params == changed) {
+        return false;
+    }
+    t->params = changed;
+    return true;
+}
+
+bool setTransitionLength(Project& project, ObjectId transition, std::int64_t before,
+                         std::int64_t after) {
+    Transition* t = findTransitionMutable(project, transition);
+    if (!t || transitionLocked(project, transition)) {
+        return false;
+    }
+    const TransitionLimits limits = limitsIn(project, *t);
+    before = std::clamp<std::int64_t>(before, 0, limits.maxBefore);
+    after = std::clamp<std::int64_t>(after, 0, limits.maxAfter);
+    if (before + after < kMinTransition || (before == t->before && after == t->after)) {
+        return false;
+    }
+    t->before = before;
+    t->after = after;
+    t->params.durationFrames = t->length();
+    return true;
+}
+
+ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
+                              std::int64_t hitFrames, double volumeDb) {
+    const Transition* t = project.transition(transition);
+    const MediaItem* item = project.findMedia(soundMedia);
+    if (!t || !item || !item->hasAudio || transitionLocked(project, transition)) {
+        return 0;
+    }
+    const std::int64_t cut = project.cutOf(*t);
+    const std::int64_t length = project.mediaFrames(*item);
+    if (cut < 0 || length <= 0) {
+        return 0;
+    }
+    // El golpe del sonido cae en el corte (si empezaría antes del 0, se recorta).
+    const std::int64_t start = std::max<std::int64_t>(0, cut - hitFrames);
+    const std::int64_t in = start - (cut - hitFrames);
+    if (in >= length) {
+        return 0;
+    }
+    const ObjectId previous = t->sound;
+    if (previous != 0) {
+        removeClips(project, {previous});
+    }
+    // Primera pista de audio sin nada en ese tramo; si no hay, una nueva debajo.
+    const std::int64_t end = start + (length - in);
+    std::size_t number = 0;
+    for (;; ++number) {
+        const auto index = project.trackIndex(TrackKind::Audio, number);
+        if (!index) {
+            break; // placeClip la crea
+        }
+        const Track& track = project.tracks[*index];
+        const bool free = !track.locked &&
+                          std::none_of(track.clips.begin(), track.clips.end(), [&](const Clip& c) {
+                              return c.start < end && c.end() > start;
+                          });
+        if (free) {
+            break;
+        }
+    }
+    const ObjectId clip =
+        placeClip(project, soundMedia, start, in, length - in, {.video = 0, .audio = number});
+    if (clip == 0) {
+        return 0;
+    }
+    setClipVolume(project, clip, volumeDb);
+    if (Transition* mutableT = findTransitionMutable(project, transition)) {
+        mutableT->sound = clip;
+    }
+    return clip;
 }
 
 std::vector<ObjectId> withLinked(const Project& project, const std::vector<ObjectId>& clips) {

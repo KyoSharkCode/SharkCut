@@ -15,6 +15,7 @@
 // a 30 fps en un proyecto a 60 fps no necesita conversiones al editar.
 
 #include "core/time.h"
+#include "core/transition.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -85,12 +86,32 @@ struct Clip {
     friend bool operator==(const Clip&, const Clip&) = default;
 };
 
+// Transición en el corte entre dos clips seguidos de una pista de video (A termina
+// justo donde empieza B). Ocupa [corte − before, corte + after): en ese tramo A sigue
+// más allá de su final y B empieza antes de su inicio, con el material que sobra del
+// medio (si no hay, se repite su último o su primer fotograma). Ningún clip se mueve,
+// así que el audio y las demás pistas siguen sincronizados (como en Premiere).
+struct Transition {
+    ObjectId id = 0;
+    ObjectId from = 0;       // clip saliente (A)
+    ObjectId to = 0;         // clip entrante (B)
+    std::int64_t before = 0; // fotogramas antes del corte
+    std::int64_t after = 0;  // fotogramas después del corte
+    TransitionParams params; // params.durationFrames = before + after
+    ObjectId sound = 0;      // clip de audio con su efecto de sonido (0 = ninguno)
+
+    std::int64_t length() const { return before + after; }
+
+    friend bool operator==(const Transition&, const Transition&) = default;
+};
+
 struct Track {
     TrackKind kind = TrackKind::Video;
-    std::vector<Clip> clips; // ordenados por `start` y sin solaparse
-    bool hidden = false;     // video: no se ve (ni en la vista previa ni al exportar)
-    bool muted = false;      // audio: no suena
-    bool locked = false;     // sus clips no se pueden editar
+    std::vector<Clip> clips;               // ordenados por `start` y sin solaparse
+    std::vector<Transition> transitions{}; // solo video; ordenadas por corte
+    bool hidden = false;                   // video: no se ve (ni en la vista previa ni al exportar)
+    bool muted = false;                    // audio: no suena
+    bool locked = false;                   // sus clips no se pueden editar
 
     friend bool operator==(const Track&, const Track&) = default;
 };
@@ -124,9 +145,20 @@ struct Project {
     // Una capa de video visible en un fotograma (ver videoLayersAt).
     struct Layer {
         std::size_t track = 0;
-        const Clip* clip = nullptr;
+        const Clip* clip = nullptr; // el clip (en una transición, el saliente)
         const MediaItem* media = nullptr;
         std::int64_t mediaFrame = 0; // fotograma del medio que se ve
+        // Durante una transición: el clip entrante y en qué punto de ella se está.
+        const Transition* transition = nullptr;
+        const Clip* clipB = nullptr;
+        const MediaItem* mediaB = nullptr;
+        std::int64_t mediaFrameB = 0;
+        std::int64_t transitionFrame = 0; // 0 … length() − 1
+    };
+
+    struct TransitionRef {
+        std::size_t track = 0;
+        std::size_t index = 0;
     };
 
     // Final de la línea de tiempo (fin del último clip de cualquier pista).
@@ -150,6 +182,17 @@ struct Project {
     // Clip de la pista `track` que se ve en `frame`, o nullptr si hay un hueco.
     const Clip* clipAt(std::size_t track, std::int64_t frame) const;
 
+    // --- Transiciones ---
+    std::optional<TransitionRef> findTransition(ObjectId id) const;
+    const Transition* transition(ObjectId id) const;
+    // Fotograma del corte (donde empieza el clip entrante); -1 si no existe.
+    std::int64_t cutOf(const Transition& transition) const;
+    // Transición de la pista que cubre `frame`, o nullptr.
+    const Transition* transitionAt(std::size_t track, std::int64_t frame) const;
+    // Transición en el corte donde empieza (o termina) un clip, o nullptr.
+    const Transition* transitionInto(ObjectId clip) const;
+    const Transition* transitionOutOf(ObjectId clip) const;
+
     // Duración del medio en fotogramas del proyecto.
     std::int64_t mediaFrames(const MediaItem& item) const;
 
@@ -157,11 +200,13 @@ struct Project {
     // la línea de tiempo, si `frame` cae dentro del clip.
     std::int64_t mediaTimeUs(const Clip& clip, std::int64_t frame) const;
 
-    // Fotograma del medio (en sus propios fps) que se ve en `frame`.
+    // Fotograma del medio (en sus propios fps) que se ve en `frame`. Fuera del clip
+    // (en una transición) sigue el medio, limitado a su primer y último fotograma.
     std::int64_t mediaFrameIndex(const Clip& clip, std::int64_t frame) const;
 
-    // Lo que se ve en `frame`, de abajo (V1) arriba: un clip por pista de video
-    // visible, sin los que apuntan a un medio que no existe.
+    // Lo que se ve en `frame`, de abajo (V1) arriba: un clip (o dos, en una
+    // transición) por pista de video visible, sin los que apuntan a un medio que no
+    // existe.
     std::vector<Layer> videoLayersAt(std::int64_t frame) const;
 
     friend bool operator==(const Project&, const Project&) = default;

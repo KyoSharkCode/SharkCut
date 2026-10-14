@@ -33,6 +33,9 @@ target_link_libraries(sharkcut_tests PRIVATE
     FFmpeg::avformat FFmpeg::avcodec FFmpeg::avutil
 )
 sharkcut_copy_runtime_dlls(sharkcut_tests)
+# Para comprobar los archivos de presets/sfx desde los tests.
+target_compile_definitions(sharkcut_tests PRIVATE
+    SHARKCUT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)

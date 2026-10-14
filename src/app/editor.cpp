@@ -4,6 +4,7 @@
 #include "audio/audio_worker.h"
 #include "core/edit.h"
 #include "core/project_file.h"
+#include "core/sfx.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
 #include "media/timeline_audio.h"
@@ -84,6 +85,33 @@ ObjectId findMediaByPath(const Project& project, const std::string& path) {
     return 0;
 }
 
+QString fromView(std::string_view text) {
+    return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+}
+
+// Carpeta de los efectos de sonido, junto al ejecutable.
+QString soundFolder() {
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
+}
+
+// Medio de la biblioteca para un efecto de sonido (se añade si no está).
+ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
+    const std::string path = QDir(soundFolder()).filePath(fromView(effect.file)).toStdString();
+    if (const ObjectId id = findMediaByPath(project, path)) {
+        return id;
+    }
+    MediaItem item;
+    item.path = path;
+    item.name = std::string(effect.file);
+    item.durationUs = effect.durationUs;
+    item.frameRate = project.settings.frameRate;
+    item.hasAudio = true;
+    return sharkcut::addMedia(project, item);
+}
+
+// Volumen al que entra un efecto de sonido (por debajo de la voz y el juego).
+constexpr double kSoundVolumeDb = -6.0;
+
 // Proyecto nuevo: V1 y V2 encima, A1 y A2 debajo (gameplay, facecam y música).
 Project newTimeline() {
     Project project;
@@ -112,6 +140,15 @@ bool sameVideo(const Project& a, const Project& b) {
         if (ta.kind == sharkcut::TrackKind::Video &&
             !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
                         sameTiming)) {
+            return false;
+        }
+        // Lo que dura cada transición cambia qué fotogramas hacen falta (su tipo, no).
+        if (!std::equal(ta.transitions.begin(), ta.transitions.end(), tb.transitions.begin(),
+                        tb.transitions.end(),
+                        [](const sharkcut::Transition& x, const sharkcut::Transition& y) {
+                            return x.from == y.from && x.to == y.to && x.before == y.before &&
+                                   x.after == y.after;
+                        })) {
             return false;
         }
     }
@@ -425,12 +462,35 @@ QSize Editor::canvasSize() const {
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
-        if (layer.track >= m_video.size() || !m_video[layer.track].frame) {
+        if (layer.track >= m_video.size()) {
+            continue;
+        }
+        const TrackVideo& track = m_video[layer.track];
+        auto a = track.frameOf(layer.clip->id);
+        auto b = layer.transition ? track.frameOf(layer.clipB->id) : nullptr;
+        if (!a && !b) {
+            a = track.last; // mientras llega el fotograma de este clip
+        }
+        if (!a && !b) {
             continue;
         }
         sharkcut::CompositorLayer& out = input.layers.emplace_back();
-        out.a = m_video[layer.track].frame;
-        out.transform = transformOf(layer.clip->id);
+        if (layer.transition && a && b) {
+            out.a = a;
+            out.b = b;
+            out.transform = transformOf(layer.clip->id);
+            out.transformB = transformOf(layer.clipB->id);
+            out.transition = layer.transition->params;
+            out.state =
+                sharkcut::evaluateTransition(layer.transition->params, layer.transitionFrame);
+        } else {
+            // Solo ha llegado uno de los dos: se muestra el que corresponde a ese lado
+            // del corte, como si no hubiera transición.
+            const bool showB =
+                !a || (b && layer.transition && m_currentFrame >= layer.clipB->start);
+            out.a = showB ? b : a;
+            out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
+        }
     }
     return input;
 }
@@ -517,6 +577,24 @@ void Editor::openProjectPath(const QString& path) {
         QStringList missing;
         try {
             *project = sharkcut::loadProject(sharkcut::pathFromUtf8(path.toStdString()));
+            // Los efectos de sonido van con SharkCut: si se instaló en otra carpeta (u
+            // otro equipo), se buscan en la de ahora.
+            for (MediaItem& item : project->media) {
+                std::error_code ignored;
+                const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
+                if (std::filesystem::exists(current, ignored)) {
+                    continue;
+                }
+                const QString file =
+                    QString::fromStdString(sharkcut::utf8FromPath(current.filename()));
+                const bool isEffect = std::any_of(
+                    sharkcut::kSoundEffects.begin(), sharkcut::kSoundEffects.end(),
+                    [&file](const sharkcut::SoundEffect& e) { return fromView(e.file) == file; });
+                const QString candidate = QDir(soundFolder()).filePath(file);
+                if (isEffect && QFileInfo::exists(candidate)) {
+                    item.path = candidate.toStdString();
+                }
+            }
             for (const MediaItem& item : project->media) {
                 std::error_code ignored;
                 if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
@@ -963,6 +1041,10 @@ void Editor::splitClip(qint64 clipId, qint64 frame) {
 }
 
 void Editor::removeSelection() {
+    if (m_selectedTransition != 0) {
+        removeTransition(static_cast<qint64>(m_selectedTransition));
+        return;
+    }
     const std::vector<ObjectId> selected = m_selection;
     edit(QStringLiteral("Quitar"),
          [&selected](Project& p) { return sharkcut::removeClips(p, selected); });
@@ -1150,6 +1232,7 @@ void Editor::select(qint64 clipId, bool add) {
     if (!project().clip(id)) {
         return;
     }
+    m_selectedTransition = 0;
     if (!add) {
         m_selection = {id};
     } else if (isSelected(clipId)) {
@@ -1164,10 +1247,268 @@ void Editor::select(qint64 clipId, bool add) {
 }
 
 void Editor::clearSelection() {
-    if (!m_selection.empty()) {
+    if (!m_selection.empty() || m_selectedTransition != 0) {
         m_selection.clear();
+        m_selectedTransition = 0;
         emit selectionChanged();
     }
+}
+
+// --- Transiciones -------------------------------------------------------------------
+
+QVariantList Editor::transitions() const {
+    QVariantList list;
+    const Project& p = project();
+    for (std::size_t t = 0; t < p.tracks.size(); ++t) {
+        for (const sharkcut::Transition& tr : p.tracks[t].transitions) {
+            QVariantMap entry;
+            entry[QStringLiteral("id")] = static_cast<qint64>(tr.id);
+            entry[QStringLiteral("track")] = static_cast<int>(t);
+            entry[QStringLiteral("cut")] = static_cast<qint64>(p.cutOf(tr));
+            entry[QStringLiteral("before")] = static_cast<qint64>(tr.before);
+            entry[QStringLiteral("after")] = static_cast<qint64>(tr.after);
+            entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(tr.params.type).name);
+            entry[QStringLiteral("sound")] = tr.sound != 0;
+            entry[QStringLiteral("locked")] = p.tracks[t].locked;
+            const sharkcut::TransitionLimits limits = sharkcut::transitionLimits(p, tr.id);
+            entry[QStringLiteral("maxBefore")] = static_cast<qint64>(limits.maxBefore);
+            entry[QStringLiteral("maxAfter")] = static_cast<qint64>(limits.maxAfter);
+            list.append(entry);
+        }
+    }
+    return list;
+}
+
+QStringList Editor::transitionNames() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kTransitions) {
+        names << fromView(info.name);
+    }
+    return names;
+}
+
+QStringList Editor::easingNames() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kEasings) {
+        names << fromView(info.name);
+    }
+    return names;
+}
+
+QStringList Editor::soundNames() const {
+    QStringList names{QStringLiteral("Ninguno")};
+    for (const auto& effect : sharkcut::kSoundEffects) {
+        names << fromView(effect.name);
+    }
+    return names;
+}
+
+QStringList Editor::transitionSounds() const {
+    QStringList names;
+    for (const auto& info : sharkcut::kTransitions) {
+        const sharkcut::SoundEffect* effect =
+            sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type));
+        names << (effect ? fromView(effect->name) : QString());
+    }
+    return names;
+}
+
+QVariantMap Editor::selectedTransition() const {
+    const Project& p = project();
+    const sharkcut::Transition* t = p.transition(m_selectedTransition);
+    if (!t) {
+        return {};
+    }
+    const auto ref = p.findTransition(t->id);
+    QVariantMap result;
+    result[QStringLiteral("id")] = static_cast<qint64>(t->id);
+    result[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(t->params.type).name);
+    result[QStringLiteral("track")] = QString::fromStdString(p.trackName(ref->track));
+    result[QStringLiteral("locked")] = p.tracks[ref->track].locked;
+    result[QStringLiteral("typeIndex")] = static_cast<int>(t->params.type);
+    result[QStringLiteral("before")] = static_cast<qint64>(t->before);
+    result[QStringLiteral("after")] = static_cast<qint64>(t->after);
+    result[QStringLiteral("length")] = static_cast<qint64>(t->length());
+    result[QStringLiteral("intensity")] = t->params.intensity;
+    result[QStringLiteral("blur")] = t->params.blur;
+    result[QStringLiteral("easingIndex")] = static_cast<int>(t->params.easing);
+    const sharkcut::TransitionLimits limits = sharkcut::transitionLimits(p, t->id);
+    result[QStringLiteral("maxBefore")] = static_cast<qint64>(limits.maxBefore);
+    result[QStringLiteral("maxAfter")] = static_cast<qint64>(limits.maxAfter);
+    // Qué sonido lleva: por el archivo de su clip.
+    int soundIndex = 0;
+    if (const Clip* sound = p.clip(t->sound)) {
+        if (const MediaItem* item = p.findMedia(sound->media)) {
+            const QString file = QFileInfo(QString::fromStdString(item->path)).fileName();
+            for (std::size_t i = 0; i < sharkcut::kSoundEffects.size(); ++i) {
+                if (fromView(sharkcut::kSoundEffects[i].file) == file) {
+                    soundIndex = static_cast<int>(i) + 1;
+                }
+            }
+        }
+        result[QStringLiteral("soundClip")] = static_cast<qint64>(sound->id);
+        result[QStringLiteral("soundVolumeDb")] = sound->volumeDb;
+    }
+    result[QStringLiteral("soundIndex")] = soundIndex;
+    result[QStringLiteral("hasSound")] = t->sound != 0;
+    return result;
+}
+
+bool Editor::placeSound(Project& p, ObjectId transition, std::string_view soundId) {
+    const sharkcut::SoundEffect* effect = sharkcut::soundEffect(soundId);
+    if (!effect) {
+        return false;
+    }
+    const ObjectId media = soundMedia(p, *effect);
+    const std::int64_t hit = sharkcut::rescale(effect->hitUs, sharkcut::kMicroseconds,
+                                               p.settings.frameRate.frameDuration());
+    return sharkcut::placeTransitionSound(p, transition, media, hit, kSoundVolumeDb) != 0;
+}
+
+void Editor::addTransition(int track, qint64 cut, int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size()) ||
+        track < 0) {
+        return;
+    }
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    const bool added = edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        sharkcut::TransitionParams params = info.defaults;
+        // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+        const sharkcut::FrameRate rate = p.settings.frameRate;
+        params.durationFrames = std::max<std::int64_t>(
+            2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+        const sharkcut::Transition* before = nullptr;
+        for (const sharkcut::Transition& t :
+             p.tracks[static_cast<std::size_t>(track)].transitions) {
+            if (p.cutOf(t) == cut) {
+                before = &t;
+            }
+        }
+        const ObjectId previousSound = before ? before->sound : 0;
+        created = sharkcut::addTransition(p, static_cast<std::size_t>(track), cut, params);
+        if (created == 0) {
+            return false;
+        }
+        // El sonido del tipo nuevo sustituye al que hubiera.
+        const std::string_view sound = sharkcut::defaultSoundFor(info.type);
+        if (!sound.empty()) {
+            placeSound(p, created, sound);
+        } else if (previousSound != 0) {
+            sharkcut::removeClips(p, {previousSound});
+        }
+        return true;
+    });
+    if (added) {
+        m_selection.clear();
+        m_selectedTransition = created;
+        emit selectionChanged();
+    } else if (created == 0) {
+        setError(QStringLiteral("Las transiciones van en el corte entre dos clips seguidos de una "
+                                "pista de video"));
+    }
+}
+
+void Editor::removeTransition(qint64 id) {
+    const auto transition = static_cast<ObjectId>(id);
+    if (edit(QStringLiteral("Quitar transición"),
+             [transition](Project& p) { return sharkcut::removeTransition(p, transition); })) {
+        if (m_selectedTransition == transition) {
+            m_selectedTransition = 0;
+            emit selectionChanged();
+        }
+    }
+}
+
+void Editor::selectTransition(qint64 id) {
+    const auto transition = static_cast<ObjectId>(id);
+    if (!project().transition(transition)) {
+        return;
+    }
+    m_selection.clear();
+    m_selectedTransition = transition;
+    emit selectionChanged();
+}
+
+void Editor::setTransitionType(qint64 id, int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const auto transition = static_cast<ObjectId>(id);
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    edit(QStringLiteral("Tipo de transición"), [&](Project& p) {
+        const sharkcut::Transition* t = p.transition(transition);
+        if (!t || t->params.type == info.type) {
+            return false;
+        }
+        const ObjectId oldSound = t->sound;
+        if (!sharkcut::setTransitionParams(p, transition, info.defaults)) {
+            return false;
+        }
+        const std::string_view sound = sharkcut::defaultSoundFor(info.type);
+        if (!sound.empty()) {
+            placeSound(p, transition, sound);
+        } else if (oldSound != 0) {
+            sharkcut::removeClips(p, {oldSound});
+        }
+        return true;
+    });
+}
+
+void Editor::setTransitionValue(qint64 id, const QString& key, double value) {
+    const auto transition = static_cast<ObjectId>(id);
+    const sharkcut::Transition* t = project().transition(transition);
+    if (!t) {
+        return;
+    }
+    sharkcut::TransitionParams params = t->params;
+    QString label;
+    if (key == QLatin1String("intensity")) {
+        params.intensity = value;
+        label = QStringLiteral("Intensidad de la transición");
+    } else if (key == QLatin1String("blur")) {
+        params.blur = value;
+        label = QStringLiteral("Desenfoque de la transición");
+    } else if (key == QLatin1String("easing")) {
+        const auto index = static_cast<std::size_t>(std::max(0.0, value));
+        if (index >= sharkcut::kEasings.size()) {
+            return;
+        }
+        params.easing = sharkcut::kEasings[index].easing;
+        label = QStringLiteral("Curva de la transición");
+    } else {
+        return;
+    }
+    edit(label, [transition, params](Project& p) {
+        return sharkcut::setTransitionParams(p, transition, params);
+    });
+}
+
+void Editor::setTransitionLength(qint64 id, qint64 before, qint64 after) {
+    const auto transition = static_cast<ObjectId>(id);
+    edit(QStringLiteral("Duración de la transición"), [transition, before, after](Project& p) {
+        return sharkcut::setTransitionLength(p, transition, before, after);
+    });
+}
+
+void Editor::setTransitionSound(qint64 id, int soundIndex) {
+    const auto transition = static_cast<ObjectId>(id);
+    edit(QStringLiteral("Sonido de la transición"), [&](Project& p) {
+        const sharkcut::Transition* t = p.transition(transition);
+        if (!t) {
+            return false;
+        }
+        if (soundIndex <= 0) {
+            return t->sound != 0 && sharkcut::removeClips(p, {t->sound});
+        }
+        if (static_cast<std::size_t>(soundIndex) > sharkcut::kSoundEffects.size()) {
+            return false;
+        }
+        return placeSound(p, transition,
+                          sharkcut::kSoundEffects[static_cast<std::size_t>(soundIndex) - 1].id);
+    });
 }
 
 bool Editor::isSelected(qint64 clipId) const {
@@ -1182,6 +1523,9 @@ void Editor::onProjectChanged() {
     std::erase_if(m_selection, [this](ObjectId id) { return project().clip(id) == nullptr; });
     if (m_previewClip != 0 && !project().clip(m_previewClip)) {
         m_previewClip = 0;
+    }
+    if (m_selectedTransition != 0 && !project().transition(m_selectedTransition)) {
+        m_selectedTransition = 0;
     }
     emit selectionChanged();
 
@@ -1252,12 +1596,15 @@ void Editor::resetVideoSlots() {
             slot.clip = 0;
             slot.seekIndex = -1;
         }
-        track.current = -1;
-        // El último fotograma se conserva mientras llega el nuevo, si sigue en la pista.
-        const auto ref = p.findClip(track.frameClip);
-        if (!video || !ref || ref->track != t) {
-            track.frame.reset();
-            track.frameClip = 0;
+        // Lo último que se veía se conserva mientras llega lo nuevo, si sigue en la pista.
+        for (TrackVideo::Shown& shown : track.shown) {
+            const auto ref = p.findClip(shown.clip);
+            if (!video || !ref || ref->track != t) {
+                shown = {};
+            }
+        }
+        if (!video) {
+            track.last.reset();
         }
     }
 }
@@ -1273,8 +1620,47 @@ std::vector<std::size_t> Editor::playedVideoTracks() const {
     return result;
 }
 
-std::int64_t Editor::sourceIndex(const Clip& clip, std::int64_t frame) const {
-    return project().mediaFrameIndex(clip, frame);
+std::vector<Editor::Need> Editor::needsAt(std::size_t track, std::int64_t frame) const {
+    const Project& p = project();
+    if (const sharkcut::Transition* t = p.transitionAt(track, frame)) {
+        const Clip* a = p.clip(t->from);
+        const Clip* b = p.clip(t->to);
+        if (a && b) {
+            return {{a, p.mediaFrameIndex(*a, frame)}, {b, p.mediaFrameIndex(*b, frame)}};
+        }
+    }
+    if (const Clip* clip = p.clipAt(track, frame)) {
+        return {{clip, p.mediaFrameIndex(*clip, frame)}};
+    }
+    return {};
+}
+
+std::optional<Editor::Need> Editor::upcoming(std::size_t track, std::int64_t frame) const {
+    const Project& p = project();
+    const std::vector<Need> now = needsAt(track, frame);
+    for (const Clip& clip : p.tracks[track].clips) {
+        if (clip.start <= frame || std::any_of(now.begin(), now.end(), [&clip](const Need& n) {
+                return n.clip->id == clip.id;
+            })) {
+            continue;
+        }
+        // Si entra con una transición, se ve desde antes de su inicio.
+        const sharkcut::Transition* into = p.transitionInto(clip.id);
+        const std::int64_t first = clip.start - (into ? into->before : 0);
+        return Need{&clip, p.mediaFrameIndex(clip, std::max(first, frame + 1))};
+    }
+    return std::nullopt;
+}
+
+int Editor::slotWith(std::size_t track, ObjectId clip) const {
+    const auto& decoders = m_video[track].decoders;
+    for (int i = 0; i < static_cast<int>(decoders.size()); ++i) {
+        if (decoders[static_cast<std::size_t>(i)].worker &&
+            decoders[static_cast<std::size_t>(i)].clip == clip) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
@@ -1318,75 +1704,83 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
     return choice;
 }
 
-void Editor::placeSlot(std::size_t track, int slot, const Clip& clip, std::int64_t frame,
-                       bool always) {
+void Editor::placeSlot(std::size_t track, int slot, std::int64_t index, bool force) {
     VideoSlot& s = m_video[track].decoders[static_cast<std::size_t>(slot)];
-    const std::int64_t index = sourceIndex(clip, frame);
-    if (always || !s.worker->hasFrame(index)) {
+    if (force || !s.worker->hasFrame(index)) {
         s.worker->seek(index);
     }
     s.seekIndex = index;
 }
 
-const Clip* Editor::nextVideoClip(std::size_t track, std::int64_t frame) const {
-    const auto& clips = project().tracks[track].clips;
-    const auto it = std::upper_bound(clips.begin(), clips.end(), frame,
-                                     [](std::int64_t f, const Clip& c) { return f < c.start; });
-    return it != clips.end() ? &*it : nullptr;
-}
-
-void Editor::prepareNext(std::size_t track, std::int64_t frame) {
-    const Clip* next = nextVideoClip(track, frame);
-    if (!next) {
-        return;
+void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
+    const std::vector<Need> needs = needsAt(t, frame);
+    int used = -1; // hilo ya ocupado por otro clip que se ve
+    for (const Need& need : needs) {
+        int slot = slotWith(t, need.clip->id);
+        if (slot >= 0 && slot != used) {
+            // Ya estaba preparado (o reproduciéndose): tras un salto, se recoloca.
+            if (seeking) {
+                placeSlot(t, slot, need.index, m_playing);
+            }
+        } else {
+            slot = slotFor(t, *need.clip, used);
+            placeSlot(t, slot, need.index, true);
+        }
+        used = slot;
     }
-    const int slot = slotFor(track, *next, m_video[track].current);
-    VideoSlot& s = m_video[track].decoders[static_cast<std::size_t>(slot)];
-    const std::int64_t index = sourceIndex(*next, next->start);
-    if (s.seekIndex != index) {
-        s.worker->seek(index); // su primer fotograma, preparado de antemano
-        s.seekIndex = index;
+    // Con un hilo libre, se prepara lo siguiente en su primer fotograma.
+    if (needs.size() < 2) {
+        if (const std::optional<Need> next = upcoming(t, frame)) {
+            int slot = slotWith(t, next->clip->id);
+            if (slot < 0 || slot == used) {
+                slot = slotFor(t, *next->clip, used);
+            }
+            VideoSlot& s = m_video[t].decoders[static_cast<std::size_t>(slot)];
+            if (s.seekIndex != next->index) {
+                s.worker->seek(next->index);
+                s.seekIndex = next->index;
+            }
+        }
     }
 }
 
 void Editor::requestFrames(qint64 frame) {
     for (std::size_t t : playedVideoTracks()) {
-        TrackVideo& track = m_video[t];
-        const Clip* current = project().clipAt(t, frame);
-        if (current) {
-            const bool assigned =
-                track.current >= 0 &&
-                track.decoders[static_cast<std::size_t>(track.current)].clip == current->id;
-            const int slot = assigned ? track.current : slotFor(t, *current, -1);
-            track.current = slot;
-            placeSlot(t, slot, *current, frame, m_playing || !assigned);
-        } else {
-            track.current = -1;
-        }
-        prepareNext(t, frame);
+        assignTrack(t, frame, true);
     }
 }
 
 bool Editor::takeTrackFrame(std::size_t t, qint64 frame) {
     TrackVideo& track = m_video[t];
-    const Clip* current = project().clipAt(t, frame);
-    if (!current) {
-        track.frame.reset(); // hueco: transparente
-        track.frameClip = 0;
+    const std::vector<Need> needs = needsAt(t, frame);
+    if (needs.empty()) {
+        track.shown = {}; // hueco: transparente
+        track.last.reset();
         return true;
     }
-    if (track.current < 0 ||
-        track.decoders[static_cast<std::size_t>(track.current)].clip != current->id) {
-        return false;
+    bool all = true;
+    std::array<TrackVideo::Shown, 2> shown;
+    for (std::size_t k = 0; k < needs.size() && k < shown.size(); ++k) {
+        const Need& need = needs[k];
+        shown[k].clip = need.clip->id;
+        shown[k].frame = track.frameOf(need.clip->id);
+        const int slot = slotWith(t, need.clip->id);
+        if (slot < 0) {
+            all = false;
+            continue;
+        }
+        DecodeWorker& worker = *track.decoders[static_cast<std::size_t>(slot)].worker;
+        if (auto f = worker.takeUpTo(need.index)) {
+            shown[k].frame = std::move(f);
+        }
+        if (shown[k].frame) {
+            track.last = shown[k].frame;
+        }
+        const bool exact = shown[k].frame && shown[k].frame->index == need.index;
+        all = all && (exact || worker.finished());
     }
-    DecodeWorker& worker = *track.decoders[static_cast<std::size_t>(track.current)].worker;
-    const std::int64_t index = sourceIndex(*current, frame);
-    if (auto f = worker.takeUpTo(index)) {
-        track.frame = std::move(f);
-        track.frameClip = current->id;
-    }
-    const bool exact = track.frame && track.frameClip == current->id && track.frame->index == index;
-    return exact || worker.finished();
+    track.shown = shown;
+    return all;
 }
 
 bool Editor::takeFrames(qint64 frame) {
@@ -1435,8 +1829,8 @@ void Editor::seek(qint64 frame) {
     if (total <= 0) {
         setCurrentFrame(0);
         for (TrackVideo& track : m_video) {
-            track.frame.reset();
-            track.frameClip = 0;
+            track.shown = {};
+            track.last.reset();
         }
         m_pendingFrame = -1;
         setBusy(false);
@@ -1503,27 +1897,9 @@ void Editor::advance() {
     const bool reachedEnd = target >= last;
     target = std::min(target, last);
 
+    // Al entrar en otro clip (o en una transición) se usa el hilo que ya estaba preparado.
     for (std::size_t t : playedVideoTracks()) {
-        TrackVideo& track = m_video[t];
-        // Al entrar en otro clip se usa el hilo que ya estaba preparado.
-        if (const Clip* current = project().clipAt(t, target)) {
-            if (track.current < 0 ||
-                track.decoders[static_cast<std::size_t>(track.current)].clip != current->id) {
-                int slot = -1;
-                for (int i = 0; i < static_cast<int>(track.decoders.size()); ++i) {
-                    if (track.decoders[static_cast<std::size_t>(i)].worker &&
-                        track.decoders[static_cast<std::size_t>(i)].clip == current->id) {
-                        slot = i;
-                    }
-                }
-                if (slot < 0) {
-                    slot = slotFor(t, *current, -1);
-                    placeSlot(t, slot, *current, target, true);
-                }
-                track.current = slot;
-            }
-        }
-        prepareNext(t, target);
+        assignTrack(t, target, false);
         takeTrackFrame(t, target);
     }
     setCurrentFrame(target);

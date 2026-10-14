@@ -24,6 +24,7 @@ qt_add_qml_module(SharkCut
         qml/BotonIcono.qml
         qml/Medidor.qml
         qml/ArrastreMedio.qml
+        qml/ArrastreTransicion.qml
         qml/PanelMedios.qml
         qml/DialogoExportar.qml
         qml/DialogoNuevoProyecto.qml
@@ -63,6 +64,14 @@ target_link_libraries(SharkCut PRIVATE
 )
 sharkcut_copy_runtime_dlls(SharkCut)
 
+# Efectos de sonido de las transiciones: junto al ejecutable (presets/sfx/), donde los
+# busca el editor.
+add_custom_command(TARGET SharkCut POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${PROJECT_SOURCE_DIR}/presets/sfx $<TARGET_FILE_DIR:SharkCut>/presets/sfx
+    COMMENT "Copiando los efectos de sonido"
+)
+
 # Instalación: `cmake --install` deja una carpeta lista para ejecutar
 # (en Windows copia las DLL de Qt con windeployqt).
 install(TARGETS SharkCut
@@ -75,6 +84,9 @@ qt_generate_deploy_qml_app_script(
     NO_TRANSLATIONS
 )
 install(SCRIPT ${deploy_script})
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/presets/sfx
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/presets
+)
 
 # FFmpeg (DLL y licencia) junto al ejecutable instalado.
 if(WIN32)

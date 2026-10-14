@@ -561,3 +561,162 @@ TEST_CASE("Moving to the top or bottom track keeps the other tracks", "[timeline
     CHECK(trackClips(p, TrackKind::Audio, 1).empty());
     checkInvariants(p);
 }
+
+// --- Transiciones --------------------------------------------------------------------
+
+namespace {
+
+// A: medio 0–300 en 0–300; B: medio 400–600 en 300–500 (corte en 300).
+Project projectWithCut(ObjectId& a, ObjectId& b) {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 20, true, true));
+    a = placeClip(p, m, 0, 0, 300);
+    b = placeClip(p, m, 300, 400, 200);
+    return p;
+}
+
+TransitionParams withLength(std::int64_t frames) {
+    TransitionParams params;
+    params.durationFrames = frames;
+    return params;
+}
+
+} // namespace
+
+TEST_CASE("Transitions sit on a cut and mix both clips", "[timeline][transitions]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b);
+    CHECK(addTransition(p, kVideoTrack, 250, withLength(30)) == 0); // ahí no hay corte
+    const ObjectId t = addTransition(p, kVideoTrack, 300, withLength(30));
+    REQUIRE(t != 0);
+    const Transition* tr = p.transition(t);
+    CHECK(tr->from == a);
+    CHECK(tr->to == b);
+    CHECK(tr->before == 15);
+    CHECK(tr->after == 15);
+    CHECK(p.cutOf(*tr) == 300);
+    CHECK(p.transitionAt(kVideoTrack, 284) == nullptr);
+    CHECK(p.transitionAt(kVideoTrack, 285) == tr);
+    CHECK(p.transitionAt(kVideoTrack, 314) == tr);
+    CHECK(p.transitionAt(kVideoTrack, 315) == nullptr);
+
+    // En el fotograma 290, A sigue normal y B usa material de antes de su entrada.
+    auto layers = p.videoLayersAt(290);
+    REQUIRE(layers.size() == 1);
+    CHECK(layers[0].transition == tr);
+    CHECK(layers[0].clip->id == a);
+    CHECK(layers[0].mediaFrame == 290);
+    CHECK(layers[0].clipB->id == b);
+    CHECK(layers[0].mediaFrameB == 390);
+    CHECK(layers[0].transitionFrame == 5);
+    // Pasado el corte, A sigue con el material de después de su salida.
+    layers = p.videoLayersAt(310);
+    CHECK(layers[0].mediaFrame == 310);
+    CHECK(layers[0].mediaFrameB == 410);
+    CHECK(layers[0].transitionFrame == 25);
+
+    // Otra en el mismo corte cambia la que había.
+    TransitionParams other = withLength(30);
+    other.type = TransitionType::PanLeft;
+    CHECK(addTransition(p, kVideoTrack, 300, other) == t);
+    CHECK(p.tracks[kVideoTrack].transitions.size() == 1);
+    CHECK(p.transition(t)->params.type == TransitionType::PanLeft);
+    checkInvariants(p);
+}
+
+TEST_CASE("Transitions without spare media repeat the first frame", "[timeline][transitions]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 20, true, true));
+    placeClip(p, m, 0, 0, 300);
+    placeClip(p, m, 300, 0, 300); // B empieza en el primer fotograma del medio
+    REQUIRE(addTransition(p, kVideoTrack, 300, withLength(20)) != 0);
+    const auto layers = p.videoLayersAt(292);
+    REQUIRE(layers.size() == 1);
+    CHECK(layers[0].mediaFrameB == 0);
+}
+
+TEST_CASE("Transition length is limited by its clips", "[timeline][transitions]") {
+    Project p;
+    const ObjectId m = addMedia(p, media("a.mp4", 20, true, true));
+    placeClip(p, m, 0, 0, 10);
+    placeClip(p, m, 10, 100, 6);
+    placeClip(p, m, 16, 200, 50);
+    const ObjectId t = addTransition(p, kVideoTrack, 10, withLength(30));
+    REQUIRE(t != 0);
+    CHECK(p.transition(t)->before == 10);
+    CHECK(p.transition(t)->after == 6);
+    CHECK_FALSE(setTransitionLength(p, t, 100, 100)); // ya está al máximo
+    CHECK_FALSE(setTransitionLength(p, t, 1, 0));     // menos de 2 fotogramas
+    REQUIRE(setTransitionLength(p, t, 4, 2));
+    // La del corte siguiente no puede pisar la anterior dentro del clip de 6.
+    const ObjectId next = addTransition(p, kVideoTrack, 16, withLength(30));
+    REQUIRE(next != 0);
+    CHECK(p.transition(next)->before == 4);
+    CHECK(transitionLimits(p, t).maxAfter == 2);
+    checkInvariants(p);
+}
+
+TEST_CASE("Transitions follow splits and vanish when the cut opens", "[timeline][transitions]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b);
+    const ObjectId t = addTransition(p, kVideoTrack, 300, withLength(30));
+    REQUIRE(splitAt(p, 280)); // dentro de A, a 20 fotogramas del corte
+    const Transition* tr = p.transition(t);
+    REQUIRE(tr != nullptr);
+    CHECK(tr->from != a);
+    CHECK(p.clip(tr->from)->start == 280);
+    CHECK(tr->before == 15);
+
+    // Dividir más cerca del corte acorta la transición.
+    REQUIRE(splitAt(p, 295));
+    REQUIRE(p.transition(t) != nullptr);
+    CHECK(p.transition(t)->before == 5);
+
+    // Mover B (y su audio) separa los clips: la transición desaparece.
+    Project moved = p;
+    REQUIRE(moveClips(moved, {b}, 10));
+    CHECK(moved.transition(t) == nullptr);
+    // Mover los dos juntos la conserva.
+    Project both = p;
+    REQUIRE(moveClips(both, {p.transition(t)->from, b}, 50));
+    CHECK(both.transition(t) != nullptr);
+    // Quitarla.
+    REQUIRE(removeTransition(p, t));
+    CHECK(p.tracks[kVideoTrack].transitions.empty());
+    checkInvariants(p);
+}
+
+TEST_CASE("Transition sounds go to a free audio track", "[timeline][transitions]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b);
+    MediaItem whoosh = media("whoosh.wav", 1, false, true);
+    const ObjectId sound = addMedia(p, whoosh);
+    const ObjectId t = addTransition(p, kVideoTrack, 300, withLength(30));
+    // A1 tiene el audio de los clips: el sonido va a A2 (nueva), con el golpe en el corte.
+    const ObjectId clip = placeTransitionSound(p, t, sound, 20, -4.0);
+    REQUIRE(clip != 0);
+    REQUIRE(p.trackCount(TrackKind::Audio) == 2);
+    CHECK(trackClips(p, TrackKind::Audio, 1)[0].id == clip);
+    CHECK(p.clip(clip)->start == 280);
+    CHECK(p.clip(clip)->volumeDb == -4.0);
+    CHECK(p.transition(t)->sound == clip);
+
+    // Otro sonido sustituye al anterior.
+    const ObjectId again = placeTransitionSound(p, t, sound, 10);
+    REQUIRE(again != 0);
+    CHECK(p.clip(clip) == nullptr);
+    CHECK(p.clip(again)->start == 290);
+
+    // Si el usuario quita el sonido, la transición se queda sin él.
+    Project withoutSound = p;
+    REQUIRE(removeClips(withoutSound, {again}));
+    CHECK(withoutSound.transition(t)->sound == 0);
+
+    // Quitar la transición se lleva su sonido.
+    REQUIRE(removeTransition(p, t));
+    CHECK(p.clip(again) == nullptr);
+    checkInvariants(p);
+}

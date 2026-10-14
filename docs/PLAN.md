@@ -379,7 +379,7 @@ Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
 - ✅ Varias pistas de video (uno encima de otro) y de audio (música, etc.), con la
   onda del audio dibujada en la línea de tiempo, y posición y escala de cada clip
   (facecam encima, reencuadrar un video 16:9 en un lienzo vertical).
-- Transiciones integradas en la línea de tiempo (arrastrar entre clips y
+- ✅ Transiciones integradas en la línea de tiempo (arrastrar entre clips y
   ajustarlas ahí mismo) y efectos de sonido emparejados con cada transición.
 **Hecho cuando:** se monta un short con facecam o música encima y transiciones
 sin salir de la pestaña Editor.
@@ -581,14 +581,31 @@ ctest --preset windows-debug
        exportación sigue sin problemas aunque se abra otro proyecto mientras tanto.
      - Hecho cuando: un short vertical con el gameplay reencuadrado en V1, la facecam
        en V2 y música en A2 se ve, se oye y se exporta igual.
-   - [ ] Etapa 3: transiciones y sonido en la línea de tiempo.
-     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips:
-       los clips se solapan lo que dura la transición (como en el laboratorio).
-     - Ajustarla ahí mismo: duración arrastrando sus bordes; tipo, intensidad,
-       desenfoque y curva en Propiedades. Se reproduce y exporta con el compositor.
-     - Biblioteca de efectos de sonido con licencia libre (registrados en
-       presets/sfx/LICENCIAS.md) y emparejamiento: al poner una transición se coloca
-       su sonido (whoosh, impacto…) en una pista de audio, ajustable o quitable.
+   - [x] Etapa 3: transiciones y sonido en la línea de tiempo.
+     - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips
+       seguidos de una pista de video (se ilumina el corte más cercano). Cambio respecto a
+       lo previsto ("los clips se solapan"): la transición se centra en el corte y usa el
+       material que sobra del medio antes y después de cada clip, como en Premiere; si no
+       hay, repite el primer o el último fotograma. Así ningún clip se mueve y el audio y
+       las demás pistas siguen sincronizados.
+     - Ajustarla ahí mismo: duración arrastrando sus bordes (antes y después del corte, por
+       separado); tipo, duración, intensidad, desenfoque, curva y sonido en Propiedades
+       (se abre al soltarla). Supr o clic derecho para quitarla. Se reproduce (dos hilos de
+       decodificación por pista: saliente y entrante) y se exporta con el compositor. En
+       una pista superior (la facecam) la transición no tapa lo de debajo: las capas de la
+       transición son transparentes donde no hay clip.
+     - Las transiciones siguen a las ediciones: si se parte el clip saliente pasan a su
+       parte derecha; si los clips dejan de estar seguidos, desaparecen; su duración se
+       limita a lo que cabe. Archivo `.sharkp` versión 3 (abre la 1 y la 2).
+     - Biblioteca de efectos de sonido sintetizados por código (tools/sfx/generar_sfx.py),
+       propios y CC0, registrados en presets/sfx/LICENCIAS.md: whoosh, whoosh que sube,
+       whoosh que baja, swoosh, giro, impacto, glitch y riser. Cada transición lleva uno por
+       defecto (Fade to Black, ninguno) que se coloca con su golpe en el corte, en la
+       primera pista de audio libre y a −6 dB; es un clip normal (se puede mover, cambiar
+       de volumen o quitar) y se cambia o se quita desde Propiedades.
+     - Comprobado en Linux: arrastrar, ajustar, quitar y deshacer en la app; reproducir a
+       través de la transición; exportar (V1 con Zoom In y V2 con un fundido que deja ver
+       V1). Pendiente de validar en el PC de Kyo, también cómo suenan los efectos.
      - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y
        transiciones sin salir de la pestaña Editor).
 

@@ -11,7 +11,6 @@ Rectangle {
 
     required property Editor editor
     required property Item fantasma          // lo que se ve al arrastrar un medio
-    property var transiciones: []            // nombres del catálogo de transiciones
     property int pestana: 0
     property bool cuadricula: false
     signal importar()
@@ -316,8 +315,9 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Pronto podrás arrastrarlas entre dos clips de la línea de tiempo "
-                      + "(fase 3, etapa 3). Mientras tanto, pruébalas en la pestaña Transición."
+                text: "Arrastra una transición al corte entre dos clips seguidos de una pista "
+                      + "de video. Lleva su efecto de sonido, que puedes cambiar o quitar en "
+                      + "Propiedades."
                 color: Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
             }
@@ -327,17 +327,22 @@ Rectangle {
                 columnSpacing: 8
                 rowSpacing: 8
                 Repeater {
-                    model: panel.transiciones
+                    model: panel.editor.transitionNames
                     delegate: Rectangle {
+                        id: tarjeta
                         required property string modelData
+                        required property int index
+                        readonly property string sonido: panel.editor.transitionSounds[index] || ""
                         Layout.fillWidth: true
-                        implicitHeight: 50
+                        implicitHeight: 54
                         radius: Theme.radio
-                        color: Theme.panelElevado
-                        border.color: Theme.borde
+                        color: arrastreTransicion.containsMouse ? Theme.borde : Theme.panelElevado
+                        border.color: arrastreTransicion.containsMouse ? Theme.clipTransicion
+                                                                        : Theme.borde
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 10
+                            anchors.rightMargin: 8
                             spacing: 10
                             Rectangle {
                                 implicitWidth: 32
@@ -351,16 +356,42 @@ Rectangle {
                                     color: Theme.texto
                                 }
                             }
-                            Text {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                text: parent.parent.modelData
-                                color: Theme.texto
-                                font.pixelSize: Theme.tamTexto
-                                elide: Text.ElideRight
+                                spacing: 1
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: tarjeta.modelData
+                                    color: Theme.texto
+                                    font.pixelSize: Theme.tamTexto
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: tarjeta.sonido.length > 0 ? "♪ " + tarjeta.sonido
+                                                                    : "Sin sonido"
+                                    color: Theme.textoSecundario
+                                    font.pixelSize: Theme.tamTextoPequeno
+                                    elide: Text.ElideRight
+                                }
                             }
+                        }
+                        ArrastreTransicion {
+                            id: arrastreTransicion
+                            anchors.fill: parent
+                            indice: tarjeta.index
+                            nombre: tarjeta.modelData
+                            fantasma: panel.fantasma
                         }
                     }
                 }
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Para probar los ajustes con calma sigue estando la pestaña Transición."
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
             }
             Item { Layout.fillHeight: true }
         }
@@ -410,6 +441,8 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
 
+            readonly property var tr: panel.editor.selectedTransition
+            readonly property bool hayTransicion: tr.id !== undefined
             readonly property var sel: panel.editor.selectedClip
             readonly property bool uno: sel.count === 1
             readonly property bool hayVideo: uno && sel.video !== 0
@@ -427,13 +460,156 @@ Rectangle {
                 width: propiedades.width - 28
                 spacing: 10
 
+                // --- Transición seleccionada ---
+                ColumnLayout {
+                    id: propiedadesTransicion
+                    visible: propiedades.hayTransicion
+                    enabled: propiedades.hayTransicion && !propiedades.tr.locked
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    readonly property real fps: Math.max(1, panel.editor.fps)
+                    function segundos(fotogramas) {
+                        return (fotogramas / fps).toFixed(2).replace(".", ",") + " s"
+                    }
+
+                    Text {
+                        text: "TRANSICIÓN SELECCIONADA"
+                        color: Theme.textoDesactivado
+                        font.pixelSize: Theme.tamTextoPequeno
+                        font.letterSpacing: 0.6
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Rectangle {
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            radius: 4
+                            color: Theme.clipTransicion
+                            Icono { anchors.centerIn: parent; nombre: "transicion"; tam: 14; color: Theme.texto }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: (propiedades.tr.name || "") + " · " + (propiedades.tr.track || "")
+                            color: Theme.texto
+                            font.pixelSize: Theme.tamTexto
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        Chip {
+                            visible: propiedades.hayTransicion && propiedades.tr.locked
+                            texto: "BLOQUEADA"
+                            colorTexto: Theme.aviso
+                        }
+                    }
+                    Selector {
+                        etiqueta: "Tipo"
+                        model: panel.editor.transitionNames
+                        indice: propiedades.tr.typeIndex !== undefined ? propiedades.tr.typeIndex : 0
+                        onElegido: (i) => panel.editor.setTransitionType(propiedades.tr.id, i)
+                    }
+                    CampoNumero {
+                        etiqueta: "Duración"
+                        unidad: "fot."
+                        paso: 0.25
+                        desde: 2
+                        hasta: (propiedades.tr.maxBefore || 0) + (propiedades.tr.maxAfter || 0)
+                        valor: propiedades.tr.length || 0
+                        onCambiado: (v) => {
+                            // Repartida como estaba antes y después del corte.
+                            const t = propiedades.tr
+                            const total = Math.round(v)
+                            const parteAntes = t.length > 0 ? t.before / t.length : 0.5
+                            let antes = Math.min(t.maxBefore, Math.round(total * parteAntes))
+                            let despues = Math.min(t.maxAfter, total - antes)
+                            antes = Math.min(t.maxBefore, total - despues)
+                            panel.editor.setTransitionLength(t.id, antes, despues)
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: propiedadesTransicion.segundos(propiedades.tr.length || 0) + " · "
+                              + (propiedades.tr.before || 0) + " antes del corte y "
+                              + (propiedades.tr.after || 0) + " después (arrastra sus bordes en "
+                              + "la línea de tiempo)"
+                        wrapMode: Text.WordWrap
+                        color: Theme.textoSecundario
+                        font.pixelSize: Theme.tamTextoPequeno
+                    }
+                    Deslizador {
+                        etiqueta: "Intensidad"
+                        from: 0
+                        to: 1
+                        stepSize: 0.01
+                        valor: propiedades.tr.intensity !== undefined ? propiedades.tr.intensity : 0.6
+                        textoValor: Math.round(valorActual * 100) + " %"
+                        onSoltado: (v) => panel.editor.setTransitionValue(propiedades.tr.id, "intensity", v)
+                    }
+                    Deslizador {
+                        etiqueta: "Desenfoque de movimiento"
+                        from: 0
+                        to: 1
+                        stepSize: 0.01
+                        valor: propiedades.tr.blur !== undefined ? propiedades.tr.blur : 0.6
+                        textoValor: Math.round(valorActual * 100) + " %"
+                        onSoltado: (v) => panel.editor.setTransitionValue(propiedades.tr.id, "blur", v)
+                    }
+                    Selector {
+                        etiqueta: "Curva de movimiento"
+                        model: panel.editor.easingNames
+                        indice: propiedades.tr.easingIndex !== undefined ? propiedades.tr.easingIndex : 0
+                        onElegido: (i) => panel.editor.setTransitionValue(propiedades.tr.id, "easing", i)
+                    }
+
+                    Separador {}
+                    Selector {
+                        etiqueta: "Efecto de sonido"
+                        model: panel.editor.soundNames
+                        indice: propiedades.tr.soundIndex !== undefined ? propiedades.tr.soundIndex : 0
+                        onElegido: (i) => panel.editor.setTransitionSound(propiedades.tr.id, i)
+                    }
+                    RowLayout {
+                        visible: propiedades.tr.hasSound === true
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Deslizador {
+                            etiqueta: "Volumen del sonido"
+                            from: -60
+                            to: 15
+                            stepSize: 0.5
+                            valor: propiedades.tr.soundVolumeDb !== undefined ? propiedades.tr.soundVolumeDb : 0
+                            textoValor: valorActual <= -60 ? "Silencio"
+                                        : (valorActual > 0 ? "+" : "") + valorActual.toFixed(1) + " dB"
+                            onSoltado: (v) => panel.editor.setClipVolume(propiedades.tr.soundClip, v)
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "El sonido es un clip de audio normal: puedes moverlo o recortarlo en la "
+                              + "línea de tiempo. Se coloca con su golpe en el corte, en la primera pista "
+                              + "de audio libre."
+                        color: Theme.textoDesactivado
+                        font.pixelSize: Theme.tamTextoPequeno
+                    }
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        icono: "quitar"
+                        texto: "Quitar la transición"
+                        ayuda: "Quita la transición y su sonido (Supr)"
+                        onPulsado: panel.editor.removeTransition(propiedades.tr.id)
+                    }
+                }
+
                 Text {
+                    visible: !propiedades.hayTransicion
                     text: "CLIP SELECCIONADO"
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                     font.letterSpacing: 0.6
                 }
                 Text {
+                    visible: !propiedades.hayTransicion
                     Layout.fillWidth: true
                     text: panel.editor.selectionDescription.length > 0
                           ? panel.editor.selectionDescription : "Ningún clip seleccionado"
@@ -444,7 +620,7 @@ Rectangle {
                 }
                 Text {
                     Layout.fillWidth: true
-                    visible: !propiedades.uno
+                    visible: !propiedades.uno && !propiedades.hayTransicion
                     wrapMode: Text.WordWrap
                     text: propiedades.sel.count > 1
                           ? "Selecciona un solo clip para ver y cambiar sus propiedades."
@@ -652,6 +828,15 @@ Rectangle {
         Layout.topMargin: 2
         implicitHeight: 1
         color: Theme.borde
+    }
+
+    // Al poner (o elegir) una transición desde su pestaña, se pasa a sus propiedades.
+    Connections {
+        target: panel.editor
+        function onSelectedClipChanged() {
+            if (panel.pestana === 1 && panel.editor.selectedTransition.id !== undefined)
+                panel.pestana = 3
+        }
     }
 
     // Archivos arrastrados desde el explorador: a la biblioteca.

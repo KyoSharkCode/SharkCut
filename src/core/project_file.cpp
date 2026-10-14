@@ -110,6 +110,15 @@ void validate(Project& project, int version) {
                 throw ProjectError("Hay clips solapados en una pista del proyecto");
             }
         }
+        for (Transition& t : track.transitions) {
+            claim(t.id);
+            t.before = std::max<std::int64_t>(0, t.before);
+            t.after = std::max<std::int64_t>(0, t.after);
+            t.params.intensity =
+                std::clamp(std::isfinite(t.params.intensity) ? t.params.intensity : 0.6, 0.0, 1.0);
+            t.params.blur =
+                std::clamp(std::isfinite(t.params.blur) ? t.params.blur : 0.6, 0.0, 1.0);
+        }
     }
 
     const ObjectId maxId = ids.empty() ? 0 : *ids.rbegin();
@@ -117,8 +126,54 @@ void validate(Project& project, int version) {
     if (version < 2) {
         linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
     } else {
-        repairLinks(project);
+        repairLinks(project); // también quita las transiciones que no están en un corte
     }
+}
+
+std::string toString(std::string_view text) {
+    return std::string(text.begin(), text.end());
+}
+
+json transitionToJson(const Transition& t) {
+    return {
+        {"id", t.id},
+        {"from", t.from},
+        {"to", t.to},
+        {"before", t.before},
+        {"after", t.after},
+        {"type", toString(transitionInfo(t.params.type).id)},
+        {"intensity", t.params.intensity},
+        {"blur", t.params.blur},
+        {"easing", toString(kEasings[static_cast<std::size_t>(t.params.easing)].id)},
+        {"sound", t.sound},
+    };
+}
+
+Transition transitionFromJson(const json& value) {
+    Transition t;
+    t.id = value.at("id").get<ObjectId>();
+    t.from = value.at("from").get<ObjectId>();
+    t.to = value.at("to").get<ObjectId>();
+    t.before = value.at("before").get<std::int64_t>();
+    t.after = value.at("after").get<std::int64_t>();
+    const std::string type = value.at("type").get<std::string>();
+    const auto info = std::find_if(kTransitions.begin(), kTransitions.end(),
+                                   [&type](const TransitionInfo& i) { return i.id == type; });
+    if (info == kTransitions.end()) {
+        throw ProjectError("Transición desconocida en el proyecto: " + type);
+    }
+    t.params = info->defaults;
+    t.params.intensity = value.value("intensity", t.params.intensity);
+    t.params.blur = value.value("blur", t.params.blur);
+    const std::string easing = value.value("easing", std::string());
+    for (const EasingInfo& e : kEasings) {
+        if (e.id == easing) {
+            t.params.easing = e.easing;
+        }
+    }
+    t.params.durationFrames = t.before + t.after;
+    t.sound = value.value("sound", ObjectId{0});
+    return t;
 }
 
 json transformToJson(const ClipTransform& t) {
@@ -217,6 +272,13 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
         if (track.locked) {
             entry["locked"] = true;
         }
+        if (!track.transitions.empty()) {
+            json transitions = json::array();
+            for (const Transition& t : track.transitions) {
+                transitions.push_back(transitionToJson(t));
+            }
+            entry["transitions"] = std::move(transitions);
+        }
         tracks.push_back(std::move(entry));
     }
     root["tracks"] = std::move(tracks);
@@ -300,6 +362,11 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
                 }
                 clip.volumeDb = c.value("volumeDb", 0.0);
                 track.clips.push_back(clip);
+            }
+            if (const auto list = entry.find("transitions"); list != entry.end()) {
+                for (const json& t : *list) {
+                    track.transitions.push_back(transitionFromJson(t));
+                }
             }
             project.tracks.push_back(std::move(track));
         }

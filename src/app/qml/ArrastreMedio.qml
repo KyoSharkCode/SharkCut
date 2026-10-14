@@ -18,7 +18,9 @@ MouseArea {
         fantasma.x = p.x - 10
         fantasma.y = p.y - 14
         fantasma.mediaId = medio.id
+        fantasma.transicion = -1
         fantasma.nombre = medio.name
+        fantasma.Drag.keys = ["sharkcut/medio"]
     }
     onPositionChanged: {
         if (drag.active && !fantasma.Drag.active)

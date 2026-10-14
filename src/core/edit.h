@@ -105,6 +105,46 @@ bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
 // Separa los clips de sus enlazados: a partir de ahí se editan por separado.
 bool unlinkClips(Project& project, const std::vector<ObjectId>& clips);
 
+// --- Transiciones ---
+//
+// Una transición vive en el corte entre dos clips seguidos de una pista de video. Si
+// una edición separa los clips (mover, recortar, quitar…), la transición desaparece; si
+// parte el clip saliente, pasa a su parte derecha. Su efecto de sonido es un clip de
+// audio normal (se puede mover, cambiar de volumen o quitar).
+
+// Lo que puede durar la transición a cada lado del corte: sin salirse de los clips ni
+// pisar la transición del otro extremo de cada uno.
+struct TransitionLimits {
+    std::int64_t maxBefore = 0;
+    std::int64_t maxAfter = 0;
+};
+TransitionLimits transitionLimits(const Project& project, ObjectId transition);
+
+// Pone una transición en el corte de la pista `track` que está en el fotograma `cut`
+// (donde termina un clip y empieza el siguiente), centrada y con la duración
+// `params.durationFrames` limitada a lo que cabe. Si ya había una en ese corte, cambia
+// sus parámetros y conserva su sonido. Devuelve su id, o 0 si ahí no hay corte (o la
+// pista está bloqueada).
+ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
+                       const TransitionParams& params);
+
+// Quita la transición y, con `withSound`, también su efecto de sonido.
+bool removeTransition(Project& project, ObjectId transition, bool withSound = true);
+
+// Tipo, intensidad, desenfoque y curva (la duración se cambia con setTransitionLength).
+bool setTransitionParams(Project& project, ObjectId transition, const TransitionParams& params);
+
+// Fotogramas antes y después del corte (limitados por transitionLimits; en total, al
+// menos 2).
+bool setTransitionLength(Project& project, ObjectId transition, std::int64_t before,
+                         std::int64_t after);
+
+// Coloca el sonido `soundMedia` con su golpe (`hitFrames` desde su inicio) en el corte
+// de la transición, en la primera pista de audio libre en ese tramo (o en una nueva), y
+// lo empareja con la transición (quitando el anterior). Devuelve el clip, o 0.
+ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
+                              std::int64_t hitFrames, double volumeDb = 0.0);
+
 // Los clips indicados más sus enlazados, sin repetir y solo los que existen.
 std::vector<ObjectId> withLinked(const Project& project, const std::vector<ObjectId>& clips);
 

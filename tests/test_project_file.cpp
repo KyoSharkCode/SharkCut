@@ -76,7 +76,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 2") != std::string::npos);
+    CHECK(json.find("\"version\": 3") != std::string::npos);
     CHECK(projectFromJson(json, {}) == Project{});
 }
 
@@ -103,7 +103,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 2"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 3"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -214,4 +214,46 @@ TEST_CASE("Version 2 files drop broken links and sort tracks", "[project]") {
     CHECK(p.clip(2)->transform.scale == kMinScale);
     CHECK(p.clip(2)->transform.opacity == 1.0);
     CHECK(p.clip(3)->volumeDb == kMaxVolumeDb);
+}
+
+TEST_CASE("Version 3 keeps transitions and their sound", "[project]") {
+    Project p = sampleProject("/x.mp4");
+    // sampleProject deja dos clips seguidos en V1 (partidos en el fotograma 100).
+    TransitionParams params = transitionInfo(TransitionType::ShakeDistort).defaults;
+    params.durationFrames = 20;
+    params.intensity = 0.25;
+    params.easing = Easing::EaseOutBack;
+    const ObjectId t = addTransition(p, kVideoTrack, 100, params);
+    REQUIRE(t != 0);
+    MediaItem whoosh;
+    whoosh.path = "/sfx/whoosh.wav";
+    whoosh.name = "whoosh.wav";
+    whoosh.durationUs = 600'000;
+    whoosh.hasAudio = true;
+    const ObjectId sound = addMedia(p, whoosh);
+    REQUIRE(placeTransitionSound(p, t, sound, 18, -3.0) != 0);
+
+    const Project loaded = projectFromJson(projectToJson(p, {}), {});
+    CHECK(loaded == p);
+    const Transition* lt = loaded.transition(t);
+    REQUIRE(lt != nullptr);
+    CHECK(lt->params.type == TransitionType::ShakeDistort);
+    CHECK(lt->params.easing == Easing::EaseOutBack);
+    CHECK(lt->params.intensity == 0.25);
+    CHECK(lt->length() == 20);
+    CHECK(loaded.clip(lt->sound) != nullptr);
+}
+
+TEST_CASE("Transitions outside a cut are dropped when loading", "[project]") {
+    Project p = sampleProject("/x.mp4");
+    REQUIRE(addTransition(p, kVideoTrack, 100, {}) != 0);
+    std::string json = projectToJson(p, {});
+    // Un archivo editado a mano: la transición apunta a clips que no están seguidos.
+    const auto pos = json.find("\"to\": ");
+    REQUIRE(pos != std::string::npos);
+    const auto end = json.find(',', pos);
+    json.replace(pos, end - pos,
+                 "\"to\": " + std::to_string(p.tracks[kVideoTrack].clips.back().id));
+    const Project loaded = projectFromJson(json, {});
+    CHECK(loaded.tracks[kVideoTrack].transitions.empty());
 }

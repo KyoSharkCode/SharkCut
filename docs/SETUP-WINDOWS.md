@@ -72,7 +72,7 @@ CMake Tools no ha detectado Build Tools. Alternativa que siempre funciona:
 
 ## 6. Qué comprobar
 
-### Fase 1, etapa 1: laboratorio de transiciones
+### Fase 1: laboratorio de transiciones y exportación (validada)
 
 SharkCut tiene ahora dos pestañas arriba: **1 · Origen** y **2 · Transición**.
 

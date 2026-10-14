@@ -351,7 +351,7 @@ Whoosh, Impacto / Hit, Riser, Pop / Click, Glitch, Swoosh, Transición musical.
 **Hecho cuando:** un clip real de OBS 1080p60 se reproduce fluido y sin
 desincronía en SharkCut, y se puede saltar a cualquier fotograma.
 
-### Fase 1 — Transiciones
+### Fase 1 — Transiciones ✅
 - Compositor con dos clips y las siete transiciones de prioridad 1.
 - Panel de prueba con controles de intensidad, duración y easing.
 - Marcas de entrada y salida (I/O) para elegir los tramos A y B dentro de un video,
@@ -366,7 +366,7 @@ resultado exportado es idéntico a la vista previa.
   dividir, eliminar. Comandos + deshacer/rehacer desde el inicio.
 - Guardar y abrir `.sharkp`.
 - Exportar a MP4 1080p60 con NVENC.
-- Interfaz con el tema Marea Nocturna.
+- Interfaz con el tema Marea Profunda.
 **Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
 
 ### Fase 3 — Lo propio
@@ -467,13 +467,18 @@ ctest --preset windows-debug
      direccional y bordes en espejo, audio de la secuencia con fundido cruzado de
      potencia constante, pestañas Origen (marcas I/O) y Transición (parámetros en
      directo, "Ver transición"). Herramienta `sharkcut_filmstrip` para revisar las
-     transiciones fuera de la interfaz. Pendiente de validar en el PC de Kyo.
+     transiciones fuera de la interfaz. Validada en el PC de Kyo con grabaciones de
+     OBS (21 min + 3:35) y con clips verticales cortos (13 s y 1 min): las 7
+     transiciones se ven igual que en Premiere Composer y el audio no se corta.
    - [x] Etapa 2: exportar la secuencia de prueba a MP4. SequenceExporter compone cada
      fotograma fuera de pantalla con el mismo Compositor (instancia QRhi propia en un
      hilo: D3D11 en Windows), lo lee de la GPU y Mp4Writer lo codifica en H.264 (NVENC,
      AMF, QuickSync o x264, el primero que funcione; BT.709 rango limitado) con audio
      AAC de la mezcla A/B. Comprobado en Linux que el fotograma exportado coincide con
-     la vista previa. Pendiente de validar en el PC de Kyo (velocidad con NVENC).
+     la vista previa. Validada en el PC de Kyo: exporta con h264_nvenc (56 s) y el
+     MP4 se ve y se oye igual que en SharkCut.
+   - **Fase 1 terminada.** Lo único que falta frente a Composer son los efectos de
+     sonido de cada transición, previstos en la fase 3 (sección 7).
 
 ### Decisiones tomadas
 - [x] Nombre: **SharkCut**.

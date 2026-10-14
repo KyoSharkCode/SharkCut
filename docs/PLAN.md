@@ -608,6 +608,10 @@ ctest --preset windows-debug
        V1).
      - Validada en el PC de Kyo con VODs reales: las transiciones se añaden, se ajustan y
        se exportan en orden, con su efecto de sonido.
+     - Comentario de Kyo: los efectos de sonido cumplen, pero suenan distintos a los que
+       usa (sintetizados); hay cosas que mejorar → pendiente para una etapa posterior
+       (retocar el generador o añadir sonidos CC0 de Freesound/Pixabay, registrados en
+       presets/sfx/LICENCIAS.md).
    - **Fase 3 terminada.** Se monta un short con facecam, música y transiciones sin salir
      de la pestaña Editor.
      - Hecho cuando: el criterio de la fase 3 (short con facecam o música encima y

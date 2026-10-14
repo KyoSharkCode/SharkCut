@@ -56,7 +56,12 @@ Item {
         "video": "M4 5h16v14H4zM4 9h16M4 15h16M8 5v4M16 5v4M8 15v4M16 15v4",
         "audio": "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0M21 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0",
         "aleta": "M3 18c4-1 7-6 9-14 1 6 4 11 9 14M3 18h18",
-        "keyframe": "M12 3l9 9-9 9-9-9z"
+        "keyframe": "M12 3l9 9-9 9-9-9z",
+        "carpeta": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+        "carpetaNueva": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6",
+        "secuencia": "M3 6h9M15 6h6M3 12h5M11 12h10M3 18h12M18 18h3",
+        "secuenciaNueva": "M3 6h9M3 12h9M3 18h7M18 13v8M14 17h8",
+        "atras": "M15 6l-6 6 6 6M9 12h11"
     })
     readonly property var rellenos: ["reproducir", "pausa"]
     readonly property bool relleno: rellenos.indexOf(nombre) >= 0

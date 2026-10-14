@@ -19,6 +19,7 @@ Rectangle {
     required property Editor editor
     property string herramienta: "seleccion" // "seleccion" o "cuchilla"
     property bool iman: true                 // ajustar a bordes y cabezal al arrastrar
+    signal nuevaSecuencia()
 
     // Vista previa del arrastre en curso:
     // {tipo: "mover" | "inicio" | "final", grupo: [ids], delta, valor, pistas, video}
@@ -39,6 +40,7 @@ Rectangle {
     readonly property int separacionGrupos: 10 // entre las pistas de video y las de audio
     readonly property int filasVisibles: 6      // más pistas: desplazamiento vertical
     readonly property int anchoCabecera: 92
+    readonly property int alturaPestanas: 30
 
     // Filas en pantalla, de arriba abajo: {pista, y} (y relativa a la primera fila).
     readonly property var filas: {
@@ -73,7 +75,7 @@ Rectangle {
     border.color: zonaSoltar.containsDrag ? Theme.acento : Theme.borde
     // Alta para ver hasta `filasVisibles` pistas (más la barra de desplazamiento), y como
     // mínimo tanto como la barra de herramientas vertical.
-    implicitHeight: Math.max(yPrimeraFila
+    implicitHeight: Math.max(alturaPestanas + 4 + yPrimeraFila
                              + Math.min(altoPistas, filasVisibles * (alturaPista + separacion)
                                                     + separacionGrupos) + 20,
                              herramientas.implicitHeight) + 2 * Theme.margen
@@ -304,6 +306,40 @@ Rectangle {
             Layout.fillHeight: true
             spacing: 4
 
+            // Pestañas de las secuencias abiertas (de cualquier proyecto abierto)
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                Layout.preferredHeight: raiz.alturaPestanas
+                Layout.maximumHeight: raiz.alturaPestanas
+                spacing: 4
+                ListView {
+                    id: pestanas
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: contentWidth
+                    Layout.preferredHeight: raiz.alturaPestanas
+                    orientation: ListView.Horizontal
+                    spacing: 4
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: raiz.editor.tabs
+                    readonly property bool variosProyectos: raiz.editor.projects.length > 1
+                    delegate: PestanaSecuencia {
+                        required property var modelData
+                        pestana: modelData
+                        conProyecto: pestanas.variosProyectos
+                    }
+                }
+                BotonIcono {
+                    icono: "mas"
+                    ayuda: "Nueva secuencia"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.nuevaSecuencia()
+                }
+                Item { Layout.fillWidth: true }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -372,8 +408,8 @@ Rectangle {
                                                   * raiz.escala)
                     contentHeight: Math.max(height, raiz.yPrimeraFila + raiz.altoPistas + 4)
                     boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOn }
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ScrollBar.horizontal: BarraDesplazamiento {}
+                    ScrollBar.vertical: BarraDesplazamiento {}
 
                     Item {
                         id: contenido
@@ -388,10 +424,12 @@ Rectangle {
                                 y: raiz.yPrimeraFila + modelData.y
                                 width: contenido.width
                                 height: raiz.alturaPista
+                                readonly property color base: modelData.pista.video
+                                                              ? Theme.pistaVideo : Theme.pistaAudio
                                 color: raiz.pistaSoltar === modelData.pista.index
-                                       ? Qt.tint(Theme.fondo, Qt.rgba(Theme.acento.r, Theme.acento.g,
-                                                                      Theme.acento.b, 0.14))
-                                       : Theme.fondo
+                                       ? Qt.tint(base, Qt.rgba(Theme.acento.r, Theme.acento.g,
+                                                               Theme.acento.b, 0.14))
+                                       : base
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -972,8 +1010,11 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: raiz.editor.frameCount === 0
                 horizontalAlignment: Text.AlignHCenter
-                text: "Arrastra medios desde la biblioteca (o archivos desde el explorador) a una pista: "
-                      + "el video a V1, la facecam a V2, la música a A2…"
+                text: !raiz.editor.hasSequence
+                      ? "No hay ninguna secuencia abierta: abre una desde Medios (doble clic) o crea "
+                        + "una nueva con «+»."
+                      : "Arrastra medios desde la biblioteca (o archivos desde el explorador) a una pista: "
+                        + "el video a V1, la facecam a V2, la música a A2…"
                 color: Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
                 elide: Text.ElideRight
@@ -1086,31 +1127,91 @@ Rectangle {
         }
     }
 
-    component MenuTema: Menu {
-        id: menu
-        padding: 4
-        background: Rectangle {
-            implicitWidth: 230
-            color: Theme.panelElevado
-            border.color: Theme.borde
-            radius: 4
-        }
-        delegate: MenuItem {
-            id: opcion
-            implicitHeight: 28
-            contentItem: Text {
-                leftPadding: 6
-                text: opcion.text
-                color: opcion.enabled ? Theme.texto : Theme.textoDesactivado
-                font.pixelSize: Theme.tamTexto
-                verticalAlignment: Text.AlignVCenter
+    // Pestaña de una secuencia abierta: clic para verla, doble clic para renombrarla.
+    component PestanaSecuencia: Rectangle {
+        id: tab
+        property var pestana
+        property bool conProyecto: false
+        readonly property bool activa: pestana.active
+        width: filaTab.implicitWidth + 18
+        height: pestanas.height
+        radius: Theme.radio
+        color: activa ? Theme.panelElevado : zonaTab.containsMouse ? Theme.fondo : "transparent"
+        border.color: activa ? Theme.acento : Theme.borde
+        MouseArea {
+            id: zonaTab
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: (m) => {
+                if (m.button === Qt.MiddleButton)
+                    raiz.editor.closeTab(tab.pestana.index)
+                else
+                    raiz.editor.activateTab(tab.pestana.index)
             }
-            background: Rectangle {
+            onDoubleClicked: (m) => {
+                if (m.button !== Qt.LeftButton)
+                    return
+                raiz.editor.activateTab(tab.pestana.index)
+                const id = tab.pestana.sequence
+                dialogoNombre.pedir("Renombrar secuencia", tab.pestana.name, "Renombrar",
+                                    (nombre) => raiz.editor.renameSequence(id, nombre))
+            }
+        }
+        Row {
+            id: filaTab
+            x: 9
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+            Icono {
+                anchors.verticalCenter: parent.verticalCenter
+                nombre: "secuencia"
+                tam: 13
+                color: tab.activa ? Theme.acento : Theme.textoSecundario
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: tab.conProyecto
+                text: tab.pestana.projectName + " ›"
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: tab.pestana.name
+                color: tab.activa ? Theme.texto : Theme.textoSecundario
+                font.pixelSize: Theme.tamTexto
+                font.bold: tab.activa
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: tab.pestana.canvas
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 18
+                height: 18
                 radius: 3
-                color: opcion.highlighted ? Theme.borde : "transparent"
+                color: zonaCerrarTab.containsMouse ? Theme.borde : "transparent"
+                Icono {
+                    anchors.centerIn: parent
+                    nombre: "cerrar"
+                    tam: 11
+                    color: zonaCerrarTab.containsMouse ? Theme.texto : Theme.textoDesactivado
+                }
+                MouseArea {
+                    id: zonaCerrarTab
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: raiz.editor.closeTab(tab.pestana.index)
+                }
             }
         }
     }
+
+    DialogoNombre { id: dialogoNombre }
 
     // Cabecera de una pista: nombre, ocultar o silenciar, y bloquear.
     component CabeceraPista: Rectangle {
@@ -1118,8 +1219,19 @@ Rectangle {
         property var pista
         width: raiz.anchoCabecera - 6
         radius: 3
-        color: Theme.panelElevado
+        color: pista.video ? Theme.cabeceraVideo : Theme.cabeceraAudio
         border.color: Theme.borde
+
+        // Franja del color del tipo de pista
+        Rectangle {
+            x: 1
+            y: 4
+            width: 3
+            height: parent.height - 8
+            radius: 1.5
+            color: cabecera.pista.video ? Theme.clipVideoClaro : Theme.clipAudioClaro
+            opacity: 0.8
+        }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter

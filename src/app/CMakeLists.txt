@@ -28,6 +28,10 @@ qt_add_qml_module(SharkCut
         qml/PanelMedios.qml
         qml/DialogoExportar.qml
         qml/DialogoNuevoProyecto.qml
+        qml/DialogoNombre.qml
+        qml/MenuTema.qml
+        qml/BarraDesplazamiento.qml
+        qml/PanelBiblioteca.qml
     SOURCES
         appinfo.h
         appinfo.cpp

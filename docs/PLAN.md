@@ -648,18 +648,39 @@ ctest --preset windows-debug
      para compartirla); se retiran Origen y Transición (Kyo no usaba Origen); varios
      proyectos abiertos y varias secuencias por proyecto, como en su espacio de trabajo
      de Premiere; efectos adelantados desde la antigua fase 5 y la entrega pasa a la 5.
-   - [ ] Etapa 1: proyectos y secuencias. Modelo con varias secuencias por proyecto
-     (`.sharkp` versión 4, que abre los anteriores como un proyecto de una secuencia),
-     varios proyectos abiertos a la vez (pestañas en el panel de medios, con carpetas),
-     pestañas de secuencias en la línea de tiempo, nueva secuencia, duplicar (también
-     como vertical), renombrar y quitar.
+   - [x] Etapa 1: proyectos y secuencias. Núcleo: `Document` (src/core/document.h) con
+     medios, carpetas (un nivel) y secuencias (cada una con su lienzo, fps y pistas); las
+     operaciones de edición siguen trabajando sobre un `Project`, que es la vista de una
+     secuencia (`Document::view`/`store`), y el historial es por proyecto
+     (`BasicHistory<Document>`). `.sharkp` versión 4 (guarda también las secuencias
+     abiertas y la activa); los archivos 1–3 se abren como un proyecto de una secuencia.
+     Interfaz: proyectos abiertos como pestañas en Medios (con × y aviso de cambios sin
+     guardar; al cerrar la ventana se pregunta por cada uno), carpetas (crear, renombrar,
+     quitar, entrar y soltar medios o secuencias encima), secuencias en la biblioteca
+     (doble clic para abrir; menú: renombrar, duplicar, duplicar como vertical 9:16,
+     quitar), pestañas de secuencias en la línea de tiempo (de cualquier proyecto; doble
+     clic para renombrar, × o botón central para cerrar, «+» para una nueva). Quitar un
+     medio lo quita de todas las secuencias. Pedidos de Kyo en la etapa: barra de
+     desplazamiento vertical visible en la línea de tiempo y pistas de video en tono
+     azulado y de audio en tono verdoso.
    - [ ] Etapa 2: nueva distribución y exportación. Pestañas Proyectos · Editor ·
      Exportar; panel Propiedades separado (Medios · Transiciones · Efectos | Propiedades |
      Programa); Exportar con configuración completa y "Exportar rápido" en la esquina.
    - [ ] Etapa 3: edición rápida y trabajo seguro. Q/W, ripple delete, J/K/L, marcadores,
      crear pista al soltar en la zona vacía, autoguardado y recuperación.
    - [ ] Etapa 4: rendimiento con VODs largos.
-   - [ ] Etapa 5: efectos para los shorts (lista por concretar con Kyo).
+   - [ ] Etapa 5: efectos para los shorts. Kyo usa en Premiere estos ajustes guardados
+     (presets con nombre, que se aplican arrastrándolos a un clip), que sirven de lista:
+     - Movimiento (animaciones de posición/escala con keyframes): Acercamiento Motion
+       Kyo3D, Alejamiento Motion Kyo3D, Acercamiento Reacción, Chat Motion, Disk
+       Description Motion, Motion Prefarm.
+     - Posición fija: KyoChibi Position, Logo Clip Position.
+     - Blanco y negro, desenfoque (Blur), esquinas redondeadas (Edges, Chat Edges),
+       recorte (Crop, ya existe; Crop Description Disk como preset), croma (GreenScreen)
+       y sombra paralela / resplandor azul detrás de un clip.
+     Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
+     compositor (mismo motor para vista previa y exportación) y presets de usuario con
+     nombre (guardar, aplicar arrastrando, renombrar, quitar).
 9. Fase 5: entrega (instalador, licencias, sonidos, 0.1.0 Early Access).
 
 ### Decisiones tomadas
@@ -722,6 +743,8 @@ y neutralidad de color. Por eso la interfaz usa una variante sobria.
 | Cabezal de reproducción | `#6FE3F0` (Bioluz) |
 | Acento secundario | `#3A7BD5` (Aleta) |
 | Clip de video / audio / transición / texto | `#3D5A8A` / `#2F6F6A` / `#7D74A8` / `#9C8340` |
+| Fila de pista de video / audio | `#161C29` / `#14201F` |
+| Cabecera de pista de video / audio | `#1F2940` / `#1C2E2C` |
 | OK / aviso / error | `#4FBF8F` / `#E0B440` / `#D0465F` |
 
 La paleta completa de Marea Nocturna sigue disponible en el tema

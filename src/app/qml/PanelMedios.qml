@@ -12,20 +12,16 @@ Rectangle {
     required property Editor editor
     required property Item fantasma          // lo que se ve al arrastrar un medio
     property int pestana: 0
-    property bool cuadricula: false
     signal importar()
     signal abrirEnOrigen(string ruta)
+    signal nuevaSecuencia()
+    signal cerrarProyecto(var uid)
+    // Carpeta abierta en Medios: lo que se importa va ahí.
+    readonly property var carpeta: biblioteca.carpeta
 
     color: Theme.panel
     radius: Theme.radio
     border.color: zonaArchivos.containsDrag ? Theme.acento : Theme.borde
-
-    readonly property var mediosFiltrados: {
-        const texto = buscador.text.trim().toLowerCase()
-        const todos = editor.mediaItems
-        return texto.length === 0 ? todos
-                                  : todos.filter((m) => m.name.toLowerCase().indexOf(texto) >= 0)
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -68,241 +64,18 @@ Rectangle {
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.borde }
 
         // --- Medios ---
-        ColumnLayout {
+        PanelBiblioteca {
+            id: biblioteca
             visible: panel.pestana === 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.margins: 10
-            spacing: 10
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 30
-                    radius: Theme.radio
-                    color: Theme.fondo
-                    border.color: buscador.activeFocus ? Theme.acento : Theme.borde
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 6
-                        spacing: 6
-                        Icono { nombre: "buscar"; tam: 14; color: Theme.textoDesactivado }
-                        TextField {
-                            id: buscador
-                            Layout.fillWidth: true
-                            placeholderText: "Buscar medios"
-                            placeholderTextColor: Theme.textoDesactivado
-                            color: Theme.texto
-                            font.pixelSize: Theme.tamTexto
-                            background: null
-                            padding: 0
-                        }
-                    }
-                }
-                BotonIcono {
-                    icono: "lista"
-                    ayuda: "Ver como lista"
-                    activo: !panel.cuadricula
-                    onPulsado: panel.cuadricula = false
-                }
-                BotonIcono {
-                    icono: "cuadricula"
-                    ayuda: "Ver como cuadrícula"
-                    activo: panel.cuadricula
-                    onPulsado: panel.cuadricula = true
-                }
-                BotonIcono {
-                    icono: "importar"
-                    texto: "Importar…"
-                    ayuda: "Importar medios (Ctrl+I)"
-                    acentuado: true
-                    onPulsado: panel.importar()
-                }
-            }
-
-            // Lista
-            ListView {
-                id: lista
-                visible: !panel.cuadricula
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                spacing: 4
-                model: panel.mediosFiltrados
-                ScrollBar.vertical: ScrollBar {}
-
-                delegate: Rectangle {
-                    id: fila
-                    required property var modelData
-                    width: ListView.view.width
-                    height: 42
-                    radius: Theme.radio
-                    color: arrastreFila.containsMouse ? Theme.panelElevado : Theme.fondo
-                    border.color: Theme.borde
-
-                    ArrastreMedio {
-                        id: arrastreFila
-                        anchors.fill: parent
-                        medio: fila.modelData
-                        fantasma: panel.fantasma
-                        onAbrir: (ruta) => panel.abrirEnOrigen(ruta)
-                    }
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 6
-                        spacing: 8
-                        Icono {
-                            nombre: fila.modelData.video ? "video" : "audio"
-                            tam: 15
-                            color: fila.modelData.video ? Theme.clipVideoClaro : Theme.clipAudioClaro
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: fila.modelData.name
-                            color: Theme.texto
-                            font.pixelSize: Theme.tamTexto
-                            elide: Text.ElideMiddle
-                        }
-                        Text {
-                            text: fila.modelData.duration
-                            color: Theme.textoSecundario
-                            font.pixelSize: Theme.tamTextoPequeno
-                            font.family: "Consolas, monospace"
-                        }
-                        Text {
-                            Layout.preferredWidth: 118
-                            text: fila.modelData.details
-                            color: Theme.textoSecundario
-                            font.pixelSize: Theme.tamTextoPequeno
-                            elide: Text.ElideRight
-                        }
-                        BotonIcono {
-                            icono: "mas"
-                            ayuda: "Añadir al final de la línea de tiempo"
-                            implicitWidth: 28
-                            implicitHeight: 26
-                            onPulsado: panel.editor.addMedia(fila.modelData.id, -1)
-                        }
-                    }
-                }
-            }
-
-            // Cuadrícula con miniaturas
-            GridView {
-                id: rejilla
-                visible: panel.cuadricula
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                cellWidth: Math.floor(width / 3)
-                cellHeight: cellWidth * 9 / 16 + 30
-                model: panel.mediosFiltrados
-                ScrollBar.vertical: ScrollBar {}
-
-                delegate: Item {
-                    id: celda
-                    required property var modelData
-                    width: rejilla.cellWidth
-                    height: rejilla.cellHeight
-
-                    Rectangle {
-                        id: marco
-                        x: 3
-                        width: parent.width - 6
-                        height: width * 9 / 16
-                        radius: Theme.radio
-                        color: Theme.fondo
-                        border.color: arrastreCelda.containsMouse ? Theme.acento : Theme.borde
-                        clip: true
-
-                        Icono {
-                            anchors.centerIn: parent
-                            visible: miniatura.status !== Image.Ready
-                            nombre: celda.modelData.video ? "video" : "audio"
-                            tam: 26
-                            color: Theme.textoDesactivado
-                        }
-                        Image {
-                            id: miniatura
-                            anchors.fill: parent
-                            anchors.margins: 1
-                            source: celda.modelData.thumbnail
-                            asynchronous: true
-                            fillMode: Image.PreserveAspectCrop
-                            sourceSize.width: 320
-                        }
-                        Rectangle {
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.margins: 5
-                            width: duracion.implicitWidth + 10
-                            height: duracion.implicitHeight + 2
-                            radius: 3
-                            color: Theme.visorFondo
-                            Text {
-                                id: duracion
-                                anchors.centerIn: parent
-                                text: celda.modelData.duration
-                                color: Theme.texto
-                                font.pixelSize: 10
-                                font.family: "Consolas, monospace"
-                            }
-                        }
-                        ArrastreMedio {
-                            id: arrastreCelda
-                            anchors.fill: parent
-                            medio: celda.modelData
-                            fantasma: panel.fantasma
-                            onAbrir: (ruta) => panel.abrirEnOrigen(ruta)
-                        }
-                        BotonIcono {
-                            anchors.top: parent.top
-                            anchors.right: parent.right
-                            anchors.margins: 4
-                            visible: arrastreCelda.containsMouse || hovered
-                            property bool hovered: false
-                            icono: "mas"
-                            ayuda: "Añadir al final de la línea de tiempo"
-                            implicitWidth: 26
-                            implicitHeight: 24
-                            color: Theme.panelElevado
-                            onPulsado: panel.editor.addMedia(celda.modelData.id, -1)
-                            HoverHandler { onHoveredChanged: parent.hovered = hovered }
-                        }
-                    }
-                    Text {
-                        anchors.top: marco.bottom
-                        anchors.topMargin: 5
-                        x: 4
-                        width: parent.width - 8
-                        text: celda.modelData.name
-                        color: Theme.textoSecundario
-                        font.pixelSize: Theme.tamTextoPequeno
-                        elide: Text.ElideMiddle
-                    }
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                visible: panel.editor.mediaItems.length === 0
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-                text: "Pulsa «Importar…» o arrastra videos aquí."
-                color: Theme.textoSecundario
-                font.pixelSize: Theme.tamTexto
-            }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Arrastra un medio a la línea de tiempo · doble clic para abrirlo en Origen"
-                color: Theme.textoDesactivado
-                font.pixelSize: Theme.tamTextoPequeno
-            }
+            editor: panel.editor
+            fantasma: panel.fantasma
+            onImportar: panel.importar()
+            onAbrirEnOrigen: (ruta) => panel.abrirEnOrigen(ruta)
+            onNuevaSecuencia: panel.nuevaSecuencia()
+            onCerrarProyecto: (uid) => panel.cerrarProyecto(uid)
         }
 
         // --- Transiciones ---
@@ -846,7 +619,7 @@ Rectangle {
         keys: ["text/uri-list"]
         onDropped: (soltado) => {
             if (soltado.hasUrls) {
-                panel.editor.importFiles(soltado.urls)
+                panel.editor.importFiles(soltado.urls, -1, -1, panel.carpeta)
                 soltado.acceptProposedAction()
             }
         }

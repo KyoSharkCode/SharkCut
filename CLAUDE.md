@@ -16,7 +16,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 3, que abre la 1 y la 2).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 4, que abre la 1, la 2
+  y la 3 como un proyecto de una secuencia).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
 
@@ -34,6 +35,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   que mantienen coherentes enlaces y transiciones), deshacer/rehacer (history.h: cada
   edición se aplica a una copia del proyecto) y el archivo .sharkp (project_file.h, con
   nlohmann/json).
+  src/core también: document.h, el proyecto completo (medios, carpetas y varias
+  secuencias, cada una con su lienzo, fps y pistas). Las operaciones de edit.h trabajan
+  sobre un `Project`, que es la vista de una secuencia (`Document::view`/`store`); el
+  historial de cada proyecto abierto es un `DocumentHistory`.
   src/media también: AudioSource, SequenceAudioSource (mezcla A/B con fundido).
   src/render (Qt Gui, sin Quick): Compositor QRhi (capas de abajo arriba, cada una con
   posición, escala, opacidad y recorte, o dos clips con transición → lienzo →
@@ -43,9 +48,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC),
   TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
   caché en disco).
-  src/app también: Editor (proyecto + historial, herramientas y reproducción de la línea
-  de tiempo); interfaz en qml/LineaTiempo.qml, qml/PanelMedios.qml y los diálogos
-  qml/Dialogo*.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  src/app también: Editor (proyectos abiertos con su historial, pestañas de secuencias,
+  herramientas y reproducción de la secuencia activa); interfaz en qml/LineaTiempo.qml,
+  qml/PanelMedios.qml (con qml/PanelBiblioteca.qml: proyectos, carpetas, secuencias y
+  medios) y los diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
   Iconos: qml/Icono.qml (trazos SVG dibujados con QtQuick.Shapes); añadir los nuevos ahí.

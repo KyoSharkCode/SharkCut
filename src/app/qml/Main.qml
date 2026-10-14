@@ -14,7 +14,8 @@ Window {
     visible: true
     title: (modo === "origen" && reproductor.fileName.length > 0
             ? reproductor.fileName
-            : editor.projectName + (editor.modified ? " •" : ""))
+            : editor.projectName + (editor.modified ? " •" : "")
+              + (editor.hasSequence ? " · " + editor.sequenceName : ""))
            + " — SharkCut " + AppInfo.appVersion
     color: Theme.fondo
 
@@ -98,7 +99,7 @@ Window {
         fileMode: FileDialog.OpenFiles
         nameFilters: ["Videos y audio (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts *.mp3 *.wav *.m4a *.aac *.flac *.ogg)",
                       "Todos los archivos (*)"]
-        onAccepted: editor.importFiles(selectedFiles)
+        onAccepted: editor.importFiles(selectedFiles, -1, -1, panelMedios.carpeta)
     }
 
     FileDialog {
@@ -124,34 +125,54 @@ Window {
         id: dialogoNuevo
         onCrear: (nombre, ancho, alto, fps) => editor.newProject(nombre, ancho, alto, fps)
     }
+    DialogoNuevoProyecto {
+        id: dialogoSecuencia
+        secuencia: true
+        onCrear: (nombre, ancho, alto, fps) => editor.newSequence(nombre, ancho, alto, fps)
+    }
 
-    // --- Proyecto: guardar, abrir y cambios sin guardar ---
+    // --- Proyectos: guardar y cambios sin guardar ---
 
-    // Acción que espera a que se guarden (o descarten) los cambios: "nuevo", "abrir" o "cerrar".
+    // Acción que espera a que se guarden (o descarten) los cambios del proyecto activo:
+    // "cerrarProyecto" (el de `proyectoPendiente`) o "cerrar" (la ventana).
     property string accionPendiente: ""
+    property var proyectoPendiente: 0
     property bool cerrarSinPreguntar: false
 
     function guardar() {
         if (!editor.save())
             dialogoGuardarProyecto.open()
     }
-    function siGuardado(accion) {
-        if (!editor.modified) {
-            ejecutar(accion)
+    function cerrarProyecto(uid) {
+        if (!editor.projectModified(uid)) {
+            editor.closeProject(uid)
             return
         }
-        accionPendiente = accion
+        editor.activateProject(uid)
+        proyectoPendiente = uid
+        accionPendiente = "cerrarProyecto"
         dialogoCambios.open()
     }
-    function ejecutar(accion) {
-        accionPendiente = ""
-        if (accion === "nuevo") {
-            dialogoNuevo.open()
-        } else if (accion === "abrir") {
-            dialogoAbrirProyecto.open()
-        } else if (accion === "cerrar") {
+    // Al cerrar la ventana se pregunta por cada proyecto con cambios, uno a uno.
+    function revisarCierre() {
+        const pendientes = editor.unsavedProjects()
+        if (pendientes.length === 0) {
             cerrarSinPreguntar = true
             Qt.callLater(ventana.close)
+            return
+        }
+        editor.activateProject(pendientes[0])
+        accionPendiente = "cerrar"
+        dialogoCambios.open()
+    }
+    function ejecutar(accion, descartado) {
+        accionPendiente = ""
+        if (accion === "cerrarProyecto") {
+            editor.closeProject(proyectoPendiente)
+        } else if (accion === "cerrar") {
+            if (descartado)
+                editor.closeProject(editor.activeProject) // para no volver a preguntar
+            revisarCierre()
         }
     }
 
@@ -176,7 +197,7 @@ Window {
             if (respuesta === "guardar")
                 ventana.guardar() // la acción sigue al terminar de guardar
             else if (respuesta === "descartar")
-                ventana.ejecutar(ventana.accionPendiente)
+                ventana.ejecutar(ventana.accionPendiente, true)
             else
                 ventana.accionPendiente = ""
         }
@@ -218,15 +239,15 @@ Window {
         target: editor
         function onSaved(ok) {
             if (ok && ventana.accionPendiente.length > 0)
-                ventana.ejecutar(ventana.accionPendiente)
+                ventana.ejecutar(ventana.accionPendiente, false)
             else if (!ok)
                 ventana.accionPendiente = ""
         }
     }
     onClosing: (cierre) => {
-        if (editor.modified && !cerrarSinPreguntar) {
+        if (!cerrarSinPreguntar && editor.unsavedProjects().length > 0) {
             cierre.accepted = false
-            siGuardado("cerrar")
+            revisarCierre()
         }
     }
 
@@ -260,9 +281,9 @@ Window {
     Shortcut { sequence: "M"; onActivated: ventana.activo.muted = !ventana.activo.muted }
     Shortcut {
         sequences: [StandardKey.Open]
-        onActivated: ventana.enEditor ? ventana.siGuardado("abrir") : dialogoAbrir.open()
+        onActivated: ventana.enEditor ? dialogoAbrirProyecto.open() : dialogoAbrir.open()
     }
-    Shortcut { sequences: [StandardKey.New]; onActivated: ventana.siGuardado("nuevo") }
+    Shortcut { sequences: [StandardKey.New]; onActivated: dialogoNuevo.open() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: ventana.guardar() }
     Shortcut { sequence: "Ctrl+Shift+S"; onActivated: dialogoGuardarProyecto.open() }
     Shortcut {
@@ -368,14 +389,14 @@ Window {
                 icono: "nuevo"
                 texto: "Nuevo"
                 ayuda: "Nuevo proyecto (Ctrl+N)"
-                onPulsado: ventana.siGuardado("nuevo")
+                onPulsado: dialogoNuevo.open()
             }
             BotonIcono {
                 visible: ventana.enEditor
                 icono: "abrir"
                 texto: "Abrir"
                 ayuda: "Abrir proyecto (Ctrl+O)"
-                onPulsado: ventana.siGuardado("abrir")
+                onPulsado: dialogoAbrirProyecto.open()
             }
             BotonIcono {
                 visible: ventana.enEditor
@@ -402,12 +423,15 @@ Window {
 
             // Editor: medios, transiciones, efectos y propiedades a la izquierda
             PanelMedios {
+                id: panelMedios
                 visible: ventana.enEditor
                 Layout.preferredWidth: 430
                 Layout.fillHeight: true
                 editor: editor
                 fantasma: fantasma
                 onImportar: dialogoImportar.open()
+                onNuevaSecuencia: dialogoSecuencia.open()
+                onCerrarProyecto: (uid) => ventana.cerrarProyecto(uid)
                 onAbrirEnOrigen: (ruta) => {
                     ventana.cambiarModo("origen")
                     reproductor.openPath(ruta)
@@ -466,7 +490,7 @@ Window {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: ventana.enEditor ? "Línea de tiempo vacía"
+                                text: ventana.enEditor ? (editor.hasSequence ? "Secuencia vacía" : "Sin secuencia abierta")
                                       : ventana.enOrigen
                                       ? (reproductor.busy ? "Abriendo…" : "Origen")
                                       : "Transición"
@@ -479,7 +503,9 @@ Window {
                                 visible: !reproductor.busy || !ventana.enOrigen
                                 horizontalAlignment: Text.AlignHCenter
                                 text: ventana.enEditor
-                                      ? "Importa medios (Ctrl+I) y arrástralos a la línea de tiempo."
+                                      ? (editor.hasSequence
+                                         ? "Importa medios (Ctrl+I) y arrástralos a la línea de tiempo."
+                                         : "Abre una secuencia desde Medios o crea una nueva.")
                                       : ventana.enOrigen
                                       ? "Arrastra un video aquí o pulsa «Abrir video…» (Ctrl+O)."
                                       : "En la pestaña Origen, marca un tramo y envíalo como clip A\n"
@@ -645,7 +671,7 @@ Window {
                         if (!drop.hasUrls || drop.urls.length === 0)
                             return
                         if (ventana.enEditor) {
-                            editor.importFiles(drop.urls)
+                            editor.importFiles(drop.urls, -1, -1, panelMedios.carpeta)
                         } else {
                             ventana.cambiarModo("origen")
                             reproductor.open(drop.urls[0])
@@ -931,6 +957,7 @@ Window {
             LineaTiempo {
                 id: lineaTiempo
                 editor: editor
+                onNuevaSecuencia: dialogoSecuencia.open()
                 Layout.fillWidth: true
                 Layout.fillHeight: true
             }

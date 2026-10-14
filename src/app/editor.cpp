@@ -112,12 +112,35 @@ ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
 // Volumen al que entra un efecto de sonido (por debajo de la voz y el juego).
 constexpr double kSoundVolumeDb = -6.0;
 
-// Proyecto nuevo: V1 y V2 encima, A1 y A2 debajo (gameplay, facecam y música).
-Project newTimeline() {
-    Project project;
-    sharkcut::addTrack(project, sharkcut::TrackKind::Video);
-    sharkcut::addTrack(project, sharkcut::TrackKind::Audio);
-    return project;
+// Documento nuevo con una secuencia (V1 y V2 encima, A1 y A2 debajo).
+sharkcut::Document newDocument(const std::string& sequenceName, int width, int height, int fps) {
+    sharkcut::ProjectSettings settings;
+    if (width > 0 && height > 0) {
+        settings.width = width;
+        settings.height = height;
+        settings.adoptCanvas = false;
+    }
+    if (fps > 0) {
+        settings.frameRate = {fps, 1};
+        settings.adoptFrameRate = false;
+    }
+    sharkcut::Document document;
+    sharkcut::addSequence(document, sequenceName, settings);
+    return document;
+}
+
+QString aspectLabel(int w, int h) {
+    const int g = std::gcd(w, h);
+    if (g <= 0) {
+        return {};
+    }
+    const int rw = w / g;
+    const int rh = h / g;
+    if ((rw == 16 && rh == 9) || (rw == 9 && rh == 16) || (rw == 1 && rh == 1) ||
+        (rw == 4 && rh == 3)) {
+        return QStringLiteral("%1:%2").arg(rw).arg(rh);
+    }
+    return QStringLiteral("%1×%2").arg(w).arg(h);
 }
 
 bool sameTiming(const Clip& a, const Clip& b) {
@@ -193,8 +216,14 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
 
 } // namespace
 
-Editor::Editor(QObject* parent) : CompositionSource(parent), m_history(newTimeline()) {
+Editor::Editor(QObject* parent) : CompositionSource(parent) {
     m_audioOutput = createAudioOutput(nullptr);
+    // Siempre hay un proyecto abierto: al empezar, uno nuevo con una secuencia.
+    OpenProject& first = addProject(newDocument("Secuencia 1", 0, 0, 0), {}, {});
+    m_activeProject = first.uid;
+    m_tabs.push_back({first.uid, first.history.state().sequences.front().id, 0});
+    m_activeTab = 0;
+    refreshView();
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
     connect(this, &Editor::selectionChanged, this, &Editor::selectedClipChanged);
@@ -212,7 +241,7 @@ Editor::~Editor() {
 
 QVariantList Editor::mediaItems() const {
     QVariantList list;
-    for (const MediaItem& item : project().media) {
+    for (const MediaItem& item : document().media) {
         QVariantMap entry;
         entry[QStringLiteral("id")] = static_cast<qint64>(item.id);
         entry[QStringLiteral("name")] = QString::fromStdString(item.name);
@@ -220,6 +249,7 @@ QVariantList Editor::mediaItems() const {
         entry[QStringLiteral("duration")] = durationText(item.durationUs);
         entry[QStringLiteral("video")] = item.hasVideo;
         entry[QStringLiteral("audio")] = item.hasAudio;
+        entry[QStringLiteral("folder")] = static_cast<qint64>(item.folder);
         entry[QStringLiteral("thumbnail")] =
             item.hasVideo ? QString(QStringLiteral("image://miniaturas/") +
                                     QString::fromLatin1(
@@ -346,7 +376,7 @@ bool Editor::waveformLoading(qint64 mediaId) const {
 
 void Editor::updateWaveformDirectory() {
     m_waveforms.setDirectory(
-        m_projectPath.isEmpty() ? QString() : m_projectPath + QStringLiteral(".cache/ondas"));
+        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/ondas"));
 }
 
 sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
@@ -395,15 +425,15 @@ QString Editor::projectDescription() const {
 }
 
 QString Editor::undoText() const {
-    return canUndo()
-               ? QStringLiteral("Deshacer: %1").arg(QString::fromStdString(m_history.undoLabel()))
-               : QStringLiteral("Deshacer");
+    return canUndo() ? QStringLiteral("Deshacer: %1")
+                           .arg(QString::fromStdString(current().history.undoLabel()))
+                     : QStringLiteral("Deshacer");
 }
 
 QString Editor::redoText() const {
-    return canRedo()
-               ? QStringLiteral("Rehacer: %1").arg(QString::fromStdString(m_history.redoLabel()))
-               : QStringLiteral("Rehacer");
+    return canRedo() ? QStringLiteral("Rehacer: %1")
+                           .arg(QString::fromStdString(current().history.redoLabel()))
+                     : QStringLiteral("Rehacer");
 }
 
 QVariantList Editor::selection() const {
@@ -495,34 +525,433 @@ sharkcut::CompositorInput Editor::composition() const {
     return input;
 }
 
+// --- Proyectos abiertos y pestañas ------------------------------------------------
+
+Editor::OpenProject& Editor::current() {
+    return *findProject(m_activeProject);
+}
+
+const Editor::OpenProject& Editor::current() const {
+    return *findProject(m_activeProject);
+}
+
+Editor::OpenProject* Editor::findProject(quint64 uid) {
+    for (auto& p : m_projects) {
+        if (p->uid == uid) {
+            return p.get();
+        }
+    }
+    return nullptr;
+}
+
+const Editor::OpenProject* Editor::findProject(quint64 uid) const {
+    for (const auto& p : m_projects) {
+        if (p->uid == uid) {
+            return p.get();
+        }
+    }
+    return nullptr;
+}
+
+QString Editor::nameOf(const OpenProject& project) const {
+    if (!project.path.isEmpty()) {
+        return QFileInfo(project.path).completeBaseName();
+    }
+    return project.newName.isEmpty() ? QStringLiteral("Sin título") : project.newName;
+}
+
+Editor::OpenProject& Editor::addProject(sharkcut::Document document, QString path,
+                                        QString newName) {
+    auto project = std::make_unique<OpenProject>();
+    project->uid = m_nextUid++;
+    project->history.reset(std::move(document));
+    project->path = std::move(path);
+    project->newName = std::move(newName);
+    m_projects.push_back(std::move(project));
+    return *m_projects.back();
+}
+
+ObjectId Editor::activeSequenceId() const {
+    if (m_activeTab < 0 || m_activeTab >= static_cast<int>(m_tabs.size())) {
+        return 0;
+    }
+    const Tab& tab = m_tabs[static_cast<std::size_t>(m_activeTab)];
+    if (tab.project != m_activeProject || !document().sequence(tab.sequence)) {
+        return 0;
+    }
+    return tab.sequence;
+}
+
+void Editor::refreshView() {
+    const ObjectId sequence = activeSequenceId();
+    m_view = sequence != 0 ? document().view(sequence) : Project{};
+}
+
+sharkcut::Workspace Editor::workspaceOf(const OpenProject& project) const {
+    sharkcut::Workspace workspace;
+    for (std::size_t i = 0; i < m_tabs.size(); ++i) {
+        if (m_tabs[i].project == project.uid) {
+            workspace.openSequences.push_back(m_tabs[i].sequence);
+            if (static_cast<int>(i) == m_activeTab) {
+                workspace.activeSequence = m_tabs[i].sequence;
+            }
+        }
+    }
+    return workspace;
+}
+
+void Editor::switchTo(int tab) {
+    pause();
+    if (m_activeTab >= 0 && m_activeTab < static_cast<int>(m_tabs.size())) {
+        m_tabs[static_cast<std::size_t>(m_activeTab)].frame = m_currentFrame;
+    }
+    m_activeTab = tab >= 0 && tab < static_cast<int>(m_tabs.size()) ? tab : -1;
+    qint64 frame = 0;
+    if (m_activeTab >= 0) {
+        const Tab& t = m_tabs[static_cast<std::size_t>(m_activeTab)];
+        m_activeProject = t.project;
+        frame = t.frame;
+    }
+    m_selection.clear();
+    m_selectedTransition = 0;
+    m_previewClip = 0;
+    updateWaveformDirectory();
+    setCurrentFrame(frame);
+    onProjectChanged();
+    emit projectsChanged();
+    emit fileChanged();
+}
+
+QVariantList Editor::projects() const {
+    QVariantList list;
+    for (const auto& p : m_projects) {
+        QVariantMap entry;
+        entry[QStringLiteral("uid")] = static_cast<qint64>(p->uid);
+        entry[QStringLiteral("name")] = nameOf(*p);
+        entry[QStringLiteral("modified")] = p->history.modified();
+        entry[QStringLiteral("active")] = p->uid == m_activeProject;
+        entry[QStringLiteral("saved")] = !p->path.isEmpty();
+        list.append(entry);
+    }
+    return list;
+}
+
+QVariantList Editor::tabs() const {
+    QVariantList list;
+    for (std::size_t i = 0; i < m_tabs.size(); ++i) {
+        const Tab& tab = m_tabs[i];
+        const OpenProject* project = findProject(tab.project);
+        const sharkcut::Sequence* sequence =
+            project ? project->history.state().sequence(tab.sequence) : nullptr;
+        if (!sequence) {
+            continue;
+        }
+        QVariantMap entry;
+        entry[QStringLiteral("index")] = static_cast<int>(i);
+        entry[QStringLiteral("project")] = static_cast<qint64>(tab.project);
+        entry[QStringLiteral("sequence")] = static_cast<qint64>(tab.sequence);
+        entry[QStringLiteral("name")] = QString::fromStdString(sequence->name);
+        entry[QStringLiteral("projectName")] = nameOf(*project);
+        entry[QStringLiteral("active")] = static_cast<int>(i) == m_activeTab;
+        entry[QStringLiteral("canvas")] =
+            aspectLabel(sequence->settings.width, sequence->settings.height);
+        list.append(entry);
+    }
+    return list;
+}
+
+QString Editor::sequenceName() const {
+    const sharkcut::Sequence* sequence = document().sequence(activeSequenceId());
+    return sequence ? QString::fromStdString(sequence->name) : QString();
+}
+
+QVariantList Editor::folders() const {
+    QVariantList list;
+    const sharkcut::Document& d = document();
+    for (const sharkcut::Folder& folder : d.folders) {
+        const auto count =
+            std::count_if(d.media.begin(), d.media.end(),
+                          [&folder](const MediaItem& m) { return m.folder == folder.id; }) +
+            std::count_if(d.sequences.begin(), d.sequences.end(),
+                          [&folder](const sharkcut::Sequence& s) { return s.folder == folder.id; });
+        QVariantMap entry;
+        entry[QStringLiteral("id")] = static_cast<qint64>(folder.id);
+        entry[QStringLiteral("name")] = QString::fromStdString(folder.name);
+        entry[QStringLiteral("count")] = static_cast<int>(count);
+        list.append(entry);
+    }
+    return list;
+}
+
+QVariantList Editor::sequences() const {
+    QVariantList list;
+    const sharkcut::Document& d = document();
+    for (const sharkcut::Sequence& sequence : d.sequences) {
+        const Project view = d.view(sequence.id);
+        const sharkcut::ProjectSettings& s = sequence.settings;
+        QVariantMap entry;
+        entry[QStringLiteral("id")] = static_cast<qint64>(sequence.id);
+        entry[QStringLiteral("name")] = QString::fromStdString(sequence.name);
+        entry[QStringLiteral("folder")] = static_cast<qint64>(sequence.folder);
+        entry[QStringLiteral("canvas")] = aspectLabel(s.width, s.height);
+        entry[QStringLiteral("details")] =
+            QStringLiteral("%1×%2 · %3 fps").arg(s.width).arg(s.height).arg(fpsText(s.frameRate));
+        entry[QStringLiteral("duration")] =
+            QString::fromStdString(sharkcut::formatTimecode(view.length(), s.frameRate));
+        entry[QStringLiteral("open")] =
+            std::any_of(m_tabs.begin(), m_tabs.end(), [&](const Tab& t) {
+                return t.project == m_activeProject && t.sequence == sequence.id;
+            });
+        list.append(entry);
+    }
+    return list;
+}
+
+void Editor::activateProject(qint64 uid) {
+    const auto id = static_cast<quint64>(uid);
+    if (!findProject(id) || id == m_activeProject) {
+        return;
+    }
+    // Su última pestaña, si tiene alguna abierta.
+    int tab = -1;
+    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+        if (m_tabs[static_cast<std::size_t>(i)].project == id) {
+            tab = i;
+        }
+    }
+    if (tab >= 0) {
+        switchTo(tab);
+        return;
+    }
+    pause();
+    if (m_activeTab >= 0 && m_activeTab < static_cast<int>(m_tabs.size())) {
+        m_tabs[static_cast<std::size_t>(m_activeTab)].frame = m_currentFrame;
+    }
+    m_activeProject = id;
+    m_activeTab = -1;
+    switchTo(-1);
+}
+
+void Editor::closeProject(qint64 uid) {
+    const auto id = static_cast<quint64>(uid);
+    if (!findProject(id) || m_fileBusy) {
+        return;
+    }
+    pause();
+    // La pestaña activa, para volver a encontrarla después de quitar las del proyecto.
+    std::optional<Tab> active;
+    if (m_activeTab >= 0 && m_activeTab < static_cast<int>(m_tabs.size())) {
+        m_tabs[static_cast<std::size_t>(m_activeTab)].frame = m_currentFrame;
+        active = m_tabs[static_cast<std::size_t>(m_activeTab)];
+    }
+    std::erase_if(m_tabs, [id](const Tab& t) { return t.project == id; });
+    std::erase_if(m_projects, [id](const auto& p) { return p->uid == id; });
+    if (m_projects.empty()) {
+        OpenProject& fresh = addProject(newDocument("Secuencia 1", 0, 0, 0), {}, {});
+        m_tabs.push_back({fresh.uid, fresh.history.state().sequences.front().id, 0});
+    }
+    int tab = -1;
+    if (id != m_activeProject && findProject(m_activeProject)) {
+        for (int i = 0; active && i < static_cast<int>(m_tabs.size()); ++i) {
+            const Tab& t = m_tabs[static_cast<std::size_t>(i)];
+            if (t.project == active->project && t.sequence == active->sequence) {
+                tab = i;
+            }
+        }
+    } else {
+        // Otro proyecto: el último abierto, en su última pestaña.
+        m_activeProject = m_projects.back()->uid;
+        for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+            if (m_tabs[static_cast<std::size_t>(i)].project == m_activeProject) {
+                tab = i;
+            }
+        }
+    }
+    m_activeTab = -1; // la posición del cabezal ya está guardada
+    switchTo(tab);
+}
+
+bool Editor::projectModified(qint64 uid) const {
+    const OpenProject* project = findProject(static_cast<quint64>(uid));
+    return project && project->history.modified();
+}
+
+QVariantList Editor::unsavedProjects() const {
+    QVariantList list;
+    for (const auto& p : m_projects) {
+        if (p->history.modified()) {
+            list.append(static_cast<qint64>(p->uid));
+        }
+    }
+    return list;
+}
+
+void Editor::openSequence(qint64 sequenceId) {
+    const auto id = static_cast<ObjectId>(sequenceId);
+    if (!document().sequence(id)) {
+        return;
+    }
+    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+        const Tab& tab = m_tabs[static_cast<std::size_t>(i)];
+        if (tab.project == m_activeProject && tab.sequence == id) {
+            switchTo(i);
+            return;
+        }
+    }
+    m_tabs.push_back({m_activeProject, id, 0});
+    switchTo(static_cast<int>(m_tabs.size()) - 1);
+}
+
+void Editor::activateTab(int index) {
+    if (index >= 0 && index < static_cast<int>(m_tabs.size()) && index != m_activeTab) {
+        switchTo(index);
+    }
+}
+
+void Editor::closeTab(int index) {
+    if (index < 0 || index >= static_cast<int>(m_tabs.size())) {
+        return;
+    }
+    const quint64 project = m_tabs[static_cast<std::size_t>(index)].project;
+    const bool wasActive = index == m_activeTab;
+    if (m_activeTab >= 0 && m_activeTab < static_cast<int>(m_tabs.size())) {
+        m_tabs[static_cast<std::size_t>(m_activeTab)].frame = m_currentFrame;
+    }
+    m_tabs.erase(m_tabs.begin() + index);
+    int next = m_activeTab;
+    if (wasActive) {
+        // Otra pestaña del mismo proyecto, si queda alguna (la más cercana).
+        next = -1;
+        for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+            if (m_tabs[static_cast<std::size_t>(i)].project == project) {
+                next = i;
+                if (i >= index) {
+                    break;
+                }
+            }
+        }
+        m_activeProject = project;
+    } else if (index < m_activeTab) {
+        --next;
+    }
+    m_activeTab = -1;
+    switchTo(next);
+}
+
+void Editor::newSequence(const QString& name, int width, int height, int fps) {
+    ObjectId created = 0;
+    sharkcut::ProjectSettings settings = project().settings;
+    if (width > 0 && height > 0) {
+        settings.width = width;
+        settings.height = height;
+        settings.adoptCanvas = false;
+    }
+    if (fps > 0) {
+        settings.frameRate = {fps, 1};
+        settings.adoptFrameRate = false;
+    }
+    const std::string sequenceName =
+        name.trimmed().isEmpty()
+            ? QStringLiteral("Secuencia %1").arg(document().sequences.size() + 1).toStdString()
+            : name.trimmed().toStdString();
+    editDocument(QStringLiteral("Nueva secuencia"), [&](sharkcut::Document& d) {
+        created = sharkcut::addSequence(d, sequenceName, settings);
+        return created != 0;
+    });
+    if (created != 0) {
+        openSequence(static_cast<qint64>(created));
+    }
+}
+
+void Editor::renameSequence(qint64 sequenceId, const QString& name) {
+    const std::string text = name.trimmed().toStdString();
+    editDocument(QStringLiteral("Renombrar secuencia"), [&](sharkcut::Document& d) {
+        return sharkcut::renameSequence(d, static_cast<ObjectId>(sequenceId), text);
+    });
+}
+
+void Editor::duplicateSequence(qint64 sequenceId, bool vertical) {
+    const sharkcut::Sequence* original = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!original) {
+        return;
+    }
+    const std::string name =
+        original->name + (vertical ? std::string(" (vertical)") : std::string(" (copia)"));
+    std::optional<std::pair<int, int>> canvas;
+    if (vertical) {
+        // El lado corto del lienzo original pasa a ser el ancho (1920×1080 → 1080×1920).
+        const int shortSide = std::min(original->settings.width, original->settings.height);
+        canvas = std::pair{shortSide, shortSide * 16 / 9};
+    }
+    ObjectId created = 0;
+    editDocument(
+        vertical ? QStringLiteral("Duplicar como vertical") : QStringLiteral("Duplicar secuencia"),
+        [&](sharkcut::Document& d) {
+            created =
+                sharkcut::duplicateSequence(d, static_cast<ObjectId>(sequenceId), name, canvas);
+            return created != 0;
+        });
+    if (created != 0) {
+        openSequence(static_cast<qint64>(created));
+    }
+}
+
+void Editor::removeSequence(qint64 sequenceId) {
+    const auto id = static_cast<ObjectId>(sequenceId);
+    if (!editDocument(QStringLiteral("Quitar secuencia"),
+                      [id](sharkcut::Document& d) { return sharkcut::removeSequence(d, id); })) {
+        setError(QStringLiteral("Un proyecto necesita al menos una secuencia"));
+        return;
+    }
+    // Sus pestañas se cierran (quitarla se puede deshacer; la pestaña se vuelve a abrir
+    // desde Medios).
+    pruneTabs();
+    emit projectsChanged();
+}
+
+void Editor::newFolder(const QString& name) {
+    const std::string text =
+        name.trimmed().isEmpty() ? std::string("Carpeta nueva") : name.trimmed().toStdString();
+    editDocument(QStringLiteral("Nueva carpeta"),
+                 [&text](sharkcut::Document& d) { return sharkcut::addFolder(d, text) != 0; });
+}
+
+void Editor::renameFolder(qint64 folderId, const QString& name) {
+    const std::string text = name.trimmed().toStdString();
+    editDocument(QStringLiteral("Renombrar carpeta"), [&](sharkcut::Document& d) {
+        return sharkcut::renameFolder(d, static_cast<ObjectId>(folderId), text);
+    });
+}
+
+void Editor::removeFolder(qint64 folderId) {
+    editDocument(QStringLiteral("Quitar carpeta"), [folderId](sharkcut::Document& d) {
+        return sharkcut::removeFolder(d, static_cast<ObjectId>(folderId));
+    });
+}
+
+void Editor::moveToFolder(const QVariantList& items, qint64 folderId) {
+    std::vector<ObjectId> ids;
+    for (const QVariant& item : items) {
+        ids.push_back(static_cast<ObjectId>(item.toLongLong()));
+    }
+    editDocument(QStringLiteral("Mover a la carpeta"), [&](sharkcut::Document& d) {
+        return sharkcut::moveToFolder(d, ids, static_cast<ObjectId>(folderId));
+    });
+}
+
 // --- Archivo del proyecto -------------------------------------------------------------
 
 QString Editor::projectName() const {
-    if (!m_projectPath.isEmpty()) {
-        return QFileInfo(m_projectPath).completeBaseName();
-    }
-    return m_newName.isEmpty() ? QStringLiteral("Sin título") : m_newName;
+    return nameOf(current());
 }
 
 QString Editor::canvasLabel() const {
-    const int w = project().settings.width;
-    const int h = project().settings.height;
-    const int g = std::gcd(w, h);
-    if (g <= 0) {
-        return {};
-    }
-    const int rw = w / g;
-    const int rh = h / g;
-    if ((rw == 16 && rh == 9) || (rw == 9 && rh == 16) || (rw == 1 && rh == 1) ||
-        (rw == 4 && rh == 3)) {
-        return QStringLiteral("%1:%2").arg(rw).arg(rh);
-    }
-    return QStringLiteral("%1×%2").arg(w).arg(h);
+    return aspectLabel(project().settings.width, project().settings.height);
 }
 
 QUrl Editor::defaultExportFolder() const {
-    if (!m_projectPath.isEmpty()) {
-        return QUrl::fromLocalFile(QFileInfo(m_projectPath).absolutePath());
+    if (!current().path.isEmpty()) {
+        return QUrl::fromLocalFile(QFileInfo(current().path).absolutePath());
     }
     return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::MoviesLocation));
 }
@@ -538,26 +967,14 @@ void Editor::newProject(const QString& name, int width, int height, int fps) {
     if (m_fileBusy) {
         return;
     }
-    pause();
-    Project project = newTimeline();
-    if (width > 0 && height > 0) {
-        project.settings.width = width;
-        project.settings.height = height;
-        project.settings.adoptCanvas = false;
-    }
-    if (fps > 0) {
-        project.settings.frameRate = {fps, 1};
-        project.settings.adoptFrameRate = false;
-    }
-    m_history.reset(std::move(project));
-    m_projectPath.clear();
-    m_newName = name.trimmed();
-    m_selection.clear();
-    setCurrentFrame(0);
+    const QString trimmed = name.trimmed();
+    OpenProject& project = addProject(
+        newDocument(trimmed.isEmpty() ? std::string("Secuencia 1") : trimmed.toStdString(), width,
+                    height, fps),
+        {}, trimmed);
+    m_tabs.push_back({project.uid, project.history.state().sequences.front().id, 0});
     setError({});
-    updateWaveformDirectory();
-    onProjectChanged();
-    emit fileChanged();
+    switchTo(static_cast<int>(m_tabs.size()) - 1);
 }
 
 void Editor::openProject(const QUrl& file) {
@@ -568,18 +985,27 @@ void Editor::openProjectPath(const QString& path) {
     if (path.isEmpty() || m_fileBusy) {
         return;
     }
+    // Si ya está abierto, solo se activa.
+    const QString wanted = QFileInfo(path).absoluteFilePath();
+    for (const auto& p : m_projects) {
+        if (!p->path.isEmpty() && QFileInfo(p->path).absoluteFilePath() == wanted) {
+            activateProject(static_cast<qint64>(p->uid));
+            emit opened(true);
+            return;
+        }
+    }
     pause();
     setFileBusy(true);
     QPointer<Editor> self(this);
     QThreadPool::globalInstance()->start([self, path] {
-        auto project = std::make_shared<Project>();
+        auto loaded = std::make_shared<sharkcut::LoadedDocument>();
         QString error;
         QStringList missing;
         try {
-            *project = sharkcut::loadProject(sharkcut::pathFromUtf8(path.toStdString()));
+            *loaded = sharkcut::loadDocument(sharkcut::pathFromUtf8(path.toStdString()));
             // Los efectos de sonido van con SharkCut: si se instaló en otra carpeta (u
             // otro equipo), se buscan en la de ahora.
-            for (MediaItem& item : project->media) {
+            for (MediaItem& item : loaded->document.media) {
                 std::error_code ignored;
                 const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
                 if (std::filesystem::exists(current, ignored)) {
@@ -595,7 +1021,7 @@ void Editor::openProjectPath(const QString& path) {
                     item.path = candidate.toStdString();
                 }
             }
-            for (const MediaItem& item : project->media) {
+            for (const MediaItem& item : loaded->document.media) {
                 std::error_code ignored;
                 if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
                     missing << QString::fromStdString(item.name);
@@ -606,41 +1032,61 @@ void Editor::openProjectPath(const QString& path) {
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, project, path, error, missing] {
+            [self, loaded, path, error, missing] {
                 if (self) {
-                    self->finishOpen(project, path, error, missing);
+                    self->finishOpen(loaded, path, error, missing);
                 }
             },
             Qt::QueuedConnection);
     });
 }
 
-void Editor::finishOpen(const std::shared_ptr<Project>& project, const QString& path,
-                        const QString& error, const QStringList& missing) {
+void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
+                        const QString& path, const QString& error, const QStringList& missing) {
     setFileBusy(false);
     if (!error.isEmpty()) {
         setError(QStringLiteral("No se pudo abrir el proyecto: %1").arg(error));
         emit opened(false);
         return;
     }
-    m_history.reset(std::move(*project));
-    m_projectPath = path;
-    updateWaveformDirectory();
-    m_selection.clear();
-    setCurrentFrame(0);
+    // Un proyecto nuevo que no se llegó a usar se sustituye por el que se abre.
+    if (m_projects.size() == 1) {
+        const OpenProject& only = *m_projects.front();
+        const sharkcut::Document& d = only.history.state();
+        const bool untouched = only.path.isEmpty() && !only.history.modified() &&
+                               !only.history.canUndo() && d.media.empty();
+        if (untouched) {
+            const quint64 uid = only.uid;
+            std::erase_if(m_tabs, [uid](const Tab& t) { return t.project == uid; });
+            m_projects.clear();
+            m_activeTab = -1;
+        }
+    }
+    OpenProject& project = addProject(std::move(loaded->document), path, {});
+    int active = -1;
+    for (ObjectId sequence : loaded->workspace.openSequences) {
+        m_tabs.push_back({project.uid, sequence, 0});
+        if (sequence == loaded->workspace.activeSequence) {
+            active = static_cast<int>(m_tabs.size()) - 1;
+        }
+    }
     setError(missing.isEmpty() ? QString()
                                : QStringLiteral("No se encuentran estos medios: %1")
                                      .arg(missing.join(QStringLiteral(", "))));
-    onProjectChanged();
-    emit fileChanged();
+    if (m_activeTab >= 0) {
+        m_tabs[static_cast<std::size_t>(m_activeTab)].frame = m_currentFrame;
+    }
+    m_activeTab = -1;
+    m_activeProject = project.uid;
+    switchTo(active);
     emit opened(true);
 }
 
 bool Editor::save() {
-    if (m_projectPath.isEmpty()) {
+    if (current().path.isEmpty()) {
         return false;
     }
-    saveToPath(m_projectPath);
+    saveToPath(m_activeProject, current().path);
     return true;
 }
 
@@ -655,49 +1101,65 @@ void Editor::saveAs(const QUrl& file) {
     if (!path.endsWith(extension, Qt::CaseInsensitive)) {
         path += extension;
     }
-    saveToPath(path);
+    saveToPath(m_activeProject, path);
 }
 
-void Editor::saveToPath(const QString& path) {
-    if (m_fileBusy) {
+void Editor::saveToPath(quint64 uid, const QString& path) {
+    const OpenProject* project = findProject(uid);
+    if (m_fileBusy || !project) {
         return;
     }
     setFileBusy(true);
-    const std::shared_ptr<const Project> snapshot = m_history.snapshot();
+    const std::shared_ptr<const sharkcut::Document> snapshot = project->history.snapshot();
+    const sharkcut::Workspace workspace = workspaceOf(*project);
     QPointer<Editor> self(this);
-    QThreadPool::globalInstance()->start([self, snapshot, path] {
+    QThreadPool::globalInstance()->start([self, uid, snapshot, workspace, path] {
         QString error;
         try {
-            sharkcut::saveProject(*snapshot, sharkcut::pathFromUtf8(path.toStdString()));
+            sharkcut::saveDocument(*snapshot, workspace,
+                                   sharkcut::pathFromUtf8(path.toStdString()));
         } catch (const std::exception& e) {
             error = QString::fromStdString(e.what());
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, snapshot, path, error] {
+            [self, uid, snapshot, path, error] {
                 if (self) {
-                    self->finishSave(snapshot, path, error);
+                    self->finishSave(uid, snapshot, path, error);
                 }
             },
             Qt::QueuedConnection);
     });
 }
 
-void Editor::finishSave(const std::shared_ptr<const Project>& written, const QString& path,
-                        const QString& error) {
+void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Document>& written,
+                        const QString& path, const QString& error) {
     setFileBusy(false);
-    if (!error.isEmpty()) {
+    OpenProject* project = findProject(uid);
+    if (!error.isEmpty() || !project) {
         setError(error);
         emit saved(false);
         return;
     }
-    m_history.markSaved(written);
-    if (m_projectPath != path) {
-        m_projectPath = path;
-        updateWaveformDirectory();
+    project->history.markSaved(written);
+    if (project->path != path) {
+        const bool firstSave = project->path.isEmpty();
+        project->path = path;
+        if (uid == m_activeProject) {
+            updateWaveformDirectory();
+        }
+        if (firstSave) {
+            // Las ondas calculadas mientras no tenía archivo, a su caché.
+            QStringList media;
+            for (const MediaItem& item : written->media) {
+                media << QString::fromStdString(item.path);
+            }
+            m_waveforms.saveTo(path + QStringLiteral(".cache/ondas"), media);
+        }
         emit fileChanged();
     }
     emit modifiedChanged();
+    emit projectsChanged();
     emit saved(true);
 }
 
@@ -794,7 +1256,7 @@ void Editor::cancelExport() {
 
 // --- Biblioteca ---------------------------------------------------------------------
 
-void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt, int track) {
+void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt, int track, qint64 folder) {
     QStringList paths;
     for (const QUrl& url : urls) {
         const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
@@ -802,10 +1264,10 @@ void Editor::importFiles(const QList<QUrl>& urls, qint64 placeAt, int track) {
             paths << path;
         }
     }
-    importPaths(paths, placeAt, track);
+    importPaths(paths, placeAt, track, folder);
 }
 
-void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track) {
+void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track, qint64 folder) {
     if (paths.isEmpty()) {
         return;
     }
@@ -814,7 +1276,8 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track) {
 
     // El análisis abre los archivos: fuera del hilo de la interfaz.
     QPointer<Editor> self(this);
-    QThreadPool::globalInstance()->start([self, paths, placeAt, track] {
+    const quint64 uid = m_activeProject;
+    QThreadPool::globalInstance()->start([self, uid, paths, placeAt, track, folder] {
         auto items = std::make_shared<std::vector<MediaItem>>();
         QStringList errors;
         for (const QString& path : paths) {
@@ -846,57 +1309,83 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track) {
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, items, errors, placeAt, track] {
+            [self, uid, items, errors, placeAt, track, folder] {
                 if (self) {
-                    self->finishImport(std::move(*items), errors, placeAt, track);
+                    self->finishImport(uid, std::move(*items), errors, placeAt, track, folder);
                 }
             },
             Qt::QueuedConnection);
     });
 }
 
-void Editor::finishImport(std::vector<MediaItem> items, QStringList errors, qint64 placeAt,
-                          int track) {
+void Editor::finishImport(quint64 uid, std::vector<MediaItem> items, QStringList errors,
+                          qint64 placeAt, int track, qint64 folder) {
     --m_importing;
     emit importingChanged();
     if (!errors.isEmpty()) {
         setError(QStringLiteral("No se pudo importar: %1").arg(errors.join(QStringLiteral("; "))));
     }
-    if (items.empty()) {
+    // El proyecto donde se pidió; si mientras tanto se cerró, no hay dónde añadirlos.
+    OpenProject* project = findProject(uid);
+    if (items.empty() || !project) {
         return;
     }
+    // Solo se colocan en la línea de tiempo si sigue a la vista la misma secuencia.
+    const ObjectId sequence = uid == m_activeProject ? activeSequenceId() : 0;
+    const bool place = placeAt >= 0 && sequence != 0;
     std::int64_t end = -1;
     const QString label =
-        placeAt >= 0 ? QStringLiteral("Añadir a la línea de tiempo") : QStringLiteral("Importar");
-    const sharkcut::PlaceTarget target = placeTarget(track);
-    edit(label, [&](Project& p) {
-        bool changed = false;
-        std::int64_t at = placeAt;
-        for (const MediaItem& item : items) {
-            ObjectId id = findMediaByPath(p, item.path);
-            if (id == 0) {
-                id = sharkcut::addMedia(p, item);
-                changed = true;
+        place ? QStringLiteral("Añadir a la línea de tiempo") : QStringLiteral("Importar");
+    const sharkcut::PlaceTarget target = place ? placeTarget(track) : sharkcut::PlaceTarget{};
+    const bool changed = project->history.apply(label.toStdString(), [&](sharkcut::Document& d) {
+        bool any = false;
+        std::vector<ObjectId> ids;
+        for (MediaItem item : items) {
+            const auto found =
+                std::find_if(d.media.begin(), d.media.end(),
+                             [&item](const MediaItem& m) { return m.path == item.path; });
+            if (found != d.media.end()) {
+                ids.push_back(found->id);
+                continue;
             }
-            if (placeAt >= 0) {
-                adoptSettings(p, id);
-                if (const ObjectId clip = sharkcut::placeClip(p, id, at, target)) {
-                    at = p.clip(clip)->end();
-                    end = at;
-                    changed = true;
-                }
-            }
+            item.id = d.nextId++;
+            item.folder =
+                d.folder(static_cast<ObjectId>(folder)) ? static_cast<ObjectId>(folder) : 0;
+            ids.push_back(item.id);
+            d.media.push_back(std::move(item));
+            any = true;
         }
-        return changed;
+        if (place) {
+            sharkcut::edit(d, sequence, [&](Project& p) {
+                std::int64_t at = placeAt;
+                for (const ObjectId id : ids) {
+                    adoptSettings(p, id);
+                    if (const ObjectId clip = sharkcut::placeClip(p, id, at, target)) {
+                        at = p.clip(clip)->end();
+                        end = at;
+                        any = true;
+                    }
+                }
+                return true;
+            });
+        }
+        return any;
     });
+    if (!changed) {
+        return;
+    }
+    if (uid == m_activeProject) {
+        onProjectChanged();
+    }
+    emit projectsChanged();
     if (end >= 0) {
         seek(end);
     }
 }
 
 void Editor::removeMedia(qint64 mediaId) {
-    edit(QStringLiteral("Quitar medio"), [mediaId](Project& p) {
-        return sharkcut::removeMedia(p, static_cast<ObjectId>(mediaId));
+    editDocument(QStringLiteral("Quitar medio"), [mediaId](sharkcut::Document& d) {
+        return sharkcut::removeMediaEverywhere(d, static_cast<ObjectId>(mediaId));
     });
 }
 
@@ -908,10 +1397,26 @@ QString Editor::mediaPath(qint64 mediaId) const {
 // --- Edición ------------------------------------------------------------------------
 
 bool Editor::edit(const QString& label, const std::function<bool(Project&)>& change) {
-    if (!m_history.apply(label.toStdString(), change)) {
+    const ObjectId sequence = activeSequenceId();
+    if (sequence == 0) {
+        return false;
+    }
+    if (!current().history.apply(label.toStdString(), [&](sharkcut::Document& d) {
+            return sharkcut::edit(d, sequence, change);
+        })) {
         return false;
     }
     onProjectChanged();
+    return true;
+}
+
+bool Editor::editDocument(const QString& label,
+                          const std::function<bool(sharkcut::Document&)>& change) {
+    if (!current().history.apply(label.toStdString(), change)) {
+        return false;
+    }
+    onProjectChanged();
+    emit projectsChanged();
     return true;
 }
 
@@ -1216,14 +1721,28 @@ void Editor::unlinkSelection() {
 }
 
 void Editor::undo() {
-    if (m_history.undo()) {
+    if (current().history.undo()) {
         onProjectChanged();
+        pruneTabs();
+        emit projectsChanged();
     }
 }
 
 void Editor::redo() {
-    if (m_history.redo()) {
+    if (current().history.redo()) {
         onProjectChanged();
+        pruneTabs();
+        emit projectsChanged();
+    }
+}
+
+void Editor::pruneTabs() {
+    for (int i = static_cast<int>(m_tabs.size()) - 1; i >= 0; --i) {
+        const Tab& tab = m_tabs[static_cast<std::size_t>(i)];
+        const OpenProject* project = findProject(tab.project);
+        if (!project || !project->history.state().sequence(tab.sequence)) {
+            closeTab(i);
+        }
     }
 }
 
@@ -1531,7 +2050,8 @@ void Editor::onProjectChanged() {
 
     // Solo se recolocan los hilos de video o se reinicia el audio si cambia lo que
     // tienen que leer: mover la facecam o cambiar un volumen no corta la reproducción.
-    const std::shared_ptr<const Project> now = m_history.snapshot();
+    refreshView();
+    const auto now = std::make_shared<const Project>(m_view);
     const bool videoChanged = !m_prepared || !sameVideo(*m_prepared, *now);
     const bool audioChanged = !m_prepared || !sameAudio(*m_prepared, *now);
     m_prepared = now;

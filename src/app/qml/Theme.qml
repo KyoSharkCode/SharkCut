@@ -34,6 +34,12 @@ QtObject {
     // Versiones claras para iconos de tipo de medio sobre fondos oscuros
     readonly property color clipVideoClaro: "#7FA2DA"
     readonly property color clipAudioClaro: "#6FC1B8"
+    // Pistas de la línea de tiempo: un tono azulado para las de video y uno verdoso para
+    // las de audio (fondo de la fila y cabecera), muy suaves para no cansar.
+    readonly property color pistaVideo: "#161C29"
+    readonly property color pistaAudio: "#14201F"
+    readonly property color cabeceraVideo: "#1F2940"
+    readonly property color cabeceraAudio: "#1C2E2C"
 
     // Fondo semitransparente detrás de un diálogo
     readonly property color velo: "#99000000"

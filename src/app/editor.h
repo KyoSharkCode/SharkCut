@@ -8,6 +8,7 @@
 #include "core/project_file.h"
 #include "media/decode_worker.h"
 #include "playbackclock.h"
+#include "proxies.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -62,7 +63,14 @@ class Editor : public CompositionSource {
     // folder, canvas, details, duration, open} y medios (con su carpeta)
     Q_PROPERTY(QVariantList folders READ folders NOTIFY projectChanged)
     Q_PROPERTY(QVariantList sequences READ sequences NOTIFY projectChanged)
-    Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY projectChanged)
+    // (cada medio lleva también su proxy: "" | "queued" | "working" | "ready" | "failed",
+    // y proxyProgress 0–1)
+    Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY libraryChanged)
+    // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
+    // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
+    Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
+    Q_PROPERTY(bool proxiesAvailable READ proxiesAvailable NOTIFY proxiesChanged)
+    Q_PROPERTY(QString proxyStatus READ proxyStatus NOTIFY proxiesChanged)
     // Pistas en el orden de `tracks` del proyecto: {index, name, kind, number, hidden,
     // muted, locked}
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY projectChanged)
@@ -147,6 +155,10 @@ public:
     QVariantList sequences() const;
 
     QVariantList mediaItems() const;
+    bool useProxies() const { return m_useProxies; }
+    void setUseProxies(bool use);
+    bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
+    QString proxyStatus() const;
     // Datos de un clip para la línea de tiempo (TimelineClipsModel): {id, link, track,
     // video, media, start, length, in, volumeDb, transformed, name}.
     QVariantMap clipEntry(std::size_t track, const sharkcut::Clip& clip) const;
@@ -286,6 +298,9 @@ public:
     Q_INVOKABLE void importPaths(const QStringList& paths, qint64 placeAt = -1, int track = -1,
                                  qint64 folder = 0);
     Q_INVOKABLE void removeMedia(qint64 mediaId);
+    // Crea los proxies de esos medios (ids; vacío = todos los videos del proyecto).
+    Q_INVOKABLE void createProxies(const QVariantList& mediaIds);
+    Q_INVOKABLE void cancelProxies();
     Q_INVOKABLE QString mediaPath(qint64 mediaId) const;
 
     // --- Pistas ---
@@ -400,6 +415,8 @@ public:
 
 signals:
     void projectChanged();
+    void libraryChanged(); // medios de la biblioteca (o el estado de sus proxies)
+    void proxiesChanged();
     void projectsChanged(); // proyectos abiertos, pestañas o secuencias
     void fileChanged();
     void modifiedChanged();
@@ -425,6 +442,7 @@ private:
     // Un hilo de decodificación colocado para un clip concreto.
     struct VideoSlot {
         sharkcut::ObjectId media = 0;
+        std::string path; // lo que tiene abierto: el original o su proxy
         std::unique_ptr<sharkcut::DecodeWorker> worker;
         sharkcut::ObjectId clip = 0; // clip para el que está colocado
         std::int64_t seekIndex = -1; // fotograma del medio al que se colocó
@@ -571,6 +589,13 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    ProxyManager m_proxies;
+    bool m_useProxies = false;
+    // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.
+    std::string decodePath(const sharkcut::MediaItem& item) const;
+    // Cierra los hilos de video y vuelve a pedir el fotograma (cambió qué se decodifica).
+    void reloadVideo();
+    QStringList mediaPaths() const;
 
     std::unique_ptr<sharkcut::AudioOutput> m_audioOutput;
     std::unique_ptr<sharkcut::AudioWorker> m_audioWorker;

@@ -285,6 +285,17 @@ ColumnLayout {
                     font.pixelSize: Theme.tamTextoPequeno
                     font.family: "Consolas, monospace"
                 }
+                // Proxy del medio: listo, creándose o en cola.
+                Chip {
+                    visible: fila.esMedio && (fila.modelData.proxy || "") !== ""
+                    texto: fila.modelData.proxy === "ready" ? "PROXY"
+                           : fila.modelData.proxy === "working"
+                             ? "PROXY " + Math.round(fila.modelData.proxyProgress * 100) + " %"
+                           : fila.modelData.proxy === "queued" ? "EN COLA" : "SIN PROXY"
+                    colorTexto: fila.modelData.proxy === "ready" ? Theme.acento
+                                : fila.modelData.proxy === "failed" ? Theme.aviso
+                                : Theme.textoSecundario
+                }
                 Text {
                     Layout.preferredWidth: 118
                     text: fila.esCarpeta
@@ -526,6 +537,27 @@ ColumnLayout {
             text: "Sacar de la carpeta"
             enabled: menuMedio.elemento !== null && menuMedio.elemento.folder !== 0
             onTriggered: biblioteca.editor.moveToFolder([menuMedio.elemento.id], 0)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: biblioteca.editor.proxiesAvailable ? "Crear proxy"
+                                                     : "Crear proxy (guarda antes el proyecto)"
+            enabled: biblioteca.editor.proxiesAvailable && menuMedio.elemento !== null
+                     && menuMedio.elemento.video
+                     && (menuMedio.elemento.proxy === "" || menuMedio.elemento.proxy === "failed")
+            onTriggered: biblioteca.editor.createProxies([menuMedio.elemento.id])
+        }
+        Action {
+            text: "Crear proxies de todos los videos"
+            enabled: biblioteca.editor.proxiesAvailable
+            onTriggered: biblioteca.editor.createProxies([])
+        }
+        Action {
+            text: "Cancelar los proxies pendientes"
+            enabled: biblioteca.editor.proxyStatus.length > 0
+            onTriggered: biblioteca.editor.cancelProxies()
         }
         MenuSeparator {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }

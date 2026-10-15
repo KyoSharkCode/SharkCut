@@ -455,6 +455,11 @@ Window {
                                 }
                                 Item { Layout.fillWidth: true }
                                 Chip {
+                                    visible: editor.useProxies && editor.proxiesAvailable
+                                    texto: "PROXIES"
+                                    colorTexto: Theme.acento
+                                }
+                                Chip {
                                     texto: "LIENZO " + editor.canvasLabel
                                     colorTexto: Theme.texto
                                 }
@@ -528,6 +533,18 @@ Window {
                                     ayuda: editor.muted ? "Activar el sonido" : "Silenciar"
                                     onPulsado: editor.muted = !editor.muted
                                 }
+                                BotonIcono {
+                                    icono: "proxy"
+                                    texto: "Proxies"
+                                    activo: editor.useProxies
+                                    enabled: editor.proxiesAvailable
+                                    ayuda: !editor.proxiesAvailable
+                                           ? "Guarda el proyecto para poder crear proxies"
+                                           : editor.useProxies
+                                             ? "Usando proxies en la vista previa (la exportación usa siempre los originales)"
+                                             : "Usar proxies: vista previa más fluida con VODs largos (créalos desde Medios)"
+                                    onPulsado: editor.useProxies = !editor.useProxies
+                                }
                                 Item { Layout.fillWidth: true }
                                 // Velocidad con J/L (a 1× no se muestra)
                                 Chip {
@@ -598,6 +615,22 @@ Window {
                 color: error.length > 0 ? Theme.aviso : Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
                 elide: Text.ElideRight
+            }
+
+            // Proxies en marcha
+            Text {
+                visible: editor.proxyStatus.length > 0
+                text: editor.proxyStatus
+                color: Theme.textoSecundario
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            BotonIcono {
+                visible: editor.proxyStatus.length > 0
+                icono: "cerrar"
+                ayuda: "Cancelar los proxies pendientes"
+                implicitWidth: 28
+                implicitHeight: 26
+                onPulsado: editor.cancelProxies()
             }
 
             // Exportación en curso o terminada

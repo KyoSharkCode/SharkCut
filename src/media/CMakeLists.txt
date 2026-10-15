@@ -25,6 +25,8 @@ add_library(sharkcut_media STATIC
     mp4_writer.cpp
     decode_worker.h
     decode_worker.cpp
+    proxy.h
+    proxy.cpp
 )
 
 find_package(Threads REQUIRED)

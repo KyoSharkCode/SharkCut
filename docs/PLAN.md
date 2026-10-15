@@ -695,7 +695,26 @@ ctest --preset windows-debug
      se abre con sus cambios sin guardar y se guarda en su archivo original). Atajos que
      cambian: M ya no silencia (es marcador; el botón de sonido sigue en el visor) y
      «Exportar rápido» pasa a Ctrl+E.
-   - [ ] Etapa 4: rendimiento con VODs largos.
+   - [x] Etapa 4: rendimiento con VODs largos. Medido con tools/bench (sharkcut_bench) y
+     un VOD de prueba de 10 min 1080p60 (MP4 fragmentado, clave cada 2 s, como OBS) y
+     un proyecto de 3 h troceado en ~8.700 clips:
+     - Línea de tiempo virtualizada (TimelineClipsModel): solo existen los clips
+       visibles (más media pantalla a cada lado) y cada edición actualiza solo las filas
+       que cambian; alejada, los clips de menos de 16 px se agrupan en bloques («N clips
+       · acércate para editarlos»). Dividir pasó de 14 s a ~20 ms; el peor salto de zoom,
+       de 1,9 s a ~0,35 s (medido en una pantalla virtual con dibujado por software).
+       Imán, corte más cercano y grupos de arrastre se calculan en C++.
+     - Decodificación: saltos cortos hacia delante sin volver al fotograma clave
+       (+10 fotogramas: de ~47 a ~7 ms) y caché de ~64 MB por hilo que, al ir hacia
+       atrás, guarda los fotogramas anteriores al destino (J: de ~14 a ~177 fps).
+     - Proxies (540p, clave cada 15 fotogramas, mismos índices de fotograma que el
+       original) en la caché del proyecto, creados en segundo plano desde Medios («Crear
+       proxy», «Crear proxies de todos los videos»); botón «Proxies» en Programa. Solo
+       para la vista previa: la exportación usa siempre los originales. Con proxy, un
+       salto al azar baja de ~47 a ~6 ms.
+     - Pendiente: visor sin copias (textura D3D11 de NVDEC directa al compositor). Es
+       código solo de Windows que no se puede compilar ni probar en la nube: se hará en
+       una sesión de prueba con Kyo en su PC.
    - [ ] Etapa 5: efectos para los shorts. Kyo usa en Premiere estos ajustes guardados
      (presets con nombre, que se aplican arrastrándolos a un clip), que sirven de lista:
      - Movimiento (animaciones de posición/escala con keyframes): Acercamiento Motion

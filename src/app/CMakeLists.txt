@@ -48,6 +48,8 @@ qt_add_qml_module(SharkCut
         thumbnails.cpp
         waveforms.h
         timelinemodel.h
+        proxies.h
+        proxies.cpp
         timelinemodel.cpp
         waveforms.cpp
 )

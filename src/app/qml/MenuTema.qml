@@ -7,7 +7,7 @@ Menu {
     id: menu
     padding: 4
     background: Rectangle {
-        implicitWidth: 230
+        implicitWidth: 300
         color: Theme.panelElevado
         border.color: Theme.borde
         radius: 4

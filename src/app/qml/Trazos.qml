@@ -52,6 +52,7 @@ QtObject {
         "carpetaNueva": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6",
         "secuencia": "M3 6h9M15 6h6M3 12h5M11 12h10M3 18h12M18 18h3",
         "secuenciaNueva": "M3 6h9M3 12h9M3 18h7M18 13v8M14 17h8",
-        "atras": "M15 6l-6 6 6 6M9 12h11"
+        "atras": "M15 6l-6 6 6 6M9 12h11",
+        "proxy": "M3 6h12v9H3zM9 9h12v9H9z"
     })
 }

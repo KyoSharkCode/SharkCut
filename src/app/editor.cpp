@@ -253,6 +253,17 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     refreshView();
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
+    connect(this, &Editor::projectChanged, this, &Editor::libraryChanged);
+    m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
+    connect(&m_proxies, &ProxyManager::changed, this, [this] {
+        emit libraryChanged();
+        emit proxiesChanged();
+    });
+    connect(&m_proxies, &ProxyManager::ready, this, [this](const QString&) {
+        if (m_useProxies) {
+            reloadVideo(); // un proxy nuevo: los clips de ese medio pasan a usarlo
+        }
+    });
     m_exportSettings =
         completeExportSettings(QSettings().value(QLatin1String(kExportSettingsKey)).toMap());
     refreshRecentProjects();
@@ -295,6 +306,11 @@ QVariantList Editor::mediaItems() const {
         entry[QStringLiteral("video")] = item.hasVideo;
         entry[QStringLiteral("audio")] = item.hasAudio;
         entry[QStringLiteral("folder")] = static_cast<qint64>(item.folder);
+        const QString path = QString::fromStdString(item.path);
+        static const char* const kStates[] = {"", "queued", "working", "ready", "failed"};
+        entry[QStringLiteral("proxy")] =
+            QString::fromLatin1(kStates[static_cast<int>(m_proxies.state(path))]);
+        entry[QStringLiteral("proxyProgress")] = m_proxies.progress(path);
         entry[QStringLiteral("thumbnail")] =
             item.hasVideo ? QString(QStringLiteral("image://miniaturas/") +
                                     QString::fromLatin1(
@@ -510,9 +526,91 @@ bool Editor::waveformLoading(qint64 mediaId) const {
     return item && m_waveforms.pending(QString::fromStdString(item->path));
 }
 
+QStringList Editor::mediaPaths() const {
+    QStringList paths;
+    for (const MediaItem& item : document().media) {
+        if (item.hasVideo) {
+            paths << QString::fromStdString(item.path);
+        }
+    }
+    return paths;
+}
+
+std::string Editor::decodePath(const MediaItem& item) const {
+    if (m_useProxies) {
+        const QString proxy = m_proxies.readyPath(QString::fromStdString(item.path));
+        if (!proxy.isEmpty()) {
+            return proxy.toStdString();
+        }
+    }
+    return item.path;
+}
+
+void Editor::reloadVideo() {
+    for (TrackVideo& track : m_video) {
+        for (VideoSlot& slot : track.decoders) {
+            slot.worker.reset();
+            slot.media = 0;
+            slot.path.clear();
+            slot.clip = 0;
+            slot.seekIndex = -1;
+        }
+    }
+    const bool wasPlaying = m_playing;
+    pause();
+    seek(m_currentFrame);
+    if (wasPlaying) {
+        play();
+    }
+}
+
+void Editor::setUseProxies(bool use) {
+    if (use == m_useProxies) {
+        return;
+    }
+    m_useProxies = use;
+    QSettings().setValue(QStringLiteral("vista/proxies"), use);
+    emit proxiesChanged();
+    reloadVideo();
+}
+
+QString Editor::proxyStatus() const {
+    const int pending = m_proxies.pending();
+    if (pending == 0) {
+        return {};
+    }
+    return QStringLiteral("Creando proxies… %1 pendiente%2 · %3 %")
+        .arg(pending)
+        .arg(pending == 1 ? QString() : QStringLiteral("s"))
+        .arg(std::lround(m_proxies.totalProgress() * 100));
+}
+
+void Editor::createProxies(const QVariantList& mediaIds) {
+    QStringList paths;
+    for (const MediaItem& item : document().media) {
+        const bool wanted =
+            mediaIds.isEmpty() ||
+            std::any_of(mediaIds.begin(), mediaIds.end(), [&item](const QVariant& v) {
+                return static_cast<ObjectId>(v.toLongLong()) == item.id;
+            });
+        if (wanted && item.hasVideo) {
+            paths << QString::fromStdString(item.path);
+        }
+    }
+    m_proxies.create(paths);
+}
+
+void Editor::cancelProxies() {
+    m_proxies.cancelAll();
+}
+
 void Editor::updateWaveformDirectory() {
     m_waveforms.setDirectory(
         current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/ondas"));
+    // Los proxies, en la misma caché (sin archivo de proyecto no hay dónde guardarlos).
+    m_proxies.setDirectory(
+        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/proxies"),
+        mediaPaths());
 }
 
 sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
@@ -1924,6 +2022,7 @@ void Editor::finishImport(quint64 uid, std::vector<MediaItem> items, QStringList
     }
     if (uid == m_activeProject) {
         onProjectChanged();
+        updateWaveformDirectory(); // ¿alguno de los nuevos tiene ya su proxy?
     }
     emit projectsChanged();
     if (end >= 0) {
@@ -2827,9 +2926,10 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
         choice = avoid == 0 ? 1 : 0;
     }
     VideoSlot& slot = decoders[static_cast<std::size_t>(choice)];
-    if (!slot.worker || slot.media != clip.media) {
+    const MediaItem* item = project().findMedia(clip.media);
+    const std::string path = item ? decodePath(*item) : std::string();
+    if (!slot.worker || slot.media != clip.media || slot.path != path) {
         slot.worker.reset();
-        const MediaItem* item = project().findMedia(clip.media);
         DecodeWorker::Callbacks callbacks;
         callbacks.failed = [this](const std::string& message) {
             const QString text = QString::fromStdString(message);
@@ -2838,9 +2938,10 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
         callbacks.framesAvailable = [this] {
             QMetaObject::invokeMethod(this, [this] { onFramesAvailable(); }, Qt::QueuedConnection);
         };
-        slot.worker = std::make_unique<DecodeWorker>(item ? item->path : std::string(),
-                                                     sharkcut::HwAccel::Auto, std::move(callbacks));
+        slot.worker =
+            std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
         slot.media = clip.media;
+        slot.path = path;
     }
     slot.clip = clip.id;
     slot.seekIndex = -1;

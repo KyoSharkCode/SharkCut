@@ -49,6 +49,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Compositor).
   src/core también: export_settings.h (tramo y fps de la exportación, resoluciones y
   tasas recomendadas) y parseTimecode en time.h.
+  src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
+  proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
   TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
   caché en disco).
@@ -59,6 +61,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   qml/PanelPropiedades.qml · Programa, y qml/LineaTiempo.qml) y Exportar
   (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
+  Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
+  (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.
+  tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
+  edición de una línea de tiempo grande (sin Qt).
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
   Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
   añadir los nuevos en Trazos.qml.

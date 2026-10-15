@@ -1,7 +1,8 @@
 // sharkcut_bench: mide lo que más pesa con VODs largos, sin interfaz.
 //
 // Uso: sharkcut_bench <video> [--cpu] [--fotogramas N] [--saltos N] [--sin-onda]
-//                      [--guardar proyecto.sharkp]
+//                      [--guardar proyecto.sharkp] [--proxy proxy.mp4]
+// Con --proxy crea antes el proxy del video (y dice cuánto tarda) y mide el proxy.
 //   - Análisis del archivo (probeMedia).
 //   - Decodificación seguida (fotogramas por segundo).
 //   - Saltos a posiciones al azar (lo que se espera al hacer clic en la regla).
@@ -17,6 +18,7 @@
 #include "core/project_file.h"
 #include "media/decode_worker.h"
 #include "media/media_info.h"
+#include "media/proxy.h"
 #include "media/video_decoder.h"
 #include "media/waveform.h"
 
@@ -149,12 +151,13 @@ int main(int argc, char* argv[]) {
                      argv[0]);
         return 2;
     }
-    const std::string path = argv[1];
+    std::string path = argv[1];
     HwAccel accel = HwAccel::Auto;
     int frames = 600;
     int seeks = 30;
     bool wave = true;
     std::string savePath;
+    std::string proxyPath;
     for (int i = 2; i < argc; ++i) {
         const std::string option = argv[i];
         if (option == "--cpu") {
@@ -165,12 +168,24 @@ int main(int argc, char* argv[]) {
             seeks = std::atoi(argv[++i]);
         } else if (option == "--sin-onda") {
             wave = false;
+        } else if (option == "--proxy" && i + 1 < argc) {
+            proxyPath = argv[++i];
         } else if (option == "--guardar" && i + 1 < argc) {
             savePath = argv[++i]; // el proyecto de prueba, para abrirlo en la app
         }
     }
 
     try {
+        if (!proxyPath.empty()) {
+            const auto start = Clock::now();
+            writeProxy(path, proxyPath, [](std::int64_t done, std::int64_t total) {
+                std::printf("\rProxy: %lld / %lld", static_cast<long long>(done),
+                            static_cast<long long>(total));
+                std::fflush(stdout);
+            });
+            std::printf("\nProxy creado en %.1f s; se mide el proxy:\n", msSince(start) / 1000.0);
+            path = proxyPath;
+        }
         auto t0 = Clock::now();
         const MediaInfo info = probeMedia(path);
         std::printf("Análisis: %.1f ms\n", msSince(t0));

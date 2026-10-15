@@ -1,6 +1,7 @@
 #include "media/decode_worker.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
+#include "media/proxy.h"
 #include "media/video_decoder.h"
 #include "test_clip.h"
 
@@ -289,4 +290,47 @@ TEST_CASE("DecodeWorker va hacia atras desde su cache", "[media]") {
         CHECK(frame->index == target);
         CHECK(contentIndex(*frame) == target);
     }
+}
+
+TEST_CASE("Los proxies conservan los indices de fotograma", "[media][proxy]") {
+    TempClip clip({.frames = 90, .width = 640, .height = 360, .gopSize = 60, .fragmented = true});
+    const std::filesystem::path proxy = tempClipPath("proxy.mp4");
+    std::int64_t lastDone = 0;
+    writeProxy(clip.path.string(), proxy.string(), [&](std::int64_t done, std::int64_t total) {
+        CHECK(done <= total);
+        lastDone = done;
+    });
+    CHECK(lastDone == 90);
+    REQUIRE(std::filesystem::exists(proxy));
+    CHECK_FALSE(std::filesystem::exists(proxy.string() + ".tmp"));
+
+    const MediaInfo info = probeMedia(proxy.string());
+    REQUIRE(info.video.has_value());
+    CHECK(info.video->height <= kProxyHeight);
+    CHECK(info.video->frameRate == FrameRate{60, 1});
+    CHECK(info.video->frameCount == 90);
+    CHECK(info.audio.empty());
+
+    VideoDecoder decoder(proxy.string(), HwAccel::None);
+    for (const std::int64_t target : {0, 37, 89, 15, 14}) {
+        CAPTURE(target);
+        decoder.seekToFrame(target);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index == target);
+        CHECK(contentIndex(*frame) == target);
+    }
+    std::error_code ignored;
+    std::filesystem::remove(proxy, ignored);
+}
+
+TEST_CASE("Cancelar un proxy no deja archivos", "[media][proxy]") {
+    TempClip clip({.frames = 120});
+    const std::filesystem::path proxy = tempClipPath("cancelado.mp4");
+    std::atomic<bool> cancel = true;
+    CHECK_THROWS_AS(writeProxy(clip.path.string(), proxy.string(), {}, &cancel), MediaError);
+    CHECK_FALSE(std::filesystem::exists(proxy));
+    CHECK_FALSE(std::filesystem::exists(proxy.string() + ".tmp"));
+    CHECK(proxyFileName(clip.path.string()).ends_with(".mp4"));
+    CHECK(proxyFileName("/no/existe.mp4").empty());
 }

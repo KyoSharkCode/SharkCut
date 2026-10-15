@@ -63,7 +63,6 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList folders READ folders NOTIFY projectChanged)
     Q_PROPERTY(QVariantList sequences READ sequences NOTIFY projectChanged)
     Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY projectChanged)
-    Q_PROPERTY(QVariantList clips READ clips NOTIFY projectChanged)
     // Pistas en el orden de `tracks` del proyecto: {index, name, kind, number, hidden,
     // muted, locked}
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY projectChanged)
@@ -148,7 +147,9 @@ public:
     QVariantList sequences() const;
 
     QVariantList mediaItems() const;
-    QVariantList clips() const;
+    // Datos de un clip para la línea de tiempo (TimelineClipsModel): {id, link, track,
+    // video, media, start, length, in, volumeDb, transformed, name}.
+    QVariantMap clipEntry(std::size_t track, const sharkcut::Clip& clip) const;
     QVariantList tracks() const;
     QVariantList transitions() const;
     QStringList transitionNames() const;
@@ -347,6 +348,20 @@ public:
     Q_INVOKABLE void setClipVolume(qint64 clipId, double volumeDb);
     // Separa el video y el audio de los clips seleccionados.
     Q_INVOKABLE void unlinkSelection();
+
+    // --- Ayudas para la línea de tiempo (sin recorrer los clips desde QML) ---
+    // Imán: el borde de clip, marcador, inicio o cabezal más cercano a `frame` a menos de
+    // `maxDistance` fotogramas (sin contar los clips `exclude`); si no hay, `frame`.
+    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude,
+                                 double maxDistance) const;
+    // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
+    // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
+    Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;
+    // Clips que se mueven juntos al arrastrar `clipId`: la selección entera si el clip
+    // está en ella, y siempre con sus enlazados.
+    Q_INVOKABLE QVariantList clipGroup(qint64 clipId) const;
+    // Primer fotograma y final de un grupo de clips: {start, end}.
+    Q_INVOKABLE QVariantMap groupRange(const QVariantList& clips) const;
 
     // --- Transiciones ---
     // Pone la transición `typeIndex` (de transitionNames) en el corte `cut` de la pista

@@ -3,7 +3,7 @@ qt_add_executable(SharkCut WIN32
 )
 
 # Theme.qml es un singleton (pragma Singleton); debe declararse antes del módulo.
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml qml/Trazos.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(SharkCut
     URI SharkCut
@@ -20,6 +20,7 @@ qt_add_qml_module(SharkCut
         qml/Selector.qml
         qml/LineaTiempo.qml
         qml/Icono.qml
+        qml/Trazos.qml
         qml/BotonIcono.qml
         qml/Medidor.qml
         qml/ArrastreMedio.qml
@@ -46,6 +47,8 @@ qt_add_qml_module(SharkCut
         thumbnails.h
         thumbnails.cpp
         waveforms.h
+        timelinemodel.h
+        timelinemodel.cpp
         waveforms.cpp
 )
 

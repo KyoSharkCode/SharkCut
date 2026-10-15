@@ -125,25 +125,8 @@ Rectangle {
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a la x del
     // contenido, a menos de 60 píxeles: {track, cut}, o null.
     function corteCercano(pista, xContenido) {
-        const finales = {}
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            if (lista[i].track === pista)
-                finales[lista[i].start + lista[i].length] = true
-        }
-        let mejor = null
-        let distancia = 60
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (c.track !== pista || !finales[c.start])
-                continue
-            const d = Math.abs(c.start * escala - xContenido)
-            if (d < distancia) {
-                distancia = d
-                mejor = { track: pista, cut: c.start }
-            }
-        }
-        return mejor
+        const corte = editor.nearestCut(pista, Math.round(xContenido / escala), 60 / escala)
+        return corte.cut === undefined ? null : corte
     }
 
     // Índice de la pista `desplazamiento` posiciones más allá dentro de su tipo.
@@ -160,44 +143,14 @@ Rectangle {
     // Grupo de clips que se mueven juntos al arrastrar `clip`: la selección entera si
     // el clip está seleccionado, y siempre con sus enlazados.
     function grupoDe(clip) {
-        let ids = []
-        if (editor.selection.indexOf(clip.id) >= 0 || editor.selection.indexOf(clip.link) >= 0)
-            ids = editor.selection.slice()
-        else
-            ids = [clip.id]
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (ids.indexOf(c.id) >= 0 && c.link !== 0 && ids.indexOf(c.link) < 0)
-                ids.push(c.link)
-        }
-        return ids
+        return editor.clipGroup(clip.id)
     }
 
-    // Imán: el borde o cabezal más cercano a `frame` (a menos de 8 píxeles).
+    // Imán: el borde, marcador o cabezal más cercano a `frame` (a menos de 8 píxeles).
     function ajustar(frame, excluir) {
         if (!iman)
             return frame
-        let mejor = frame
-        let distancia = 8 / escala
-        const probar = (f) => {
-            const d = Math.abs(f - frame)
-            if (d <= distancia) {
-                distancia = d
-                mejor = f
-            }
-        }
-        probar(0)
-        probar(editor.currentFrame)
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (excluir.indexOf(c.id) >= 0)
-                continue
-            probar(c.start)
-            probar(c.start + c.length)
-        }
-        return mejor
+        return editor.snapFrame(frame, excluir, 8 / escala)
     }
 
     function zoomEn(factor, xVista) {
@@ -496,20 +449,30 @@ Rectangle {
 
                         // Clips
                         Repeater {
-                            model: raiz.editor.clips
+                            // Solo los clips de la parte visible (más media pantalla a cada lado).
+                            model: TimelineClipsModel {
+                                editor: raiz.editor
+                                firstFrame: vista.contentX / raiz.escala
+                                lastFrame: (vista.contentX + vista.width) / raiz.escala
+                                pixelsPerFrame: raiz.escala
+                            }
                             delegate: Rectangle {
                                 id: elemento
 
-                                required property var modelData
+                                required property var datosClip
+                                readonly property var modelData: datosClip
+                                // Varios clips demasiado estrechos para verse (vista alejada):
+                                // una franja sin edición; al acercarse aparecen los clips.
+                                readonly property bool bloque: modelData.block === true
                                 readonly property bool esVideo: modelData.video
                                 readonly property var pista: raiz.editor.tracks[modelData.track]
                                 readonly property bool bloqueado: pista !== undefined && pista.locked
                                 readonly property bool apagado: pista !== undefined
                                     && (esVideo ? pista.hidden : pista.muted)
-                                readonly property bool seleccionado:
+                                readonly property bool seleccionado: !bloque && (
                                     raiz.editor.selection.indexOf(modelData.id) >= 0
                                     || (modelData.link !== 0
-                                        && raiz.editor.selection.indexOf(modelData.link) >= 0)
+                                        && raiz.editor.selection.indexOf(modelData.link) >= 0))
                                 readonly property bool enArrastre: raiz.arrastre !== null
                                     && raiz.arrastre.grupo.indexOf(modelData.id) >= 0
                                 readonly property real inicioVista: !enArrastre ? modelData.start
@@ -549,86 +512,119 @@ Rectangle {
                                 clip: true // el nombre no se sale del clip
 
                                 // Onda del audio: solo la parte visible del clip.
-                                WaveformView {
-                                    visible: !elemento.esVideo && width > 0
-                                    readonly property real izquierda:
-                                        Math.max(0, vista.contentX - elemento.x)
-                                    readonly property real derecha:
-                                        Math.min(elemento.width, vista.contentX + vista.width - elemento.x)
-                                    x: izquierda
-                                    y: 15
-                                    width: Math.max(0, derecha - izquierda)
-                                    height: elemento.height - 16
-                                    editor: raiz.editor
-                                    mediaId: elemento.modelData.media
-                                    firstFrame: elemento.entradaVista + izquierda / raiz.escala
-                                    framesPerPixel: 1 / raiz.escala
-                                    fps: raiz.editor.fps
-                                    gainDb: elemento.modelData.volumeDb
-                                    color: Theme.clipAudioClaro
+                                // (Se crea solo si se ve: con miles de clips, cada elemento cuenta.)
+                                Loader {
+                                    anchors.fill: parent
+                                    active: !elemento.esVideo && !elemento.bloque && elemento.width > 6
+                                    sourceComponent: Item {
+                                        WaveformView {
+                                            visible: width > 0
+                                            readonly property real izquierda:
+                                                Math.max(0, vista.contentX - elemento.x)
+                                            readonly property real derecha:
+                                                Math.min(elemento.width, vista.contentX + vista.width - elemento.x)
+                                            x: izquierda
+                                            y: 15
+                                            width: Math.max(0, derecha - izquierda)
+                                            height: elemento.height - 16
+                                            editor: raiz.editor
+                                            mediaId: elemento.modelData.media
+                                            firstFrame: elemento.entradaVista + izquierda / raiz.escala
+                                            framesPerPixel: 1 / raiz.escala
+                                            fps: raiz.editor.fps
+                                            gainDb: elemento.modelData.volumeDb
+                                            color: Theme.clipAudioClaro
 
-                                    // Mientras se calcula la onda (un VOD largo tarda unos segundos).
-                                    Row {
-                                        id: cargandoOnda
-                                        visible: parent.loading && parent.width > 40
-                                        x: 6
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        spacing: 6
-                                        Repeater {
-                                            model: 3
-                                            delegate: Rectangle {
-                                                required property int index
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: 3
-                                                height: 12
-                                                radius: 1
-                                                color: Theme.clipAudioClaro
-                                                SequentialAnimation on height {
-                                                    running: cargandoOnda.visible
-                                                    loops: Animation.Infinite
-                                                    PauseAnimation { duration: index * 120 }
-                                                    NumberAnimation { from: 4; to: 14; duration: 300; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 14; to: 4; duration: 300; easing.type: Easing.InOutQuad }
-                                                    PauseAnimation { duration: (2 - index) * 120 }
+                                            // Mientras se calcula la onda (un VOD largo tarda unos segundos).
+                                            Loader {
+                                                id: avisoOnda
+                                                active: parent.loading && parent.width > 40
+                                                anchors.fill: parent
+                                                sourceComponent: Item {
+                                                    Row {
+                                                        id: cargandoOnda
+                                                        x: 6
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        spacing: 6
+                                                        Repeater {
+                                                            model: 3
+                                                            delegate: Rectangle {
+                                                                required property int index
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                width: 3
+                                                                height: 12
+                                                                radius: 1
+                                                                color: Theme.clipAudioClaro
+                                                                SequentialAnimation on height {
+                                                                    running: true
+                                                                    loops: Animation.Infinite
+                                                                    PauseAnimation { duration: index * 120 }
+                                                                    NumberAnimation { from: 4; to: 14; duration: 300; easing.type: Easing.InOutQuad }
+                                                                    NumberAnimation { from: 14; to: 4; duration: 300; easing.type: Easing.InOutQuad }
+                                                                    PauseAnimation { duration: (2 - index) * 120 }
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            text: "Calculando la onda…"
+                                                            color: Theme.texto
+                                                            font.pixelSize: Theme.tamTextoPequeno
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: "Calculando la onda…"
-                                            color: Theme.texto
-                                            font.pixelSize: Theme.tamTextoPequeno
                                         }
                                     }
                                 }
 
-                                RowLayout {
+                                Loader {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    anchors.leftMargin: 5
-                                    anchors.rightMargin: 5
-                                    anchors.topMargin: 2
-                                    spacing: 4
-                                    visible: elemento.width > 30
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                    height: 18
+                                    active: elemento.width > 30 && !elemento.bloque
+                                    sourceComponent: RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 5
+                                        anchors.rightMargin: 5
+                                        anchors.topMargin: 2
+                                        spacing: 4
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            visible: !elemento.esVideo && elemento.modelData.volumeDb !== 0
+                                            text: raiz.textoVolumen(elemento.modelData.volumeDb)
+                                            color: Theme.texto
+                                            font.pixelSize: 10
+                                        }
+                                        Loader {
+                                            active: elemento.esVideo && elemento.modelData.transformed
+                                            visible: active
+                                            sourceComponent: Icono {
+                                                nombre: "rellenar"
+                                                tam: 11
+                                                color: Theme.texto
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Bloque de clips diminutos: cuántos son.
+                                Loader {
+                                    active: elemento.bloque && elemento.width > 160
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: Math.max(6, vista.contentX - elemento.x + 6)
+                                    sourceComponent: Text {
+                                        text: elemento.modelData.count + " clips · acércate para editarlos"
                                         color: Theme.texto
+                                        opacity: 0.7
                                         font.pixelSize: Theme.tamTextoPequeno
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        visible: !elemento.esVideo && elemento.modelData.volumeDb !== 0
-                                        text: raiz.textoVolumen(elemento.modelData.volumeDb)
-                                        color: Theme.texto
-                                        font.pixelSize: 10
-                                    }
-                                    Icono {
-                                        visible: elemento.esVideo && elemento.modelData.transformed
-                                        nombre: "rellenar"
-                                        tam: 11
-                                        color: Theme.texto
                                     }
                                 }
 
@@ -644,7 +640,7 @@ Rectangle {
                                 MouseArea {
                                     id: cuerpo
                                     anchors.fill: parent
-                                    enabled: !elemento.bloqueado
+                                    enabled: !elemento.bloqueado && !elemento.bloque
                                     preventStealing: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: raiz.herramienta === "cuchilla" ? Qt.IBeamCursor
@@ -683,15 +679,9 @@ Rectangle {
                                             return
                                         const c = elemento.modelData
                                         const grupo = raiz.grupoDe(c)
-                                        let inicio = Number.MAX_VALUE
-                                        let fin = 0
-                                        const lista = raiz.editor.clips
-                                        for (let i = 0; i < lista.length; ++i) {
-                                            if (grupo.indexOf(lista[i].id) >= 0) {
-                                                inicio = Math.min(inicio, lista[i].start)
-                                                fin = Math.max(fin, lista[i].start + lista[i].length)
-                                            }
-                                        }
+                                        const tramo = raiz.editor.groupRange(grupo)
+                                        const inicio = tramo.start
+                                        const fin = tramo.end
                                         let delta = Math.round(dx / raiz.escala)
                                         // Imán: el borde (inicial o final) más cercano manda.
                                         const porInicio = raiz.ajustar(inicio + delta, grupo) - inicio
@@ -722,7 +712,7 @@ Rectangle {
 
                                 // Bordes: recortar el inicio o el final.
                                 Repeater {
-                                    model: ["inicio", "final"]
+                                    model: elemento.bloque || elemento.width < 6 ? [] : ["inicio", "final"]
                                     delegate: MouseArea {
                                         id: borde
                                         required property string modelData
@@ -732,6 +722,7 @@ Rectangle {
                                         anchors.left: lado === "inicio" ? elemento.left : undefined
                                         anchors.right: lado === "final" ? elemento.right : undefined
                                         visible: raiz.herramienta === "seleccion" && !elemento.bloqueado
+                                                 && !elemento.bloque
                                         preventStealing: true
                                         hoverEnabled: true
                                         cursorShape: Qt.SizeHorCursor

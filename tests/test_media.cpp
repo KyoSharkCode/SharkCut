@@ -205,3 +205,88 @@ TEST_CASE("DecodeWorker informa si el archivo no se puede abrir", "[media]") {
     DecodeWorker worker("no-existe-sharkcut.mp4", HwAccel::None, callbacks);
     REQUIRE(waitFor([&] { return failed.load(); }));
 }
+
+TEST_CASE("VideoDecoder guarda los fotogramas anteriores al destino", "[media]") {
+    TempClip clip({.frames = 120, .gopSize = 30});
+    VideoDecoder decoder(clip.path.string(), HwAccel::None);
+
+    decoder.seekToFrame(70, 10);
+    auto frame = decoder.nextFrame();
+    REQUIRE(frame.has_value());
+    CHECK(frame->index == 70);
+    std::vector<VideoFrame> kept = decoder.takeKeptFrames();
+    REQUIRE(kept.size() == 10);
+    for (std::size_t i = 0; i < kept.size(); ++i) {
+        CHECK(kept[i].index == 60 + static_cast<std::int64_t>(i));
+        CHECK(contentIndex(kept[i]) == kept[i].index);
+    }
+    CHECK(decoder.takeKeptFrames().empty());
+
+    // Cerca del principio: solo los que hay.
+    decoder.seekToFrame(4, 10);
+    frame = decoder.nextFrame();
+    REQUIRE(frame.has_value());
+    CHECK(frame->index == 4);
+    kept = decoder.takeKeptFrames();
+    REQUIRE(kept.size() == 4);
+    CHECK(kept.front().index == 0);
+}
+
+TEST_CASE("VideoDecoder sigue decodificando en saltos cortos hacia delante", "[media]") {
+    const bool fragmented = GENERATE(false, true);
+    CAPTURE(fragmented);
+    TempClip clip({.frames = 120, .gopSize = 30, .fragmented = fragmented});
+    VideoDecoder decoder(clip.path.string(), HwAccel::None);
+    for (int i = 0; i < 10; ++i) {
+        REQUIRE(decoder.nextFrame().has_value());
+    }
+    // Hacia delante (sin volver al clave), otra vez, y hacia atrás.
+    for (const std::int64_t target : {40, 45, 46, 44, 100, 119, 3}) {
+        CAPTURE(target);
+        decoder.seekToFrame(target);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index == target);
+        CHECK(contentIndex(*frame) == target);
+    }
+    // Dos saltos seguidos sin leer entre medias: vale el último.
+    decoder.seekToFrame(20);
+    decoder.seekToFrame(25);
+    const auto frame = decoder.nextFrame();
+    REQUIRE(frame.has_value());
+    CHECK(frame->index == 25);
+}
+
+TEST_CASE("DecodeWorker va hacia atras desde su cache", "[media]") {
+    TempClip clip({.frames = 120, .gopSize = 30, .fragmented = true});
+    DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 6);
+
+    worker.seek(80);
+    REQUIRE(waitFor([&] { return worker.hasFrame(80); }));
+    REQUIRE(worker.takeUpTo(80)->index == 80);
+
+    int fromCache = 0;
+    for (std::int64_t target = 79; target >= 50; --target) {
+        CAPTURE(target);
+        worker.seek(target);
+        if (worker.hasFrame(target)) {
+            ++fromCache; // servido al instante, sin decodificar
+        }
+        REQUIRE(waitFor([&] { return worker.hasFrame(target); }));
+        const auto frame = worker.takeUpTo(target);
+        REQUIRE(frame);
+        CHECK(frame->index == target);
+        CHECK(contentIndex(*frame) == target);
+    }
+    CHECK(fromCache >= 20);
+
+    // Y de ahí, hacia delante con normalidad.
+    for (std::int64_t target = 51; target <= 70; ++target) {
+        CAPTURE(target);
+        REQUIRE(waitFor([&] { return worker.hasFrame(target); }));
+        const auto frame = worker.takeUpTo(target);
+        REQUIRE(frame);
+        CHECK(frame->index == target);
+        CHECK(contentIndex(*frame) == target);
+    }
+}

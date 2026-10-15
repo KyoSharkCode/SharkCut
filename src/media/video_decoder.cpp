@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace sharkcut {
@@ -84,7 +85,13 @@ struct VideoDecoder::Impl {
     bool havePending = false;   // `frame` contiene un fotograma aún no entregado
     bool haveLastSkipped = false;
     std::int64_t skipUntil = 0; // se descartan los fotogramas anteriores a este índice
+    std::int64_t keepFrom = -1; // …salvo desde este (se guardan en `kept`)
+    std::vector<VideoFrame> kept;
     std::int64_t lastIndex = -1;
+
+    // Hasta cuántos fotogramas por delante se sigue decodificando en vez de volver al
+    // fotograma clave (en un VOD de OBS hay uno cada 2 s, 120 fotogramas a 60 fps).
+    static constexpr std::int64_t kForwardSkip = 90;
 
     static AVPixelFormat chooseFormat(AVCodecContext* ctx, const AVPixelFormat* formats) {
         const auto* self = static_cast<const Impl*>(ctx->opaque);
@@ -263,6 +270,11 @@ struct VideoDecoder::Impl {
             const std::int64_t index = indexOf(frame.get());
             lastIndex = index;
             if (index < skipUntil) {
+                if (keepFrom >= 0 && index >= keepFrom) {
+                    VideoFrame keep = convert(frame.get());
+                    keep.index = index;
+                    kept.push_back(std::move(keep));
+                }
                 // Fotograma anterior al destino de una búsqueda: se descarta, pero se
                 // guarda por si el clip termina antes del destino.
                 av_frame_unref(lastSkipped.get());
@@ -271,12 +283,14 @@ struct VideoDecoder::Impl {
                 continue;
             }
             skipUntil = 0;
+            keepFrom = -1;
             haveLastSkipped = false;
             VideoFrame out = convert(frame.get());
             out.index = index;
             av_frame_unref(frame.get());
             return out;
         }
+        keepFrom = -1;
 
         if (skipUntil > 0 && haveLastSkipped) {
             // El destino estaba más allá del final real: se entrega el último fotograma.
@@ -290,10 +304,21 @@ struct VideoDecoder::Impl {
         return std::nullopt;
     }
 
-    void seek(std::int64_t index) {
+    void seek(std::int64_t index, std::int64_t keepBefore) {
         const std::int64_t last = std::max<std::int64_t>(info.frameCount - 1, 0);
         index = std::clamp<std::int64_t>(index, 0, last);
         const Rational frameDuration = info.frameRate.frameDuration();
+        kept.clear();
+
+        // Poco por delante: seguir decodificando es más rápido que volver al clave.
+        const bool pendingFits = !havePending || indexOf(frame.get()) <= index;
+        if (keepBefore == 0 && lastIndex >= 0 && index > lastIndex &&
+            index - lastIndex <= kForwardSkip && !demuxFinished && pendingFits) {
+            skipUntil = index;
+            keepFrom = -1;
+            return;
+        }
+        keepFrom = keepBefore > 0 ? std::max<std::int64_t>(0, index - keepBefore) : -1;
 
         // Se salta al fotograma clave anterior al destino. Si el contenedor no tiene un
         // índice exacto (p. ej. MP4 fragmentado), FFmpeg puede quedarse por detrás o
@@ -316,6 +341,7 @@ struct VideoDecoder::Impl {
             haveLastSkipped = false;
             lastIndex = -1;
             skipUntil = index;
+            kept.clear();
 
             if (!receiveRaw()) {
                 return; // Sin fotogramas tras el salto: nextFrame() devolverá nullopt.
@@ -350,8 +376,12 @@ std::optional<VideoFrame> VideoDecoder::nextFrame() {
     return d->next();
 }
 
-void VideoDecoder::seekToFrame(std::int64_t index) {
-    d->seek(index);
+void VideoDecoder::seekToFrame(std::int64_t index, std::int64_t keepBefore) {
+    d->seek(index, std::max<std::int64_t>(0, keepBefore));
+}
+
+std::vector<VideoFrame> VideoDecoder::takeKeptFrames() {
+    return std::exchange(d->kept, {});
 }
 
 } // namespace sharkcut

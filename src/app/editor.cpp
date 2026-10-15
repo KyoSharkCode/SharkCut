@@ -38,6 +38,7 @@
 #include <cmath>
 #include <exception>
 #include <filesystem>
+#include <limits>
 #include <numeric>
 
 using sharkcut::Clip;
@@ -309,29 +310,120 @@ QVariantList Editor::mediaItems() const {
     return list;
 }
 
-QVariantList Editor::clips() const {
-    QVariantList list;
+QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     const Project& p = project();
-    for (std::size_t t = 0; t < p.tracks.size(); ++t) {
-        for (const Clip& clip : p.tracks[t].clips) {
-            const MediaItem* item = p.findMedia(clip.media);
-            QVariantMap entry;
-            entry[QStringLiteral("id")] = static_cast<qint64>(clip.id);
-            entry[QStringLiteral("link")] = static_cast<qint64>(clip.link);
-            entry[QStringLiteral("track")] = static_cast<int>(t);
-            entry[QStringLiteral("video")] = p.tracks[t].kind == sharkcut::TrackKind::Video;
-            entry[QStringLiteral("media")] = static_cast<qint64>(clip.media);
-            entry[QStringLiteral("start")] = static_cast<qint64>(clip.start);
-            entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
-            entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
-            entry[QStringLiteral("volumeDb")] = clip.volumeDb;
-            entry[QStringLiteral("transformed")] = clip.transform != sharkcut::ClipTransform{};
-            entry[QStringLiteral("name")] =
-                item ? QString::fromStdString(item->name) : QStringLiteral("?");
-            list.append(entry);
+    const MediaItem* item = p.findMedia(clip.media);
+    QVariantMap entry;
+    entry[QStringLiteral("id")] = static_cast<qint64>(clip.id);
+    entry[QStringLiteral("link")] = static_cast<qint64>(clip.link);
+    entry[QStringLiteral("track")] = static_cast<int>(track);
+    entry[QStringLiteral("video")] =
+        track < p.tracks.size() && p.tracks[track].kind == sharkcut::TrackKind::Video;
+    entry[QStringLiteral("media")] = static_cast<qint64>(clip.media);
+    entry[QStringLiteral("start")] = static_cast<qint64>(clip.start);
+    entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
+    entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
+    entry[QStringLiteral("volumeDb")] = clip.volumeDb;
+    entry[QStringLiteral("transformed")] = clip.transform != sharkcut::ClipTransform{};
+    entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    return entry;
+}
+
+qint64 Editor::snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance) const {
+    std::vector<ObjectId> skip;
+    for (const QVariant& v : exclude) {
+        skip.push_back(static_cast<ObjectId>(v.toLongLong()));
+    }
+    qint64 best = frame;
+    double distance = maxDistance;
+    auto test = [&](qint64 candidate) {
+        const double d = std::abs(static_cast<double>(candidate - frame));
+        if (d <= distance) {
+            distance = d;
+            best = candidate;
+        }
+    };
+    test(0);
+    test(m_currentFrame);
+    const Project& p = project();
+    for (const sharkcut::Marker& marker : p.markers) {
+        test(marker.frame);
+    }
+    const auto from =
+        static_cast<std::int64_t>(std::floor(static_cast<double>(frame) - maxDistance));
+    for (const sharkcut::Track& track : p.tracks) {
+        // Solo los clips cerca de `frame` (cada pista está ordenada y sin solapes).
+        auto it = std::upper_bound(track.clips.begin(), track.clips.end(), from,
+                                   [](std::int64_t f, const Clip& c) { return f < c.end(); });
+        for (; it != track.clips.end() &&
+               static_cast<double>(it->start) <= static_cast<double>(frame) + maxDistance;
+             ++it) {
+            if (std::find(skip.begin(), skip.end(), it->id) != skip.end()) {
+                continue;
+            }
+            test(it->start);
+            test(it->end());
         }
     }
+    return best;
+}
+
+QVariantMap Editor::nearestCut(int track, qint64 frame, double maxDistance) const {
+    const Project& p = project();
+    if (track < 0 || static_cast<std::size_t>(track) >= p.tracks.size()) {
+        return {};
+    }
+    const auto& clips = p.tracks[static_cast<std::size_t>(track)].clips;
+    std::optional<qint64> best;
+    double distance = maxDistance;
+    for (std::size_t i = 1; i < clips.size(); ++i) {
+        if (clips[i - 1].end() != clips[i].start) {
+            continue;
+        }
+        const double d = std::abs(static_cast<double>(clips[i].start - frame));
+        if (d < distance) {
+            distance = d;
+            best = clips[i].start;
+        }
+    }
+    if (!best) {
+        return {};
+    }
+    return {{QStringLiteral("track"), track}, {QStringLiteral("cut"), *best}};
+}
+
+QVariantList Editor::clipGroup(qint64 clipId) const {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    if (!clip) {
+        return {};
+    }
+    const bool inSelection =
+        std::find(m_selection.begin(), m_selection.end(), id) != m_selection.end() ||
+        (clip->link != 0 &&
+         std::find(m_selection.begin(), m_selection.end(), clip->link) != m_selection.end());
+    const std::vector<ObjectId> group =
+        sharkcut::withLinked(project(), inSelection ? m_selection : std::vector<ObjectId>{id});
+    QVariantList list;
+    for (ObjectId member : group) {
+        list.append(static_cast<qint64>(member));
+    }
     return list;
+}
+
+QVariantMap Editor::groupRange(const QVariantList& clips) const {
+    qint64 start = std::numeric_limits<qint64>::max();
+    qint64 end = 0;
+    for (const QVariant& v : clips) {
+        if (const Clip* clip = project().clip(static_cast<ObjectId>(v.toLongLong()))) {
+            start = std::min<qint64>(start, clip->start);
+            end = std::max<qint64>(end, clip->end());
+        }
+    }
+    if (end == 0) {
+        start = 0;
+    }
+    return {{QStringLiteral("start"), start}, {QStringLiteral("end"), end}};
 }
 
 QVariantList Editor::tracks() const {

@@ -60,7 +60,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
-  Iconos: qml/Icono.qml (trazos SVG dibujados con QtQuick.Shapes); añadir los nuevos ahí.
+  Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
+  añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz

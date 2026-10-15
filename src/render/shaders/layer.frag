@@ -1,7 +1,8 @@
 #version 440
 
-// Convierte un fotograma NV12 (plano Y + plano UV) a RGB, con la opacidad del clip
-// (alfa premultiplicado: se mezcla sobre lo que ya hay en el lienzo).
+// Convierte un fotograma NV12 (plano Y + plano UV) a RGB, con su transparencia (texA; un
+// píxel blanco si el video es opaco) y la opacidad del clip (alfa premultiplicado: se
+// mezcla sobre lo que ya hay en el lienzo).
 
 layout(location = 0) in vec2 v_texcoord;
 
@@ -17,12 +18,13 @@ layout(std140, binding = 0) uniform buf {
 
 layout(binding = 1) uniform sampler2D texY;
 layout(binding = 2) uniform sampler2D texUV;
+layout(binding = 3) uniform sampler2D texA;
 
 void main()
 {
     float y = texture(texY, v_texcoord).r;
     vec2 uv = texture(texUV, v_texcoord).rg;
     vec3 rgb = clamp((ubuf.yuvToRgb * vec4(y, uv, 1.0)).rgb, 0.0, 1.0);
-    float opacity = ubuf.params.x;
-    fragColor = vec4(rgb * opacity, opacity);
+    float alpha = texture(texA, v_texcoord).r * ubuf.params.x;
+    fragColor = vec4(rgb * alpha, alpha);
 }

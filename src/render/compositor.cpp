@@ -83,10 +83,13 @@ QRhiGraphicsPipeline::TargetBlend premultipliedBlend() {
 
 } // namespace
 
-// Un fotograma NV12 en la GPU, listo para dibujarse con su transformación.
+// Un fotograma NV12 en la GPU, listo para dibujarse con su transformación. `a` es su
+// transparencia (R8); en los videos opacos, un único píxel blanco.
 struct Compositor::Source {
     std::unique_ptr<QRhiTexture> y;
     std::unique_ptr<QRhiTexture> uv;
+    std::unique_ptr<QRhiTexture> a;
+    bool opaqueAlpha = false; // `a` es el píxel blanco y ya se subió
     std::shared_ptr<const VideoFrame> uploaded;
     std::unique_ptr<QRhiBuffer> uniforms;
     std::unique_ptr<QRhiShaderResourceBindings> bindings;
@@ -231,22 +234,15 @@ Compositor::Source& Compositor::source(std::size_t index) {
         created->uniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
                                                  sizeof(LayerUniforms)));
         created->uniforms->create();
-        // Texturas NV12 provisionales hasta el primer fotograma.
+        // Texturas NV12 (y de alfa) provisionales hasta el primer fotograma.
         created->y.reset(m_rhi->newTexture(QRhiTexture::R8, QSize(16, 16)));
         created->y->create();
         created->uv.reset(m_rhi->newTexture(QRhiTexture::RG8, QSize(8, 8)));
         created->uv->create();
+        created->a.reset(m_rhi->newTexture(QRhiTexture::R8, QSize(1, 1)));
+        created->a->create();
         created->bindings.reset(m_rhi->newShaderResourceBindings());
-        const auto stage =
-            QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
-        created->bindings->setBindings({
-            QRhiShaderResourceBinding::uniformBuffer(0, stage, created->uniforms.get()),
-            QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                      created->y.get(), m_sampler.get()),
-            QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
-                                                      created->uv.get(), m_sampler.get()),
-        });
-        created->bindings->create();
+        bindSource(*created);
         m_sources.push_back(std::move(created));
     }
     return *m_sources[index];
@@ -304,26 +300,46 @@ void Compositor::ensurePipelines() {
     }
 }
 
+void Compositor::bindSource(Source& s) {
+    const auto stage =
+        QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
+    const auto fragment = QRhiShaderResourceBinding::FragmentStage;
+    s.bindings->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, stage, s.uniforms.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, fragment, s.y.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(2, fragment, s.uv.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(3, fragment, s.a.get(), m_sampler.get()),
+    });
+    s.bindings->create();
+}
+
 void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTransform& t,
                                double opacity, QRhiResourceUpdateBatch* updates) {
     const QSize sizeY(frame.width, frame.height);
-    if (s.y->pixelSize() != sizeY) {
-        s.y.reset(m_rhi->newTexture(QRhiTexture::R8, sizeY));
-        s.y->create();
-        s.uv.reset(m_rhi->newTexture(QRhiTexture::RG8, QSize(frame.uvWidth(), frame.uvHeight())));
-        s.uv->create();
-        // Nuevas texturas: se actualizan las asociaciones (mismo diseño).
-        const auto stage =
-            QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
-        s.bindings->setBindings({
-            QRhiShaderResourceBinding::uniformBuffer(0, stage, s.uniforms.get()),
-            QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                      s.y.get(), m_sampler.get()),
-            QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
-                                                      s.uv.get(), m_sampler.get()),
-        });
-        s.bindings->create();
+    const QSize sizeA = frame.hasAlpha() ? sizeY : QSize(1, 1);
+    if (s.y->pixelSize() != sizeY || s.a->pixelSize() != sizeA) {
+        if (s.y->pixelSize() != sizeY) {
+            s.y.reset(m_rhi->newTexture(QRhiTexture::R8, sizeY));
+            s.y->create();
+            s.uv.reset(
+                m_rhi->newTexture(QRhiTexture::RG8, QSize(frame.uvWidth(), frame.uvHeight())));
+            s.uv->create();
+        }
+        if (s.a->pixelSize() != sizeA) {
+            s.a.reset(m_rhi->newTexture(QRhiTexture::R8, sizeA));
+            s.a->create();
+            s.opaqueAlpha = false;
+        }
+        bindSource(s); // nuevas texturas: se actualizan las asociaciones (mismo diseño)
         s.uploaded.reset();
+    }
+    if (!frame.hasAlpha() && !s.opaqueAlpha) {
+        // Video opaco: alfa 1 en todo el clip.
+        static const char kWhite[4] = {'\xff', '\xff', '\xff', '\xff'};
+        QRhiTextureSubresourceUploadDescription white(QByteArray::fromRawData(kWhite, 1));
+        white.setDataStride(1);
+        updates->uploadTexture(s.a.get(), QRhiTextureUploadEntry(0, 0, white));
+        s.opaqueAlpha = true;
     }
 
     if (s.uploaded.get() != &frame) {
@@ -337,6 +353,13 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
                                     static_cast<qsizetype>(frame.uv.size())));
         uv.setDataStride(static_cast<quint32>(frame.uvWidth() * 2));
         updates->uploadTexture(s.uv.get(), QRhiTextureUploadEntry(0, 0, uv));
+        if (frame.hasAlpha()) {
+            QRhiTextureSubresourceUploadDescription a(
+                QByteArray::fromRawData(reinterpret_cast<const char*>(frame.a.data()),
+                                        static_cast<qsizetype>(frame.a.size())));
+            a.setDataStride(static_cast<quint32>(frame.width));
+            updates->uploadTexture(s.a.get(), QRhiTextureUploadEntry(0, 0, a));
+        }
     }
 
     // Ajuste al lienzo sin deformar, escala y posición (píxeles del lienzo, +y abajo).

@@ -14,7 +14,8 @@ namespace sharkcut {
 // Un proxy es un MP4 H.264 sin audio, a kProxyHeight de alto (o menos, si el original
 // ya es pequeño), con un fotograma clave cada kProxyGop fotogramas y los mismos fps e
 // índices de fotograma que el original (también si al original le faltan fotogramas):
-// el fotograma N del proxy es el N del original.
+// el fotograma N del proxy es el N del original. Los videos con transparencia no tienen
+// proxy (H.264 no la guarda): se usa siempre el original.
 
 inline constexpr int kProxyHeight = 540;
 inline constexpr int kProxyGop = 15;

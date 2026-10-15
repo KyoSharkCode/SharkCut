@@ -241,6 +241,18 @@ struct VideoDecoder::Impl {
         out.matrix = colorMatrixOf(src);
         out.fullRange = isFullRange(src);
         const int uvRowBytes = out.uvWidth() * 2;
+        const auto format = static_cast<AVPixelFormat>(src->format);
+        const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+        const bool rgb = desc && (desc->flags & AV_PIX_FMT_FLAG_RGB);
+        if (rgb) {
+            // RGB (Animación, PNG…): se pasa a YUV BT.709 de rango limitado.
+            out.matrix = ColorMatrix::Bt709;
+            out.fullRange = false;
+        }
+
+        if (desc && (desc->flags & AV_PIX_FMT_FLAG_ALPHA)) {
+            return convertWithAlpha(src, std::move(out), rgb);
+        }
 
         if (src->format == AV_PIX_FMT_NV12) {
             copyPlane(out.y, src->data[0], src->linesize[0], out.width, out.height);
@@ -249,19 +261,49 @@ struct VideoDecoder::Impl {
         }
 
         // Cualquier otro formato (yuv420p, 10 bits…) se convierte a NV12.
-        sws.reset(sws_getCachedContext(
-            sws.release(), src->width, src->height, static_cast<AVPixelFormat>(src->format),
-            out.width, out.height, AV_PIX_FMT_NV12, SWS_BILINEAR, nullptr, nullptr, nullptr));
-        if (!sws) {
-            throw MediaError(
-                "Formato de píxel no compatible: " +
-                std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(src->format))));
-        }
+        prepareSws(src, AV_PIX_FMT_NV12, rgb);
         out.y.resize(static_cast<std::size_t>(out.width) * out.height);
         out.uv.resize(static_cast<std::size_t>(uvRowBytes) * out.uvHeight());
         std::uint8_t* dst[4] = {out.y.data(), out.uv.data(), nullptr, nullptr};
         const int dstStride[4] = {out.width, uvRowBytes, 0, 0};
         sws_scale(sws.get(), src->data, src->linesize, 0, src->height, dst, dstStride);
+        return out;
+    }
+
+    // Conversión de `src` a `target` (8 bits). De RGB a YUV, con BT.709 de rango limitado.
+    void prepareSws(const AVFrame* src, AVPixelFormat target, bool rgb) {
+        sws.reset(sws_getCachedContext(
+            sws.release(), src->width, src->height, static_cast<AVPixelFormat>(src->format),
+            src->width, src->height, target, SWS_BILINEAR, nullptr, nullptr, nullptr));
+        if (!sws) {
+            throw MediaError(
+                "Formato de píxel no compatible: " +
+                std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(src->format))));
+        }
+        if (rgb) {
+            const int* bt709 = sws_getCoefficients(SWS_CS_ITU709);
+            sws_setColorspaceDetails(sws.get(), bt709, 1, bt709, 0, 0, 1 << 16, 1 << 16);
+        }
+    }
+
+    // Video con transparencia: YUVA 4:2:0 de 8 bits; el UV se entrelaza (NV12) y el
+    // alfa se guarda aparte.
+    VideoFrame convertWithAlpha(const AVFrame* src, VideoFrame out, bool rgb) {
+        prepareSws(src, AV_PIX_FMT_YUVA420P, rgb);
+        const int uvw = out.uvWidth();
+        const int uvh = out.uvHeight();
+        out.y.resize(static_cast<std::size_t>(out.width) * out.height);
+        out.a.resize(out.y.size());
+        std::vector<std::uint8_t> u(static_cast<std::size_t>(uvw) * uvh);
+        std::vector<std::uint8_t> v(u.size());
+        std::uint8_t* dst[4] = {out.y.data(), u.data(), v.data(), out.a.data()};
+        const int dstStride[4] = {out.width, uvw, uvw, out.width};
+        sws_scale(sws.get(), src->data, src->linesize, 0, src->height, dst, dstStride);
+        out.uv.resize(static_cast<std::size_t>(uvw) * 2 * uvh);
+        for (std::size_t i = 0; i < u.size(); ++i) {
+            out.uv[i * 2] = u[i];
+            out.uv[i * 2 + 1] = v[i];
+        }
         return out;
     }
 

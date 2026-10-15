@@ -5,11 +5,17 @@
 #include "media/video_decoder.h"
 #include "test_clip.h"
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+}
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <thread>
 
@@ -333,4 +339,124 @@ TEST_CASE("Cancelar un proxy no deja archivos", "[media][proxy]") {
     CHECK_FALSE(std::filesystem::exists(proxy.string() + ".tmp"));
     CHECK(proxyFileName(clip.path.string()).ends_with(".mp4"));
     CHECK(proxyFileName("/no/existe.mp4").empty());
+}
+
+namespace {
+
+// .mov con transparencia: mitad izquierda transparente, mitad derecha opaca y gris.
+// `codec`: "qtrle" (Animación, ARGB) o "prores_ks" (ProRes 4444, YUVA 10 bits).
+std::filesystem::path writeAlphaClip(const char* codecName, int frames = 10) {
+    const std::filesystem::path path = tempClipPath(std::string("alfa-") + codecName + ".mov");
+    const AVCodec* codec = avcodec_find_encoder_by_name(codecName);
+    if (!codec) {
+        return {};
+    }
+    AVFormatContext* out = nullptr;
+    avformat_alloc_output_context2(&out, nullptr, "mov", path.string().c_str());
+    AVStream* stream = avformat_new_stream(out, nullptr);
+    AVCodecContext* enc = avcodec_alloc_context3(codec);
+    const bool prores = std::string(codecName) == "prores_ks";
+    enc->width = 64;
+    enc->height = 32;
+    enc->time_base = {1, 30};
+    enc->framerate = {30, 1};
+    enc->pix_fmt = prores ? AV_PIX_FMT_YUVA444P10LE : AV_PIX_FMT_ARGB;
+    if (prores) {
+        enc->profile = 4; // 4444
+    }
+    if (out->oformat->flags & AVFMT_GLOBALHEADER) {
+        enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+    REQUIRE(avcodec_open2(enc, codec, nullptr) >= 0);
+    avcodec_parameters_from_context(stream->codecpar, enc);
+    stream->time_base = enc->time_base;
+    REQUIRE(avio_open(&out->pb, path.string().c_str(), AVIO_FLAG_WRITE) >= 0);
+    REQUIRE(avformat_write_header(out, nullptr) >= 0);
+    AVFrame* frame = av_frame_alloc();
+    frame->format = enc->pix_fmt;
+    frame->width = 64;
+    frame->height = 32;
+    av_frame_get_buffer(frame, 0);
+    AVPacket* packet = av_packet_alloc();
+    auto drain = [&] {
+        while (avcodec_receive_packet(enc, packet) == 0) {
+            av_packet_rescale_ts(packet, enc->time_base, stream->time_base);
+            packet->stream_index = stream->index;
+            av_interleaved_write_frame(out, packet);
+        }
+    };
+    for (int i = 0; i < frames; ++i) {
+        av_frame_make_writable(frame);
+        for (int y = 0; y < 32; ++y) {
+            for (int x = 0; x < 64; ++x) {
+                const bool opaque = x >= 32;
+                if (prores) {
+                    auto plane = [&](int p) {
+                        return reinterpret_cast<std::uint16_t*>(frame->data[p] +
+                                                                y * frame->linesize[p]);
+                    };
+                    plane(0)[x] = static_cast<std::uint16_t>(4 * 160); // Y (limitado)
+                    plane(1)[x] = 512;
+                    plane(2)[x] = 512;
+                    plane(3)[x] = opaque ? 1023 : 0;
+                } else {
+                    std::uint8_t* px = frame->data[0] + y * frame->linesize[0] + x * 4;
+                    px[0] = opaque ? 255 : 0; // A
+                    px[1] = px[2] = px[3] = 180;
+                }
+            }
+        }
+        frame->pts = i;
+        avcodec_send_frame(enc, frame);
+        drain();
+    }
+    avcodec_send_frame(enc, nullptr);
+    drain();
+    av_write_trailer(out);
+    avio_closep(&out->pb);
+    av_packet_free(&packet);
+    av_frame_free(&frame);
+    avcodec_free_context(&enc);
+    avformat_free_context(out);
+    return path;
+}
+
+} // namespace
+
+TEST_CASE("Los mov con transparencia conservan su alfa", "[media][alfa]") {
+    const char* codec = GENERATE("qtrle", "prores_ks");
+    CAPTURE(codec);
+    const std::filesystem::path path = writeAlphaClip(codec);
+    if (path.empty()) {
+        SKIP("FFmpeg sin ese codificador");
+    }
+    {
+        VideoDecoder decoder(path.string(), HwAccel::None);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        REQUIRE(frame->hasAlpha());
+        REQUIRE(frame->a.size() == static_cast<std::size_t>(64 * 32));
+        const auto at = [&](int x, int y) {
+            return frame->a[static_cast<std::size_t>(y * 64 + x)];
+        };
+        CHECK(at(4, 16) <= 2);    // transparente
+        CHECK(at(60, 16) >= 253); // opaco
+        // Gris → luma de rango limitado (Animación: 180 en RGB ≈ 170; ProRes: 160).
+        const int luma = frame->y[static_cast<std::size_t>(16 * 64 + 60)];
+        CHECK(std::abs(luma - (std::string(codec) == "qtrle" ? 170 : 160)) <= 3);
+        CHECK_FALSE(frame->fullRange);
+
+        // Sin proxy: perdería la transparencia.
+        const std::filesystem::path proxy = tempClipPath("proxy-alfa.mp4");
+        CHECK_THROWS_AS(writeProxy(path.string(), proxy.string()), MediaError);
+        CHECK_FALSE(std::filesystem::exists(proxy));
+    }
+    // Un video normal no lleva plano de alfa.
+    TempClip opaque({.frames = 5});
+    VideoDecoder plain(opaque.path.string(), HwAccel::None);
+    const auto frame = plain.nextFrame();
+    REQUIRE(frame.has_value());
+    CHECK_FALSE(frame->hasAlpha());
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
 }

@@ -712,6 +712,11 @@ ctest --preset windows-debug
        proxy», «Crear proxies de todos los videos»); botón «Proxies» en Programa. Solo
        para la vista previa: la exportación usa siempre los originales. Con proxy, un
        salto al azar baja de ~47 a ~6 ms.
+     - Arreglo pedido por Kyo al probarla: los videos con transparencia (.mov ProRes
+       4444, Animación/qtrle, PNG…) conservan su alfa en la vista previa y al exportar
+       (plano de alfa en VideoFrame y en el compositor). No tienen proxy (H.264 no
+       guarda transparencia). Los .webm VP9 con alfa necesitarían el decodificador
+       libvpx: quedan pendientes.
      - Pendiente: visor sin copias (textura D3D11 de NVDEC directa al compositor). Es
        código solo de Windows que no se puede compilar ni probar en la nube: se hará en
        una sesión de prueba con Kyo en su PC.

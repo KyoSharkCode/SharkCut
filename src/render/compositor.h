@@ -80,6 +80,7 @@ private:
     void ensurePipelines();
     Source& source(std::size_t index);
     TransitionTargets& transitionTargets(std::size_t index);
+    void bindSource(Source& source); // texturas y uniformes de la fuente
     // Sube el fotograma (si cambió) y prepara los uniformes para dibujarlo con `transform`.
     void prepareSource(Source& source, const VideoFrame& frame, const ClipTransform& transform,
                        double opacity, QRhiResourceUpdateBatch* updates);

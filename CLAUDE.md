@@ -25,6 +25,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 ## Arquitectura
 - src/core y src/media no dependen de Qt; deben poder probarse sin ventanas.
   src/media: análisis (probeMedia), VideoDecoder, DecodeWorker (hilo + cola), color.
+  Los fotogramas son NV12 más un plano de alfa opcional (videos con transparencia, como
+  .mov ProRes 4444 o Animación); el compositor lo usa en layer.frag.
   src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
   src/core también: easing, catálogo de transiciones (transition.h), la secuencia
   A → transición → B del laboratorio (sequence.h) y el catálogo de efectos de sonido

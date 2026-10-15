@@ -14,6 +14,8 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QThreadPool>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
@@ -110,11 +112,18 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString lastExportPath READ lastExportPath NOTIFY exportChanged)
     // Proyectos abiertos hace poco: {path, name, folder, exists, date}
     Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
+    // Copias de recuperación de una sesión que no se cerró bien: {key, name, path, date}
+    Q_PROPERTY(QVariantList recoverableProjects READ recoverableProjects NOTIFY recoveryChanged)
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
     Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
     Q_PROPERTY(QString exportMessage READ exportMessage NOTIFY exportChanged)
     // Reproducción
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
+    // Velocidad de reproducción (J/K/L): 0 en pausa, 1 normal, 2/4/8 hacia delante,
+    // −1/−2/−4/−8 hacia atrás. Solo suena a velocidad normal.
+    Q_PROPERTY(int playbackSpeed READ playbackSpeed NOTIFY playingChanged)
+    // Marcadores de la secuencia activa: {id, frame, name}
+    Q_PROPERTY(QVariantList markers READ markers NOTIFY projectChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(qint64 currentFrame READ currentFrame NOTIFY currentFrameChanged)
     Q_PROPERTY(QString timecode READ timecode NOTIFY currentFrameChanged)
@@ -175,10 +184,18 @@ public:
     QVariantMap exportSettings() const { return m_exportSettings; }
     QString lastExportPath() const { return m_lastExportPath; }
     QVariantList recentProjects() const { return m_recentProjects; }
+    QVariantList recoverableProjects() const { return m_recoverable; }
     double exportProgress() const { return m_exportProgress; }
     QString exportMessage() const { return m_exportMessage; }
 
     bool playing() const { return m_playing; }
+    int playbackSpeed() const { return m_playing ? m_speed : 0; }
+    QVariantList markers() const;
+
+    // Pista "nueva": al soltar un medio en la zona vacía de la línea de tiempo (encima de
+    // la última pista de video o debajo de la última de audio), se crean una pista de
+    // video y una de audio nuevas para él (las que necesite).
+    static constexpr int kNewTracks = -2;
     bool busy() const { return m_busy; }
     qint64 currentFrame() const { return m_currentFrame; }
     QString timecode() const;
@@ -251,10 +268,17 @@ public:
     // --- Proyectos recientes ---
     Q_INVOKABLE void forgetRecentProject(const QString& path);
 
+    // --- Recuperación ---
+    // Abre la copia de recuperación (con sus cambios sin guardar; al guardar va a su
+    // archivo original, si tenía) o la descarta.
+    Q_INVOKABLE void recoverProject(const QString& key);
+    Q_INVOKABLE void discardRecovery(const QString& key);
+
     // --- Biblioteca ---
     // Analiza los archivos en segundo plano y los añade a la biblioteca. Con
     // `placeAt` >= 0 también los coloca, uno tras otro, desde ese fotograma, en la pista
-    // `track` (índice; -1 = V1 y A1) y su pareja del otro tipo (V2 ↔ A2…). Los medios
+    // `track` (índice; -1 = V1 y A1; kNewTracks = pistas nuevas) y su pareja del otro tipo
+    // (V2 ↔ A2…). Los medios
     // nuevos van a la carpeta `folder` (0 = raíz) del proyecto activo.
     Q_INVOKABLE void importFiles(const QList<QUrl>& urls, qint64 placeAt = -1, int track = -1,
                                  qint64 folder = 0);
@@ -272,11 +296,29 @@ public:
 
     // --- Edición ---
     // Coloca el medio entero en `frame` (sobrescribiendo); `frame` < 0: al final.
-    // `track`: pista donde se suelta (índice; -1 = V1 y A1), como en importFiles.
+    // `track`: pista donde se suelta (índice; -1 = V1 y A1; kNewTracks = pistas nuevas),
+    // como en importFiles.
     Q_INVOKABLE void addMedia(qint64 mediaId, qint64 frame = -1, int track = -1);
     Q_INVOKABLE void splitAtPlayhead();                      // divide lo que hay bajo el cabezal
     Q_INVOKABLE void splitClip(qint64 clipId, qint64 frame); // cuchilla
     Q_INVOKABLE void removeSelection();
+    // Edición con rizo (cierra el hueco desplazando lo posterior en las pistas no
+    // bloqueadas): Q quita desde el borde anterior hasta el cabezal, W desde el cabezal
+    // hasta el borde siguiente; rippleDeleteSelection quita la selección (Mayús+Supr).
+    Q_INVOKABLE void rippleTrimPrevious();
+    Q_INVOKABLE void rippleTrimNext();
+    Q_INVOKABLE void rippleDeleteSelection();
+    // Hueco de la pista `track` en `frame` (para el menú): true si se puede cerrar.
+    Q_INVOKABLE bool hasGapAt(int track, qint64 frame) const;
+    Q_INVOKABLE void closeGap(int track, qint64 frame);
+
+    // --- Marcadores ---
+    Q_INVOKABLE void addMarkerAtPlayhead(); // M
+    Q_INVOKABLE void removeMarker(qint64 markerId);
+    Q_INVOKABLE void renameMarker(qint64 markerId, const QString& name);
+    Q_INVOKABLE void moveMarker(qint64 markerId, qint64 frame);
+    // Lleva el cabezal al marcador siguiente (`direction` > 0) o al anterior.
+    Q_INVOKABLE void goToMarker(int direction);
     Q_INVOKABLE void trimStart(qint64 clipId, qint64 frame);
     Q_INVOKABLE void trimEnd(qint64 clipId, qint64 frame);
     Q_INVOKABLE qint64 limitTrimStart(qint64 clipId, qint64 frame) const;
@@ -335,6 +377,9 @@ public:
     Q_INVOKABLE void togglePlay();
     Q_INVOKABLE void seek(qint64 frame);
     Q_INVOKABLE void step(int frames);
+    // J (`direction` < 0) y L (> 0): reproduce en ese sentido; cada pulsación más dobla
+    // la velocidad (hasta 8×). Pulsar el sentido contrario vuelve a 1×. K es pause().
+    Q_INVOKABLE void shuttle(int direction);
     // Avanza la reproducción según el reloj; se llama una vez por refresco de pantalla.
     Q_INVOKABLE void advance();
 
@@ -349,6 +394,7 @@ signals:
     void exportChanged();
     void exportSettingsChanged();
     void recentProjectsChanged();
+    void recoveryChanged();
     void metersChanged();
     void selectionChanged();
     void selectedClipChanged();
@@ -400,6 +446,10 @@ private:
         sharkcut::DocumentHistory history;
         QString path;    // vacío: proyecto sin guardar
         QString newName; // nombre propuesto de un proyecto aún sin guardar
+        // Copia de recuperación (autoguardado): su nombre en la carpeta de recuperación
+        // ("" = aún no tiene) y el estado que se copió por última vez.
+        QString recoveryKey;
+        std::shared_ptr<const sharkcut::Document> autosaved;
     };
     // Una pestaña de la línea de tiempo: una secuencia de un proyecto abierto.
     struct Tab {
@@ -459,6 +509,7 @@ private:
                            std::string_view soundId);
 
     void setCurrentFrame(qint64 frame);
+    void advanceShuttle(sharkcut::FrameRate rate);
     void setPlaying(bool playing);
     void setBusy(bool busy);
     void setError(const QString& message);
@@ -477,8 +528,14 @@ private:
     void refreshRecentProjects();
     void finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Document>& written,
                     const QString& path, const QString& error);
+    static QString recoveryDirectory();
+    void autosave();
+    void removeRecovery(const QString& key);
+    void scanRecovery();
+    // `recoveryKey` y `recoveredName`: al abrir una copia de recuperación.
     void finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded, const QString& path,
-                    const QString& error, const QStringList& missing);
+                    const QString& error, const QStringList& missing,
+                    const QString& recoveryKey = {}, const QString& recoveredName = {});
     void setFileBusy(bool busy);
 
     std::vector<std::unique_ptr<OpenProject>> m_projects;
@@ -507,6 +564,11 @@ private:
     qint64 m_currentFrame = 0;
     qint64 m_pendingFrame = -1; // fotograma pedido en pausa que aún no ha llegado
     bool m_playing = false;
+    // J/K/L: a una velocidad distinta de 1 no suena y el tiempo lo lleva un temporizador
+    // desde `m_shuttleFrom`.
+    int m_speed = 1;
+    QElapsedTimer m_shuttleTimer;
+    qint64 m_shuttleFrom = 0;
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
@@ -516,6 +578,9 @@ private:
     QVariantMap m_exportSettings;
     QString m_lastExportPath;
     QVariantList m_recentProjects;
+    QVariantList m_recoverable;
+    QTimer m_autosaveTimer;
+    QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;

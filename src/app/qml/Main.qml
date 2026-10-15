@@ -248,17 +248,24 @@ Window {
         enabled: ventana.conSecuencia
         onActivated: { editor.pause(); editor.seek(editor.frameCount - 1) }
     }
-    Shortcut { sequence: "M"; onActivated: editor.muted = !editor.muted }
     Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrirProyecto.open() }
     Shortcut { sequences: [StandardKey.New]; onActivated: dialogoNuevo.open() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: ventana.guardar() }
     Shortcut { sequence: "Ctrl+Shift+S"; onActivated: dialogoGuardarProyecto.open() }
     Shortcut { sequence: "Ctrl+M"; onActivated: ventana.irA("exportar") }
     Shortcut {
-        sequence: "Ctrl+Shift+M"
+        sequence: "Ctrl+E"
         enabled: editor.frameCount > 0 && !editor.exporting
         onActivated: editor.quickExport()
     }
+    // J/K/L (como en Premiere): atrás, pausa, adelante; otra pulsación dobla la velocidad.
+    Shortcut { sequence: "J"; enabled: ventana.conSecuencia; onActivated: editor.shuttle(-1) }
+    Shortcut { sequence: "K"; enabled: ventana.conSecuencia; onActivated: editor.pause() }
+    Shortcut { sequence: "L"; enabled: ventana.conSecuencia; onActivated: editor.shuttle(1) }
+    // Marcadores: M pone uno en el cabezal; Mayús+M va al siguiente y Ctrl+Mayús+M al anterior.
+    Shortcut { sequence: "M"; enabled: ventana.conSecuencia; onActivated: editor.addMarkerAtPlayhead() }
+    Shortcut { sequence: "Shift+M"; enabled: ventana.conSecuencia; onActivated: editor.goToMarker(1) }
+    Shortcut { sequence: "Ctrl+Shift+M"; enabled: ventana.conSecuencia; onActivated: editor.goToMarker(-1) }
     Shortcut { sequence: "1"; onActivated: ventana.irA("proyectos") }
     Shortcut { sequence: "2"; onActivated: ventana.irA("editor") }
     Shortcut { sequence: "3"; onActivated: ventana.irA("exportar") }
@@ -270,6 +277,15 @@ Window {
         enabled: ventana.enEditor
         onActivated: editor.removeSelection()
     }
+    Shortcut {
+        sequences: ["Shift+Delete", "Shift+Backspace"]
+        enabled: ventana.enEditor
+        onActivated: editor.rippleDeleteSelection()
+    }
+    // Q / W: recortar con rizo desde el borde anterior hasta el cabezal / desde el cabezal
+    // hasta el borde siguiente.
+    Shortcut { sequence: "Q"; enabled: ventana.enEditor; onActivated: editor.rippleTrimPrevious() }
+    Shortcut { sequence: "W"; enabled: ventana.enEditor; onActivated: editor.rippleTrimNext() }
     Shortcut { sequences: [StandardKey.Undo]; enabled: ventana.enEditor; onActivated: editor.undo() }
     Shortcut {
         sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
@@ -509,10 +525,17 @@ Window {
                                 Item { implicitWidth: 8 }
                                 BotonIcono {
                                     icono: editor.muted ? "silencio" : "sonido"
-                                    ayuda: editor.muted ? "Activar el sonido (M)" : "Silenciar (M)"
+                                    ayuda: editor.muted ? "Activar el sonido" : "Silenciar"
                                     onPulsado: editor.muted = !editor.muted
                                 }
                                 Item { Layout.fillWidth: true }
+                                // Velocidad con J/L (a 1× no se muestra)
+                                Chip {
+                                    visible: editor.playbackSpeed !== 0 && editor.playbackSpeed !== 1
+                                    texto: (editor.playbackSpeed < 0 ? "◀ " : "▶ ")
+                                           + Math.abs(editor.playbackSpeed) + "×"
+                                    colorTexto: Theme.acento
+                                }
                                 CodigoTiempo {
                                     actual: editor.timecode
                                     total: editor.durationTimecode
@@ -609,7 +632,7 @@ Window {
                 visible: !ventana.enExportar
                 icono: "exportar"
                 texto: "Exportar rápido"
-                ayuda: "La secuencia entera con los últimos ajustes de Exportar (Ctrl+Mayús+M)"
+                ayuda: "La secuencia entera con los últimos ajustes de Exportar (Ctrl+E)"
                 acentuado: true
                 implicitHeight: 36
                 implicitWidth: 160

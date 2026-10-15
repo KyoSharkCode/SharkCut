@@ -179,6 +179,86 @@ Item {
                 anchors.margins: 22
                 spacing: 12
 
+                // Copias de recuperación de una sesión que no se cerró bien
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: pagina.editor.recoverableProjects.length > 0
+                    implicitHeight: recuperacion.implicitHeight + 28
+                    radius: Theme.radio
+                    color: Theme.fondo
+                    border.color: Theme.aviso
+                    ColumnLayout {
+                        id: recuperacion
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 14
+                        spacing: 8
+                        Text {
+                            text: "SharkCut no se cerró bien la última vez"
+                            color: Theme.aviso
+                            font.pixelSize: Theme.tamTexto
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: "Hay cambios sin guardar que se copiaron automáticamente. Al "
+                                  + "recuperar un proyecto se abre con esos cambios; guárdalo para "
+                                  + "conservarlos."
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                        }
+                        Repeater {
+                            model: pagina.editor.recoverableProjects
+                            delegate: RowLayout {
+                                id: copia
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 10
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: copia.modelData.name + "  ·  copia del "
+                                              + copia.modelData.date
+                                        color: Theme.texto
+                                        font.pixelSize: Theme.tamTexto
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: copia.modelData.path.length > 0 ? copia.modelData.path
+                                              : "Proyecto que aún no se había guardado"
+                                        color: Theme.textoSecundario
+                                        font.pixelSize: Theme.tamTextoPequeno
+                                        elide: Text.ElideMiddle
+                                    }
+                                }
+                                BotonIcono {
+                                    texto: "Descartar"
+                                    ayuda: "Borra la copia (el archivo del proyecto no se toca)"
+                                    implicitHeight: 32
+                                    onPulsado: pagina.editor.discardRecovery(copia.modelData.key)
+                                }
+                                BotonIcono {
+                                    icono: "restablecer"
+                                    texto: "Recuperar"
+                                    acentuado: true
+                                    implicitHeight: 32
+                                    enabled: !pagina.editor.fileBusy
+                                    onPulsado: {
+                                        pagina.esperandoApertura = true
+                                        pagina.editor.recoverProject(copia.modelData.key)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Text {
                     text: "Recientes"
                     color: Theme.texto

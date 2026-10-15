@@ -117,6 +117,16 @@ struct Track {
     friend bool operator==(const Track&, const Track&) = default;
 };
 
+// Marcador de la secuencia (tecla M): un punto con nombre en la regla, para volver a él
+// o recordar algo ("aquí empieza la partida").
+struct Marker {
+    ObjectId id = 0;
+    std::int64_t frame = 0;
+    std::string name;
+
+    friend bool operator==(const Marker&, const Marker&) = default;
+};
+
 // V1 es siempre la primera pista.
 inline constexpr std::size_t kVideoTrack = 0;
 
@@ -136,6 +146,7 @@ struct Project {
     ProjectSettings settings;
     std::vector<MediaItem> media;
     std::vector<Track> tracks{Track{TrackKind::Video, {}}, Track{TrackKind::Audio, {}}};
+    std::vector<Marker> markers{}; // ordenados por fotograma
     ObjectId nextId = 1;
 
     struct ClipRef {

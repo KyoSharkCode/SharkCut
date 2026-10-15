@@ -12,18 +12,24 @@
 #include "render/sequence_exporter.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QMetaObject>
 #include <QOffscreenSurface>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QThreadPool>
+#include <QUuid>
 #include <QVariantMap>
 #include <rhi/qrhi.h>
 
@@ -46,6 +52,13 @@ namespace {
 constexpr auto kExportSettingsKey = "exportar/ajustes";
 constexpr auto kRecentProjectsKey = "proyectos/recientes";
 constexpr int kMaxRecentProjects = 15;
+// Cada cuánto se hace la copia de recuperación (SHARKCUT_AUTOSAVE_MS la cambia, para
+// probarlo).
+int autosaveIntervalMs() {
+    bool ok = false;
+    const int value = qEnvironmentVariableIntValue("SHARKCUT_AUTOSAVE_MS", &ok);
+    return ok && value > 0 ? value : 2 * 60 * 1000;
+}
 
 sharkcut::VideoCodec codecOf(const QString& name) {
     return name == QLatin1String("h265") ? sharkcut::VideoCodec::H265 : sharkcut::VideoCodec::H264;
@@ -242,11 +255,26 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     m_exportSettings =
         completeExportSettings(QSettings().value(QLatin1String(kExportSettingsKey)).toMap());
     refreshRecentProjects();
+    // Una copia de recuperación de cada proyecto con cambios cada pocos minutos; las que
+    // queden de una sesión que no se cerró bien se ofrecen en Proyectos.
+    m_recoveryPool.setMaxThreadCount(1);
+    m_autosaveTimer.setInterval(autosaveIntervalMs());
+    connect(&m_autosaveTimer, &QTimer::timeout, this, &Editor::autosave);
+    m_autosaveTimer.start();
+    scanRecovery();
     connect(this, &Editor::selectionChanged, this, &Editor::selectedClipChanged);
     connect(this, &Editor::projectChanged, this, &Editor::selectedClipChanged);
 }
 
 Editor::~Editor() {
+    // Al cerrar con normalidad, cada proyecto con cambios se guardó o se descartó; las
+    // copias de lo que quede sin cambios ya no hacen falta.
+    for (const auto& p : m_projects) {
+        if (!p->history.modified()) {
+            removeRecovery(p->recoveryKey);
+        }
+    }
+    m_recoveryPool.waitForDone();
     m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
@@ -767,6 +795,7 @@ void Editor::closeProject(qint64 uid) {
         active = m_tabs[static_cast<std::size_t>(m_activeTab)];
     }
     std::erase_if(m_tabs, [id](const Tab& t) { return t.project == id; });
+    removeRecovery(findProject(id)->recoveryKey); // se cerró a propósito
     std::erase_if(m_projects, [id](const auto& p) { return p->uid == id; });
     if (m_projects.empty()) {
         OpenProject& fresh = addProject(newDocument("Secuencia 1", 0, 0, 0), {}, {});
@@ -1003,6 +1032,39 @@ void Editor::openProject(const QUrl& file) {
     openProjectPath(file.isLocalFile() ? file.toLocalFile() : file.toString());
 }
 
+namespace {
+
+// Tras leer un proyecto (en segundo plano): los efectos de sonido van con SharkCut, así
+// que si se instaló en otra carpeta (u otro equipo) se buscan en la de ahora. Devuelve
+// los medios que no se encuentran.
+QStringList relinkAndCheck(sharkcut::LoadedDocument& loaded) {
+    for (MediaItem& item : loaded.document.media) {
+        std::error_code ignored;
+        const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
+        if (std::filesystem::exists(current, ignored)) {
+            continue;
+        }
+        const QString file = QString::fromStdString(sharkcut::utf8FromPath(current.filename()));
+        const bool isEffect = std::any_of(
+            sharkcut::kSoundEffects.begin(), sharkcut::kSoundEffects.end(),
+            [&file](const sharkcut::SoundEffect& e) { return fromView(e.file) == file; });
+        const QString candidate = QDir(soundFolder()).filePath(file);
+        if (isEffect && QFileInfo::exists(candidate)) {
+            item.path = candidate.toStdString();
+        }
+    }
+    QStringList missing;
+    for (const MediaItem& item : loaded.document.media) {
+        std::error_code ignored;
+        if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
+            missing << QString::fromStdString(item.name);
+        }
+    }
+    return missing;
+}
+
+} // namespace
+
 void Editor::openProjectPath(const QString& path) {
     if (path.isEmpty() || m_fileBusy) {
         return;
@@ -1025,30 +1087,7 @@ void Editor::openProjectPath(const QString& path) {
         QStringList missing;
         try {
             *loaded = sharkcut::loadDocument(sharkcut::pathFromUtf8(path.toStdString()));
-            // Los efectos de sonido van con SharkCut: si se instaló en otra carpeta (u
-            // otro equipo), se buscan en la de ahora.
-            for (MediaItem& item : loaded->document.media) {
-                std::error_code ignored;
-                const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
-                if (std::filesystem::exists(current, ignored)) {
-                    continue;
-                }
-                const QString file =
-                    QString::fromStdString(sharkcut::utf8FromPath(current.filename()));
-                const bool isEffect = std::any_of(
-                    sharkcut::kSoundEffects.begin(), sharkcut::kSoundEffects.end(),
-                    [&file](const sharkcut::SoundEffect& e) { return fromView(e.file) == file; });
-                const QString candidate = QDir(soundFolder()).filePath(file);
-                if (isEffect && QFileInfo::exists(candidate)) {
-                    item.path = candidate.toStdString();
-                }
-            }
-            for (const MediaItem& item : loaded->document.media) {
-                std::error_code ignored;
-                if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
-                    missing << QString::fromStdString(item.name);
-                }
-            }
+            missing = relinkAndCheck(*loaded);
         } catch (const std::exception& e) {
             error = QString::fromStdString(e.what());
         }
@@ -1064,7 +1103,8 @@ void Editor::openProjectPath(const QString& path) {
 }
 
 void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
-                        const QString& path, const QString& error, const QStringList& missing) {
+                        const QString& path, const QString& error, const QStringList& missing,
+                        const QString& recoveryKey, const QString& recoveredName) {
     setFileBusy(false);
     if (!error.isEmpty()) {
         setError(QStringLiteral("No se pudo abrir el proyecto: %1").arg(error));
@@ -1084,7 +1124,20 @@ void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
             m_activeTab = -1;
         }
     }
-    OpenProject& project = addProject(std::move(loaded->document), path, {});
+    OpenProject& project = addProject(std::move(loaded->document), path, recoveredName);
+    if (!recoveryKey.isEmpty()) {
+        // Recuperado: tiene cambios que no están en su archivo (sigue usando la misma
+        // copia de recuperación hasta que se guarde).
+        project.history.markSaved(nullptr);
+        project.recoveryKey = recoveryKey;
+        m_recoverable.erase(std::remove_if(m_recoverable.begin(), m_recoverable.end(),
+                                           [&recoveryKey](const QVariant& v) {
+                                               return v.toMap().value(QStringLiteral("key")) ==
+                                                      recoveryKey;
+                                           }),
+                            m_recoverable.end());
+        emit recoveryChanged();
+    }
     int active = -1;
     for (ObjectId sequence : loaded->workspace.openSequences) {
         m_tabs.push_back({project.uid, sequence, 0});
@@ -1101,8 +1154,188 @@ void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
     m_activeTab = -1;
     m_activeProject = project.uid;
     switchTo(active);
-    addRecentProject(path);
+    if (!path.isEmpty()) {
+        addRecentProject(path);
+    }
     emit opened(true);
+}
+
+// --- Autoguardado y recuperación -----------------------------------------------------
+
+QString Editor::recoveryDirectory() {
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+        .filePath(QStringLiteral("recuperacion"));
+}
+
+void Editor::autosave() {
+    const QString directory = recoveryDirectory();
+    for (const auto& p : m_projects) {
+        OpenProject& project = *p;
+        const std::shared_ptr<const sharkcut::Document> snapshot = project.history.snapshot();
+        if (!project.history.modified() || snapshot == project.autosaved) {
+            continue;
+        }
+        if (project.recoveryKey.isEmpty()) {
+            project.recoveryKey = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        }
+        project.autosaved = snapshot;
+        const sharkcut::Workspace workspace = workspaceOf(project);
+        const QString key = project.recoveryKey;
+        const QString path = project.path;
+        const QString name = nameOf(project);
+        // Las rutas relativas de los medios se calculan respecto al archivo del proyecto
+        // (o a la copia, si aún no tiene): así se leen igual al recuperarlo.
+        m_recoveryPool.start([directory, key, path, name, snapshot, workspace] {
+            QDir().mkpath(directory);
+            const QString file = QDir(directory).filePath(key + QStringLiteral(".sharkp"));
+            const QString reference = path.isEmpty() ? file : path;
+            std::string text;
+            try {
+                text = sharkcut::documentToJson(
+                    *snapshot, sharkcut::pathFromUtf8(reference.toStdString()), workspace);
+            } catch (const std::exception&) {
+                return; // texto no válido: ya avisará el guardado normal
+            }
+            QSaveFile out(file);
+            if (!out.open(QIODevice::WriteOnly)) {
+                return;
+            }
+            out.write(text.data(), static_cast<qint64>(text.size()));
+            if (!out.commit()) {
+                return;
+            }
+            const QJsonObject meta{
+                {QStringLiteral("path"), path},
+                {QStringLiteral("name"), name},
+                {QStringLiteral("date"), QDateTime::currentDateTime().toString(Qt::ISODate)},
+            };
+            QSaveFile metaFile(QDir(directory).filePath(key + QStringLiteral(".json")));
+            if (metaFile.open(QIODevice::WriteOnly)) {
+                metaFile.write(QJsonDocument(meta).toJson());
+                metaFile.commit();
+            }
+        });
+    }
+}
+
+void Editor::removeRecovery(const QString& key) {
+    if (key.isEmpty()) {
+        return;
+    }
+    const QString directory = recoveryDirectory();
+    // En la misma cola que las escrituras: nunca se adelanta a una copia pendiente.
+    m_recoveryPool.start([directory, key] {
+        QFile::remove(QDir(directory).filePath(key + QStringLiteral(".sharkp")));
+        QFile::remove(QDir(directory).filePath(key + QStringLiteral(".json")));
+    });
+}
+
+void Editor::scanRecovery() {
+    const QString directory = recoveryDirectory();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, directory] {
+        QVariantList list;
+        const QDir dir(directory);
+        for (const QFileInfo& info :
+             dir.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Time)) {
+            QFile file(info.absoluteFilePath());
+            if (!file.open(QIODevice::ReadOnly)) {
+                continue;
+            }
+            const QJsonObject meta = QJsonDocument::fromJson(file.readAll()).object();
+            const QString key = info.completeBaseName();
+            if (!QFileInfo::exists(dir.filePath(key + QStringLiteral(".sharkp")))) {
+                continue;
+            }
+            const QDateTime date =
+                QDateTime::fromString(meta.value(QStringLiteral("date")).toString(), Qt::ISODate);
+            QVariantMap entry;
+            entry[QStringLiteral("key")] = key;
+            entry[QStringLiteral("name")] = meta.value(QStringLiteral("name")).toString();
+            entry[QStringLiteral("path")] = meta.value(QStringLiteral("path")).toString();
+            entry[QStringLiteral("date")] =
+                QLocale().toString(date, QStringLiteral("d MMM yyyy, HH:mm"));
+            list.append(entry);
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, list] {
+                if (!self) {
+                    return;
+                }
+                // Sin las de los proyectos que ya están abiertos en esta sesión.
+                QVariantList pending;
+                for (const QVariant& v : list) {
+                    const QString key = v.toMap().value(QStringLiteral("key")).toString();
+                    if (std::none_of(self->m_projects.begin(), self->m_projects.end(),
+                                     [&key](const auto& p) { return p->recoveryKey == key; })) {
+                        pending.append(v);
+                    }
+                }
+                self->m_recoverable = pending;
+                emit self->recoveryChanged();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::recoverProject(const QString& key) {
+    if (m_fileBusy) {
+        return;
+    }
+    QVariantMap meta;
+    for (const QVariant& v : m_recoverable) {
+        if (v.toMap().value(QStringLiteral("key")) == key) {
+            meta = v.toMap();
+        }
+    }
+    if (meta.isEmpty()) {
+        return;
+    }
+    pause();
+    setFileBusy(true);
+    const QString file = QDir(recoveryDirectory()).filePath(key + QStringLiteral(".sharkp"));
+    const QString path = meta.value(QStringLiteral("path")).toString();
+    const QString name = meta.value(QStringLiteral("name")).toString();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, file, path, name, key] {
+        auto loaded = std::make_shared<sharkcut::LoadedDocument>();
+        QString error;
+        QStringList missing;
+        try {
+            QFile in(file);
+            if (!in.open(QIODevice::ReadOnly)) {
+                throw std::runtime_error("no se puede leer la copia de recuperación");
+            }
+            const QByteArray text = in.readAll();
+            const QString reference = path.isEmpty() ? file : path;
+            *loaded = sharkcut::documentFromJson(
+                std::string_view(text.constData(), static_cast<std::size_t>(text.size())),
+                sharkcut::pathFromUtf8(reference.toStdString()));
+            missing = relinkAndCheck(*loaded);
+        } catch (const std::exception& e) {
+            error = QString::fromStdString(e.what());
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, loaded, path, error, missing, key, name] {
+                if (self) {
+                    self->finishOpen(loaded, path, error, missing, key,
+                                     path.isEmpty() ? name : QString());
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::discardRecovery(const QString& key) {
+    removeRecovery(key);
+    m_recoverable.erase(std::remove_if(m_recoverable.begin(), m_recoverable.end(),
+                                       [&key](const QVariant& v) {
+                                           return v.toMap().value(QStringLiteral("key")) == key;
+                                       }),
+                        m_recoverable.end());
+    emit recoveryChanged();
 }
 
 bool Editor::save() {
@@ -1166,6 +1399,11 @@ void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Docum
     }
     project->history.markSaved(written);
     addRecentProject(path);
+    if (!project->history.modified()) {
+        removeRecovery(project->recoveryKey); // lo guardado ya está en su archivo
+        project->recoveryKey.clear();
+        project->autosaved.reset();
+    }
     if (project->path != path) {
         const bool firstSave = project->path.isEmpty();
         project->path = path;
@@ -1640,6 +1878,10 @@ bool Editor::editDocument(const QString& label,
 
 sharkcut::PlaceTarget Editor::placeTarget(int track) const {
     const Project& p = project();
+    if (track == kNewTracks) {
+        // Números que aún no existen: placeClip crea una pista de cada tipo.
+        return {p.trackCount(sharkcut::TrackKind::Video), p.trackCount(sharkcut::TrackKind::Audio)};
+    }
     if (track < 0 || static_cast<std::size_t>(track) >= p.tracks.size()) {
         return {};
     }
@@ -1719,6 +1961,119 @@ void Editor::splitClip(qint64 clipId, qint64 frame) {
     edit(QStringLiteral("Dividir"), [clipId, frame](Project& p) {
         return sharkcut::splitAt(p, frame, {static_cast<ObjectId>(clipId)});
     });
+}
+
+void Editor::rippleTrimPrevious() {
+    const std::int64_t frame = m_currentFrame;
+    const std::int64_t from = sharkcut::previousEdit(project(), frame);
+    if (edit(QStringLiteral("Recortar con rizo hasta el cabezal"),
+             [frame](Project& p) { return sharkcut::rippleTrimPrevious(p, frame); })) {
+        seek(from); // lo que estaba en el cabezal ahora empieza en el borde
+    }
+}
+
+void Editor::rippleTrimNext() {
+    const std::int64_t frame = m_currentFrame;
+    if (edit(QStringLiteral("Recortar con rizo desde el cabezal"),
+             [frame](Project& p) { return sharkcut::rippleTrimNext(p, frame); })) {
+        seek(frame);
+    }
+}
+
+void Editor::rippleDeleteSelection() {
+    if (m_selectedTransition != 0) {
+        removeTransition(static_cast<qint64>(m_selectedTransition));
+        return;
+    }
+    const std::vector<ObjectId> selected = m_selection;
+    auto result = sharkcut::RippleResult::Nothing;
+    edit(QStringLiteral("Eliminar con rizo"), [&](Project& p) {
+        result = sharkcut::rippleDelete(p, selected);
+        return result != sharkcut::RippleResult::Nothing;
+    });
+    if (result == sharkcut::RippleResult::Blocked) {
+        setError(QStringLiteral("Se quitó, pero el hueco no se cerró: otras pistas tienen clips "
+                                "en ese tramo"));
+    }
+}
+
+bool Editor::hasGapAt(int track, qint64 frame) const {
+    const Project& p = project();
+    return track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
+           !p.tracks[static_cast<std::size_t>(track)].locked &&
+           sharkcut::gapAt(p, static_cast<std::size_t>(track), frame).has_value();
+}
+
+void Editor::closeGap(int track, qint64 frame) {
+    if (track < 0) {
+        return;
+    }
+    auto result = sharkcut::RippleResult::Nothing;
+    edit(QStringLiteral("Cerrar hueco"), [&](Project& p) {
+        result = sharkcut::closeGap(p, static_cast<std::size_t>(track), frame);
+        return result == sharkcut::RippleResult::Closed;
+    });
+    if (result == sharkcut::RippleResult::Blocked) {
+        setError(QStringLiteral("No se puede cerrar el hueco: otras pistas tienen clips en ese "
+                                "tramo"));
+    }
+}
+
+// --- Marcadores ---------------------------------------------------------------------
+
+QVariantList Editor::markers() const {
+    QVariantList list;
+    for (const sharkcut::Marker& marker : project().markers) {
+        QVariantMap entry;
+        entry[QStringLiteral("id")] = static_cast<qint64>(marker.id);
+        entry[QStringLiteral("frame")] = static_cast<qint64>(marker.frame);
+        entry[QStringLiteral("name")] = QString::fromStdString(marker.name);
+        list.append(entry);
+    }
+    return list;
+}
+
+void Editor::addMarkerAtPlayhead() {
+    const std::int64_t frame = m_currentFrame;
+    edit(QStringLiteral("Añadir marcador"),
+         [frame](Project& p) { return sharkcut::addMarker(p, frame) != 0; });
+}
+
+void Editor::removeMarker(qint64 markerId) {
+    edit(QStringLiteral("Quitar marcador"), [markerId](Project& p) {
+        return sharkcut::removeMarker(p, static_cast<ObjectId>(markerId));
+    });
+}
+
+void Editor::renameMarker(qint64 markerId, const QString& name) {
+    const std::string text = name.trimmed().toStdString();
+    edit(QStringLiteral("Renombrar marcador"), [&](Project& p) {
+        return sharkcut::renameMarker(p, static_cast<ObjectId>(markerId), text);
+    });
+}
+
+void Editor::moveMarker(qint64 markerId, qint64 frame) {
+    edit(QStringLiteral("Mover marcador"), [markerId, frame](Project& p) {
+        return sharkcut::moveMarker(p, static_cast<ObjectId>(markerId), frame);
+    });
+}
+
+void Editor::goToMarker(int direction) {
+    const std::vector<sharkcut::Marker>& list = project().markers;
+    std::optional<std::int64_t> target;
+    for (const sharkcut::Marker& marker : list) {
+        if (direction > 0 && marker.frame > m_currentFrame) {
+            target = marker.frame;
+            break;
+        }
+        if (direction < 0 && marker.frame < m_currentFrame) {
+            target = marker.frame; // el último que queda antes
+        }
+    }
+    if (target) {
+        pause();
+        seek(*target);
+    }
 }
 
 void Editor::removeSelection() {
@@ -2488,7 +2843,7 @@ bool Editor::takeFrames(qint64 frame) {
 }
 
 void Editor::onFramesAvailable() {
-    if (m_playing || m_pendingFrame < 0) {
+    if ((m_playing && m_speed > 0) || m_pendingFrame < 0) {
         return;
     }
     if (takeFrames(m_pendingFrame)) {
@@ -2505,6 +2860,7 @@ void Editor::play() {
     if (m_currentFrame >= frameCount() - 1) {
         seek(0);
     }
+    m_speed = 1;
     m_pendingFrame = -1;
     setBusy(false);
     setPlaying(true);
@@ -2512,8 +2868,44 @@ void Editor::play() {
 }
 
 void Editor::pause() {
+    const bool shuttling = m_playing && m_speed != 1;
     m_clock.stop();
+    m_speed = 1;
     setPlaying(false);
+    if (shuttling) {
+        seek(m_currentFrame); // a otra velocidad quizá se veía un fotograma aproximado
+    }
+}
+
+void Editor::shuttle(int direction) {
+    const qint64 last = frameCount() - 1;
+    if (last < 0 || direction == 0) {
+        return;
+    }
+    int speed = direction > 0 ? 1 : -1;
+    if (m_playing && (m_speed > 0) == (direction > 0)) {
+        speed = std::clamp(m_speed * 2, -8, 8); // otra pulsación en el mismo sentido
+    }
+    if (speed == 1) {
+        if (!(m_playing && m_speed == 1)) {
+            pause();
+            play();
+        }
+        return;
+    }
+    if ((speed < 0 && m_currentFrame <= 0) || (speed > 0 && m_currentFrame >= last)) {
+        return;
+    }
+    m_clock.stop(); // a otra velocidad no suena
+    m_speed = speed;
+    m_shuttleFrom = m_currentFrame;
+    m_shuttleTimer.start();
+    m_pendingFrame = -1;
+    setBusy(false);
+    if (m_playing) {
+        emit playingChanged(); // cambió la velocidad
+    }
+    setPlaying(true);
 }
 
 void Editor::togglePlay() {
@@ -2536,9 +2928,13 @@ void Editor::seek(qint64 frame) {
     frame = std::clamp<qint64>(frame, 0, total - 1);
     setCurrentFrame(frame);
     requestFrames(frame);
-    if (m_playing) {
+    if (m_playing && m_speed == 1) {
         m_clock.start(sharkcut::frameToMicroseconds(frame, project().settings.frameRate));
         return;
+    }
+    if (m_playing) { // J/L: se sigue desde aquí
+        m_shuttleFrom = frame;
+        m_shuttleTimer.restart();
     }
     // En pausa: se muestra en cuanto lleguen los fotogramas de ese instante.
     if (takeFrames(frame)) {
@@ -2588,6 +2984,10 @@ void Editor::advance() {
         return;
     }
     const sharkcut::FrameRate rate = project().settings.frameRate;
+    if (m_speed != 1) {
+        advanceShuttle(rate);
+        return;
+    }
     qint64 target = sharkcut::microsecondsToFrame(m_clock.nowUs(), rate);
     const qint64 last = frameCount() - 1;
     const bool reachedEnd = target >= last;
@@ -2600,6 +3000,43 @@ void Editor::advance() {
     }
     setCurrentFrame(target);
     emit compositionChanged();
+    if (reachedEnd) {
+        pause();
+    }
+}
+
+void Editor::advanceShuttle(sharkcut::FrameRate rate) {
+    const double fps = static_cast<double>(rate.num) / static_cast<double>(rate.den);
+    const double elapsed = static_cast<double>(m_shuttleTimer.elapsed()) / 1000.0;
+    qint64 target = m_shuttleFrom + std::llround(elapsed * fps * m_speed);
+    const qint64 last = frameCount() - 1;
+    const bool reachedEnd = target >= last || target <= 0;
+    target = std::clamp<qint64>(target, 0, last);
+    if (m_speed > 0) {
+        // Hacia delante los hilos siguen decodificando en orden (lo que no llegue a
+        // tiempo se salta).
+        for (std::size_t t : playedVideoTracks()) {
+            assignTrack(t, target, false);
+            takeTrackFrame(t, target);
+        }
+        setCurrentFrame(target);
+        emit compositionChanged();
+    } else {
+        // Hacia atrás cada fotograma es un salto: se pide el siguiente cuando llega el
+        // anterior (como al arrastrar el cabezal).
+        if (m_pendingFrame >= 0 && takeFrames(m_pendingFrame)) {
+            m_pendingFrame = -1;
+            emit compositionChanged();
+        }
+        if (m_pendingFrame < 0 && target != m_currentFrame) {
+            setCurrentFrame(target);
+            requestFrames(target);
+            if (!takeFrames(target)) {
+                m_pendingFrame = target;
+            }
+            emit compositionChanged();
+        }
+    }
     if (reachedEnd) {
         pause();
     }

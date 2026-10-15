@@ -31,6 +31,8 @@ QtObject {
     readonly property color clipAudio: "#2F6F6A"
     readonly property color clipTransicion: "#7D74A8"
     readonly property color clipTexto: "#9C8340"
+    // Marcadores de la secuencia, en la regla
+    readonly property color marcador: "#E5B94E"
     // Versiones claras para iconos de tipo de medio sobre fondos oscuros
     readonly property color clipVideoClaro: "#7FA2DA"
     readonly property color clipAudioClaro: "#6FC1B8"

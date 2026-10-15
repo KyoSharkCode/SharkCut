@@ -320,3 +320,21 @@ TEST_CASE("Broken workspace entries are ignored", "[project]") {
     CHECK(loaded.workspace.openSequences == std::vector<ObjectId>{d.sequences[1].id});
     CHECK(loaded.workspace.activeSequence == d.sequences[1].id);
 }
+
+TEST_CASE("Markers survive a round trip and broken ones are fixed", "[project][markers]") {
+    Document d = sampleDocument();
+    const ObjectId seq = d.sequences[1].id;
+    REQUIRE(edit(d, seq, [](Project& p) {
+        return addMarker(p, 90, "Jefe") != 0 && addMarker(p, 10, "Inicio") != 0;
+    }));
+    const LoadedDocument loaded = documentFromJson(documentToJson(d, {}, {}), {});
+    CHECK(loaded.document == d);
+
+    // Fotograma negativo: se lleva al 0. Id repetido: el archivo no vale.
+    std::string text = documentToJson(d, {}, {});
+    const auto pos = text.find("\"frame\": 10");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 11, "\"frame\": -5");
+    const LoadedDocument fixed = documentFromJson(text, {});
+    CHECK(fixed.document.sequence(seq)->markers.front().frame == 0);
+}

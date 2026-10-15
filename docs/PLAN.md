@@ -677,8 +677,24 @@ ctest --preset windows-debug
      con el nombre de la secuencia. Nunca se reemplaza un archivo: «nombre (2).mp4». Se
      retiran Origen, Transición y su código (Player, TransitionLab); la prueba de
      transición sigue en tools/filmstrip.
-   - [ ] Etapa 3: edición rápida y trabajo seguro. Q/W, ripple delete, J/K/L, marcadores,
-     crear pista al soltar en la zona vacía, autoguardado y recuperación.
+   - [x] Etapa 3: edición rápida y trabajo seguro. Con rizo, como Premiere con bloqueo de
+     sincronización (se desplaza todo lo posterior en las pistas no bloqueadas, y los
+     marcadores): Q quita desde el borde anterior hasta el cabezal y W desde el cabezal
+     hasta el borde siguiente; Mayús+Supr (o el menú del clip) elimina con rizo; clic
+     derecho en un hueco: «Cerrar este hueco». Si otras pistas tienen clips en el tramo,
+     el hueco no se cierra y se avisa. J/K/L: atrás, pausa, adelante; otra pulsación dobla
+     la velocidad (hasta 8×), sin sonido salvo a 1×; hacia atrás se muestra fotograma a
+     fotograma según llegan. Marcadores por secuencia (campo opcional de la versión 4 del
+     .sharkp): M pone uno, Mayús+M / Ctrl+Mayús+M van al siguiente / anterior; en la
+     regla se arrastran, doble clic para el nombre, clic derecho para quitarlos. Zona
+     vacía encima de las pistas de video y debajo de las de audio: soltar un medio ahí
+     crea pistas nuevas (una de video y una de audio, las que necesite). Autoguardado:
+     cada 2 minutos, una copia de cada proyecto con cambios en la carpeta de datos de la
+     app (recuperacion/); se borra al guardar o cerrar el proyecto. Si la app no se cerró
+     bien, Proyectos ofrece recuperar o descartar cada copia (al recuperar, el proyecto
+     se abre con sus cambios sin guardar y se guarda en su archivo original). Atajos que
+     cambian: M ya no silencia (es marcador; el botón de sonido sigue en el visor) y
+     «Exportar rápido» pasa a Ctrl+E.
    - [ ] Etapa 4: rendimiento con VODs largos.
    - [ ] Etapa 5: efectos para los shorts. Kyo usa en Premiere estos ajustes guardados
      (presets con nombre, que se aplican arrastrándolos a un clip), que sirven de lista:

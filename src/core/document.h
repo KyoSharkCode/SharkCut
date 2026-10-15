@@ -31,6 +31,7 @@ struct Sequence {
     ObjectId folder = 0; // carpeta de la biblioteca (0 = raíz)
     ProjectSettings settings;
     std::vector<Track> tracks{Track{TrackKind::Video, {}}, Track{TrackKind::Audio, {}}};
+    std::vector<Marker> markers{};
 
     friend bool operator==(const Sequence&, const Sequence&) = default;
 };

@@ -115,6 +115,12 @@ void validateSequence(Project& project, int version, IdSet& ids) {
                 std::clamp(std::isfinite(t.params.blur) ? t.params.blur : 0.6, 0.0, 1.0);
         }
     }
+    for (Marker& marker : project.markers) {
+        claim(ids, marker.id);
+        marker.frame = std::max<std::int64_t>(0, marker.frame);
+    }
+    std::stable_sort(project.markers.begin(), project.markers.end(),
+                     [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
     if (version < 2) {
         linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
     } else {
@@ -146,6 +152,7 @@ void validate(Document& document, int version) {
         validateSequence(view, version, ids);
         sequence.settings = view.settings;
         sequence.tracks = view.tracks;
+        sequence.markers = view.markers;
     }
     for (MediaItem& item : document.media) {
         if (item.folder != 0 && !document.folder(item.folder)) {
@@ -389,6 +396,14 @@ std::string documentToJson(const Document& document, const std::filesystem::path
         if (sequence.folder != 0) {
             entry["folder"] = sequence.folder;
         }
+        if (!sequence.markers.empty()) {
+            json markers = json::array();
+            for (const Marker& marker : sequence.markers) {
+                markers.push_back(
+                    {{"id", marker.id}, {"frame", marker.frame}, {"name", marker.name}});
+            }
+            entry["markers"] = std::move(markers);
+        }
         sequences.push_back(std::move(entry));
     }
     root["sequences"] = std::move(sequences);
@@ -462,6 +477,12 @@ LoadedDocument documentFromJson(std::string_view text, const std::filesystem::pa
                 sequence.folder = entry.value("folder", ObjectId{0});
                 sequence.settings = settingsFromJson(entry.at("settings"));
                 sequence.tracks = tracksFromJson(entry.at("tracks"));
+                // Marcadores: campo opcional de la versión 4 (no existía al crearla).
+                for (const json& m : entry.value("markers", json::array())) {
+                    sequence.markers.push_back({m.at("id").get<ObjectId>(),
+                                                m.at("frame").get<std::int64_t>(),
+                                                m.value("name", std::string())});
+                }
                 document.sequences.push_back(std::move(sequence));
             }
             loaded.workspace.openSequences = root.value("openSequences", std::vector<ObjectId>{});

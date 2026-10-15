@@ -17,7 +17,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
 - Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 4, que abre la 1, la 2
-  y la 3 como un proyecto de una secuencia).
+  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4).
+  Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
 
@@ -31,8 +32,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/core también: proyecto y línea de tiempo (project.h: pistas en número variable,
   primero las de video de V1 hacia arriba y después las de audio; transformación y
   volumen por clip; transiciones en los cortes de las pistas de video, que usan el
-  material sobrante del medio sin mover los clips), operaciones de edición (edit.h,
-  que mantienen coherentes enlaces y transiciones), deshacer/rehacer (history.h: cada
+  material sobrante del medio sin mover los clips; marcadores), operaciones de edición
+  (edit.h, que mantienen coherentes enlaces y transiciones; también las de rizo: Q/W,
+  eliminar con rizo, cerrar hueco), deshacer/rehacer (history.h: cada
   edición se aplica a una copia del proyecto) y el archivo .sharkp (project_file.h, con
   nlohmann/json).
   src/core también: document.h, el proyecto completo (medios, carpetas y varias

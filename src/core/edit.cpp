@@ -851,4 +851,222 @@ void linkMatchingClips(Project& project) {
     }
 }
 
+// --- Edición con rizo -------------------------------------------------------------
+
+std::int64_t previousEdit(const Project& project, std::int64_t frame) {
+    std::int64_t best = 0;
+    for (const Track& track : project.tracks) {
+        if (track.locked) {
+            continue;
+        }
+        for (const Clip& clip : track.clips) {
+            for (const std::int64_t edge : {clip.start, clip.end()}) {
+                if (edge < frame) {
+                    best = std::max(best, edge);
+                }
+            }
+        }
+    }
+    return best;
+}
+
+std::optional<std::int64_t> nextEdit(const Project& project, std::int64_t frame) {
+    std::optional<std::int64_t> best;
+    for (const Track& track : project.tracks) {
+        if (track.locked) {
+            continue;
+        }
+        for (const Clip& clip : track.clips) {
+            for (const std::int64_t edge : {clip.start, clip.end()}) {
+                if (edge > frame && (!best || edge < *best)) {
+                    best = edge;
+                }
+            }
+        }
+    }
+    return best;
+}
+
+namespace {
+
+// ¿Está vacío [from, to) en todas las pistas no bloqueadas?
+bool rangeFree(const Project& project, std::int64_t from, std::int64_t to) {
+    for (const Track& track : project.tracks) {
+        if (track.locked) {
+            continue;
+        }
+        for (const Clip& clip : track.clips) {
+            if (clip.start < to && clip.end() > from) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void sortMarkers(Project& project) {
+    std::stable_sort(project.markers.begin(), project.markers.end(),
+                     [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
+}
+
+} // namespace
+
+bool extractRange(Project& project, std::int64_t from, std::int64_t to) {
+    from = std::max<std::int64_t>(0, from);
+    if (to <= from) {
+        return false;
+    }
+    const std::int64_t length = to - from;
+    bool changed = false;
+    Splits splits;
+    for (std::size_t t = 0; t < project.tracks.size(); ++t) {
+        if (project.tracks[t].locked) {
+            continue;
+        }
+        const std::vector<Clip> before = project.tracks[t].clips;
+        clearRange(project, t, from, to, splits);
+        for (Clip& clip : project.tracks[t].clips) {
+            if (clip.start >= to) {
+                clip.start -= length;
+            }
+        }
+        changed = changed || project.tracks[t].clips != before;
+    }
+    for (Marker& marker : project.markers) {
+        if (marker.frame >= to) {
+            marker.frame -= length;
+            changed = true;
+        } else if (marker.frame > from) {
+            marker.frame = from; // estaba en lo que se quitó: queda en el corte
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return false;
+    }
+    sortMarkers(project);
+    fixLinks(project, splits);
+    return true;
+}
+
+bool rippleTrimPrevious(Project& project, std::int64_t frame) {
+    if (frame <= 0) {
+        return false;
+    }
+    return extractRange(project, previousEdit(project, frame), frame);
+}
+
+bool rippleTrimNext(Project& project, std::int64_t frame) {
+    const std::optional<std::int64_t> next = nextEdit(project, frame);
+    return next && extractRange(project, frame, *next);
+}
+
+RippleResult rippleDelete(Project& project, const std::vector<ObjectId>& clips) {
+    std::vector<ObjectId> group = withLinked(project, clips);
+    std::erase_if(group, [&project](ObjectId id) { return inLockedTrack(project, id); });
+    if (group.empty()) {
+        return RippleResult::Nothing;
+    }
+    // Tramos que ocupaban los clips quitados, unidos si se tocan o se solapan.
+    std::vector<Gap> ranges;
+    for (ObjectId id : group) {
+        const Clip* clip = project.clip(id);
+        ranges.push_back({clip->start, clip->end()});
+    }
+    std::sort(ranges.begin(), ranges.end(),
+              [](const Gap& a, const Gap& b) { return a.start < b.start; });
+    std::vector<Gap> merged;
+    for (const Gap& r : ranges) {
+        if (!merged.empty() && r.start <= merged.back().end) {
+            merged.back().end = std::max(merged.back().end, r.end);
+        } else {
+            merged.push_back(r);
+        }
+    }
+    removeClips(project, group);
+    // De derecha a izquierda: cerrar un hueco no mueve los anteriores.
+    bool blocked = false;
+    for (auto it = merged.rbegin(); it != merged.rend(); ++it) {
+        if (rangeFree(project, it->start, it->end)) {
+            extractRange(project, it->start, it->end);
+        } else {
+            blocked = true;
+        }
+    }
+    return blocked ? RippleResult::Blocked : RippleResult::Closed;
+}
+
+std::optional<Gap> gapAt(const Project& project, std::size_t track, std::int64_t frame) {
+    if (track >= project.tracks.size() || frame < 0) {
+        return std::nullopt;
+    }
+    std::int64_t start = 0;
+    for (const Clip& clip : project.tracks[track].clips) {
+        if (clip.start <= frame && frame < clip.end()) {
+            return std::nullopt; // hay un clip
+        }
+        if (clip.end() <= frame) {
+            start = std::max(start, clip.end());
+        } else if (clip.start > frame) {
+            return Gap{start, clip.start};
+        }
+    }
+    return std::nullopt; // después no hay nada: no es un hueco
+}
+
+RippleResult closeGap(Project& project, std::size_t track, std::int64_t frame) {
+    const std::optional<Gap> gap = gapAt(project, track, frame);
+    if (!gap || project.tracks[track].locked) {
+        return RippleResult::Nothing;
+    }
+    if (!rangeFree(project, gap->start, gap->end)) {
+        return RippleResult::Blocked;
+    }
+    return extractRange(project, gap->start, gap->end) ? RippleResult::Closed
+                                                       : RippleResult::Nothing;
+}
+
+// --- Marcadores --------------------------------------------------------------------
+
+ObjectId addMarker(Project& project, std::int64_t frame, std::string name) {
+    if (frame < 0 || std::any_of(project.markers.begin(), project.markers.end(),
+                                 [frame](const Marker& m) { return m.frame == frame; })) {
+        return 0;
+    }
+    Marker marker;
+    marker.id = newId(project);
+    marker.frame = frame;
+    marker.name = std::move(name);
+    project.markers.push_back(std::move(marker));
+    const ObjectId id = project.markers.back().id;
+    sortMarkers(project);
+    return id;
+}
+
+bool removeMarker(Project& project, ObjectId marker) {
+    return std::erase_if(project.markers, [marker](const Marker& m) { return m.id == marker; }) > 0;
+}
+
+bool renameMarker(Project& project, ObjectId marker, std::string name) {
+    for (Marker& m : project.markers) {
+        if (m.id == marker && m.name != name) {
+            m.name = std::move(name);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool moveMarker(Project& project, ObjectId marker, std::int64_t frame) {
+    frame = std::max<std::int64_t>(0, frame);
+    for (Marker& m : project.markers) {
+        if (m.id == marker && m.frame != frame) {
+            m.frame = frame;
+            sortMarkers(project);
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace sharkcut

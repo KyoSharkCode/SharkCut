@@ -32,6 +32,7 @@ Project Document::view(ObjectId id) const {
     if (const Sequence* s = sequence(id)) {
         project.settings = s->settings;
         project.tracks = s->tracks;
+        project.markers = s->markers;
     }
     return project;
 }
@@ -43,6 +44,7 @@ void Document::store(ObjectId id, const Project& view) {
         if (s.id == id) {
             s.settings = view.settings;
             s.tracks = view.tracks;
+            s.markers = view.markers;
         }
     }
 }
@@ -61,6 +63,7 @@ Document documentFromProject(Project project, std::string sequenceName) {
     sequence.name = std::move(sequenceName);
     sequence.settings = project.settings;
     sequence.tracks = std::move(project.tracks);
+    sequence.markers = std::move(project.markers);
     document.sequences.push_back(std::move(sequence));
     return document;
 }
@@ -143,6 +146,9 @@ ObjectId duplicateSequence(Document& document, ObjectId id, std::string name,
             t.to = map(t.to);
             t.sound = map(t.sound);
         }
+    }
+    for (Marker& marker : copy.markers) {
+        marker.id = document.nextId++;
     }
     document.sequences.push_back(std::move(copy));
     return document.sequences.back().id;

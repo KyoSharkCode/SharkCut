@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Shapes
 import SharkCut
 
 // Línea de tiempo del editor: herramientas en vertical a la izquierda, regla y pistas
@@ -11,8 +12,11 @@ import SharkCut
 // previa; la edición se aplica al soltar, como un único paso de deshacer.
 //
 // Cabecera de cada pista: ocultar (video) o silenciar (audio) y bloquear. Clic derecho:
-// añadir o quitar pistas. Rueda: desplazar en el tiempo; sobre las cabeceras o con Alt,
-// desplazar entre pistas; con Ctrl, zoom.
+// añadir o quitar pistas (y, sobre un hueco, cerrarlo). Rueda: desplazar en el tiempo;
+// sobre las cabeceras o con Alt, desplazar entre pistas; con Ctrl, zoom.
+//
+// Regla: marcadores (M). Encima de la última pista de video y debajo de la última de
+// audio hay una zona vacía: soltar ahí un medio crea pistas nuevas para él.
 Rectangle {
     id: raiz
 
@@ -27,6 +31,9 @@ Rectangle {
     property var arrastre: null
     property real marcaSoltar: -1 // fotograma donde caería lo que se arrastra encima
     property int pistaSoltar: -1  // pista donde caería
+    // Zona vacía donde se suelta un medio para crear pistas nuevas: "", "video" (encima de
+    // la última de video) o "audio" (debajo de la última de audio).
+    property string zonaNueva: ""
     property var corteSoltar: null // {track, cut} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
@@ -40,6 +47,9 @@ Rectangle {
     readonly property int separacionGrupos: 10 // entre las pistas de video y las de audio
     readonly property int filasVisibles: 6      // más pistas: desplazamiento vertical
     readonly property int anchoCabecera: 92
+    // Zona vacía encima y debajo de las pistas (soltar ahí crea pistas nuevas; debajo
+    // vale también todo el espacio libre hasta el final de la vista).
+    readonly property int bandaNueva: 30
     readonly property int alturaPestanas: 30
 
     // Filas en pantalla, de arriba abajo: {pista, y} (y relativa a la primera fila).
@@ -48,7 +58,7 @@ Rectangle {
         const videos = pistas.filter((p) => p.video).reverse()
         const audios = pistas.filter((p) => !p.video)
         const lista = []
-        let y = 0
+        let y = bandaNueva
         for (const p of videos) {
             lista.push({ pista: p, y: y })
             y += alturaPista + separacion
@@ -61,7 +71,7 @@ Rectangle {
         return lista
     }
     readonly property real altoPistas: filas.length > 0
-        ? filas[filas.length - 1].y + alturaPista : 0
+        ? filas[filas.length - 1].y + alturaPista + bandaNueva : 0
     readonly property real yPrimeraFila: alturaRegla + separacion
     readonly property var yPorPista: {
         const mapa = {}
@@ -88,6 +98,18 @@ Rectangle {
 
     function yDePista(indice) {
         return yPrimeraFila + (yPorPista[indice] !== undefined ? yPorPista[indice] : 0)
+    }
+
+    // Zona de pistas nuevas bajo una coordenada y del contenido: "video", "audio" o "".
+    function zonaNuevaEn(yContenido) {
+        if (filas.length === 0)
+            return ""
+        const y = yContenido - yPrimeraFila
+        if (y < filas[0].y - separacion)
+            return "video"
+        if (y > filas[filas.length - 1].y + alturaPista + separacion)
+            return "audio"
+        return ""
     }
 
     // Pista (objeto de editor.tracks) bajo una coordenada y del contenido, o null.
@@ -436,8 +458,38 @@ Rectangle {
                                     onPressed: (m) => {
                                         raiz.editor.clearSelection()
                                         if (m.button === Qt.RightButton)
-                                            menuPista.abrir(parent.modelData.pista)
+                                            menuPista.abrir(parent.modelData.pista, raiz.frameEn(m.x))
                                     }
+                                }
+                            }
+                        }
+
+                        // Zonas vacías de arriba y de abajo: al arrastrar un medio encima se
+                        // ve que ahí se crea una pista nueva.
+                        Repeater {
+                            model: ["video", "audio"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                visible: raiz.zonaNueva === modelData
+                                x: vista.contentX + 4
+                                y: modelData === "video"
+                                   ? raiz.yPrimeraFila + 2
+                                   : raiz.yPrimeraFila + raiz.altoPistas - raiz.bandaNueva + raiz.separacion
+                                width: vista.width - 8
+                                height: modelData === "video"
+                                        ? raiz.bandaNueva - raiz.separacion - 2
+                                        : Math.max(raiz.bandaNueva - raiz.separacion - 2,
+                                                   vista.contentY + vista.height - y - 4)
+                                radius: 3
+                                color: Qt.rgba(Theme.acento.r, Theme.acento.g, Theme.acento.b, 0.12)
+                                border.color: Theme.acento
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.modelData === "video"
+                                          ? "Suelta aquí para crear una pista de video nueva"
+                                          : "Suelta aquí para crear una pista de audio nueva"
+                                    color: Theme.acento
+                                    font.pixelSize: Theme.tamTextoPequeno
                                 }
                             }
                         }
@@ -873,7 +925,7 @@ Rectangle {
                             id: zonaSoltar
                             y: raiz.yPrimeraFila - raiz.separacion
                             width: parent.width
-                            height: raiz.altoPistas + 2 * raiz.separacion
+                            height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
                             keys: ["sharkcut/medio", "sharkcut/transicion", "text/uri-list"]
                             function esTransicion(d) {
                                 return d.keys.indexOf("sharkcut/transicion") >= 0
@@ -886,6 +938,7 @@ Rectangle {
                                 }
                                 raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
                                 raiz.pistaSoltar = p ? p.index : -1
+                                raiz.zonaNueva = p ? "" : raiz.zonaNuevaEn(d.y + y)
                             }
                             onPositionChanged: (d) => actualizar(d)
                             onEntered: (d) => actualizar(d)
@@ -893,15 +946,18 @@ Rectangle {
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
                                 raiz.corteSoltar = null
+                                raiz.zonaNueva = ""
                             }
                             onDropped: (d) => {
                                 const f = raiz.ajustar(raiz.frameEn(d.x), [])
                                 const p = raiz.pistaEnY(d.y + y)
-                                const pista = p ? p.index : -1
+                                // En la zona vacía de arriba o de abajo: pistas nuevas.
+                                const pista = p ? p.index : raiz.zonaNuevaEn(d.y + y) !== "" ? -2 : -1
                                 const corte = raiz.corteSoltar
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
                                 raiz.corteSoltar = null
+                                raiz.zonaNueva = ""
                                 if (esTransicion(d)) {
                                     if (corte !== null && d.source)
                                         Qt.callLater(raiz.editor.addTransition, corte.track, corte.cut,
@@ -979,6 +1035,107 @@ Rectangle {
                                         raiz.editor.seek(raiz.frameEn(m.x))
                                 }
                             }
+
+                            // Marcadores (M): clic para ir, arrastrar para moverlo, doble clic
+                            // para ponerle nombre y clic derecho para su menú.
+                            Repeater {
+                                model: raiz.editor.markers
+                                delegate: Item {
+                                    id: marcador
+                                    required property var modelData
+                                    property real arrastre: -1 // fotograma mientras se arrastra
+                                    readonly property real fotograma: arrastre >= 0 ? arrastre
+                                                                                    : modelData.frame
+                                    x: fotograma * raiz.escala - 6
+                                    y: regla.height - 14
+                                    width: 12
+                                    height: 14
+                                    z: 2
+                                    Shape {
+                                        anchors.fill: parent
+                                        preferredRendererType: Shape.CurveRenderer
+                                        ShapePath {
+                                            strokeColor: Theme.visorFondo
+                                            strokeWidth: 1
+                                            fillColor: Theme.marcador
+                                            startX: 0; startY: 0
+                                            PathLine { x: 12; y: 0 }
+                                            PathLine { x: 12; y: 8 }
+                                            PathLine { x: 6; y: 14 }
+                                            PathLine { x: 0; y: 8 }
+                                            PathLine { x: 0; y: 0 }
+                                        }
+                                    }
+                                    Text {
+                                        visible: marcador.modelData.name.length > 0
+                                        x: 14
+                                        y: -1
+                                        text: marcador.modelData.name
+                                        color: Theme.marcador
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        id: zonaMarcador
+                                        anchors.fill: parent
+                                        anchors.margins: -3
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        cursorShape: Qt.PointingHandCursor
+                                        property real inicioX: 0
+                                        onPressed: (m) => {
+                                            if (m.button === Qt.RightButton) {
+                                                menuMarcador.abrir(marcador.modelData)
+                                                return
+                                            }
+                                            inicioX = mapToItem(regla, m.x, m.y).x
+                                        }
+                                        onPositionChanged: (m) => {
+                                            if (!(pressedButtons & Qt.LeftButton))
+                                                return
+                                            const xr = mapToItem(regla, m.x, m.y).x
+                                            if (marcador.arrastre < 0 && Math.abs(xr - inicioX) < 4)
+                                                return
+                                            marcador.arrastre = raiz.ajustar(raiz.frameEn(xr), [])
+                                        }
+                                        onReleased: (m) => {
+                                            if (m.button !== Qt.LeftButton)
+                                                return
+                                            if (marcador.arrastre >= 0) {
+                                                const destino = marcador.arrastre
+                                                marcador.arrastre = -1
+                                                raiz.editor.moveMarker(marcador.modelData.id, destino)
+                                            } else {
+                                                raiz.editor.pause()
+                                                raiz.editor.seek(marcador.modelData.frame)
+                                            }
+                                        }
+                                        onDoubleClicked: (m) => {
+                                            if (m.button === Qt.LeftButton)
+                                                menuMarcador.renombrar(marcador.modelData)
+                                        }
+                                    }
+                                    ToolTip {
+                                        id: ayudaMarcador
+                                        visible: zonaMarcador.containsMouse && marcador.arrastre < 0
+                                        delay: 400
+                                        text: (marcador.modelData.name.length > 0 ? marcador.modelData.name
+                                                                                  : "Marcador")
+                                              + " · " + raiz.editor.timecodeFor(marcador.modelData.frame)
+                                        contentItem: Text {
+                                            text: ayudaMarcador.text
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                        }
+                                        background: Rectangle {
+                                            color: Theme.panelElevado
+                                            border.color: Theme.borde
+                                            radius: 4
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Cabezal de reproducción
@@ -1045,12 +1202,24 @@ Rectangle {
     MenuTema {
         id: menuPista
         property var pista: null
-        function abrir(p) {
+        property real fotograma: -1 // dónde se hizo clic (-1: en la cabecera)
+        property bool hayHueco: false
+        function abrir(p, frame) {
             pista = p
+            fotograma = frame === undefined ? -1 : frame
+            hayHueco = fotograma >= 0 && raiz.editor.hasGapAt(p.index, fotograma)
             popup()
         }
         readonly property int delMismoTipo: pista === null ? 0
             : raiz.editor.tracks.filter((t) => t.video === pista.video).length
+        Action {
+            text: "Cerrar este hueco"
+            enabled: menuPista.hayHueco
+            onTriggered: raiz.editor.closeGap(menuPista.pista.index, menuPista.fotograma)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
         Action {
             text: "Añadir pista de video"
             onTriggered: raiz.editor.addTrack("video")
@@ -1068,6 +1237,38 @@ Rectangle {
                     + (menuPista.pista.empty ? "" : " y sus clips")
             enabled: menuPista.delMismoTipo > 1
             onTriggered: raiz.editor.removeTrack(menuPista.pista.index)
+        }
+    }
+
+    MenuTema {
+        id: menuMarcador
+        property var marcador: null
+        function abrir(m) {
+            marcador = m
+            popup()
+        }
+        function renombrar(m) {
+            const id = m.id
+            dialogoNombre.pedir("Nombre del marcador", m.name, "Aceptar",
+                                (nombre) => raiz.editor.renameMarker(id, nombre))
+        }
+        Action {
+            text: "Ir al marcador"
+            onTriggered: {
+                raiz.editor.pause()
+                raiz.editor.seek(menuMarcador.marcador.frame)
+            }
+        }
+        Action {
+            text: "Ponerle nombre…"
+            onTriggered: menuMarcador.renombrar(menuMarcador.marcador)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: "Quitar el marcador"
+            onTriggered: raiz.editor.removeMarker(menuMarcador.marcador.id)
         }
     }
 
@@ -1101,8 +1302,12 @@ Rectangle {
             onTriggered: raiz.editor.splitAtPlayhead()
         }
         Action {
-            text: "Quitar"
+            text: "Quitar (deja el hueco)"
             onTriggered: raiz.editor.removeSelection()
+        }
+        Action {
+            text: "Eliminar con rizo (Mayús+Supr)"
+            onTriggered: raiz.editor.rippleDeleteSelection()
         }
     }
 

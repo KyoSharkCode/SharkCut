@@ -812,3 +812,148 @@ TEST_CASE("Folders hold media and sequences", "[document]") {
     CHECK(d.media.front().folder == 0);
     CHECK(d.sequence(vod)->folder == 0);
 }
+
+// --- Edición con rizo y marcadores ---
+
+TEST_CASE("Q and W remove up to the playhead and close the gap", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId b = addMedia(p, media("b.mp4", 10, true, true));
+    placeClip(p, a, 0);   // 0–600
+    placeClip(p, b, 600); // 600–1200
+    addMarker(p, 900, "final");
+
+    // Q a mitad del segundo clip: quita 600–750 y lo de después se adelanta.
+    REQUIRE(rippleTrimPrevious(p, 750));
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 2);
+    CHECK(video(p)[1].start == 600);
+    CHECK(video(p)[1].in == 150);
+    CHECK(video(p)[1].length == 450);
+    CHECK(audio(p)[1].start == 600); // el audio enlazado igual
+    CHECK(video(p)[1].link == audio(p)[1].id);
+    CHECK(p.markers[0].frame == 750);
+
+    // W a mitad del primero: quita 300–600.
+    REQUIRE(rippleTrimNext(p, 300));
+    checkInvariants(p);
+    CHECK(video(p)[0].length == 300);
+    CHECK(video(p)[1].start == 300);
+    CHECK(p.length() == 750);
+    CHECK(p.markers[0].frame == 450);
+
+    CHECK_FALSE(rippleTrimPrevious(p, 0));
+    CHECK_FALSE(rippleTrimNext(p, 750)); // después del final no hay borde
+}
+
+TEST_CASE("Ripple edits skip locked tracks", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId music = addMedia(p, media("m.mp3", 30, false, true));
+    placeClip(p, a, 0);
+    placeClip(p, music, 0, PlaceTarget{0, 1}); // A2
+    const std::size_t a2 = *p.trackIndex(TrackKind::Audio, 1);
+    setTrackLocked(p, a2, true);
+
+    REQUIRE(rippleTrimNext(p, 200)); // borde siguiente: el final del clip (600)
+    checkInvariants(p);
+    CHECK(video(p)[0].length == 200);
+    CHECK(p.tracks[a2].clips[0].length == 1800); // la música no se toca
+}
+
+TEST_CASE("Ripple delete closes the gap only when the range is free", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId b = addMedia(p, media("b.mp4", 5, true, true));
+    const ObjectId c = addMedia(p, media("c.mp4", 5, true, false));
+    const ObjectId first = placeClip(p, a, 0);    // 0–600
+    const ObjectId second = placeClip(p, b, 600); // 600–900
+    placeClip(p, b, 900);                         // 900–1200
+
+    CHECK(rippleDelete(p, {second}) == RippleResult::Closed);
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 2);
+    CHECK(video(p)[1].start == 600);
+    CHECK(audio(p)[1].start == 600);
+
+    // Con una facecam en V2 encima del tramo, el clip se quita pero el hueco se queda.
+    placeClip(p, c, 100, PlaceTarget{1, 0});
+    CHECK(rippleDelete(p, {first}) == RippleResult::Blocked);
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 1);
+    CHECK(video(p)[0].start == 600);
+    CHECK(rippleDelete(p, {}) == RippleResult::Nothing);
+}
+
+TEST_CASE("Closing a gap moves everything after it", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 5, true, true));
+    placeClip(p, a, 0);   // 0–300
+    placeClip(p, a, 500); // 500–800
+    REQUIRE(gapAt(p, kVideoTrack, 400).has_value());
+    CHECK(gapAt(p, kVideoTrack, 400)->start == 300);
+    CHECK(gapAt(p, kVideoTrack, 400)->end == 500);
+    CHECK_FALSE(gapAt(p, kVideoTrack, 100)); // es un clip
+    CHECK_FALSE(gapAt(p, kVideoTrack, 900)); // después no hay nada
+
+    CHECK(closeGap(p, kVideoTrack, 400) == RippleResult::Closed);
+    checkInvariants(p);
+    CHECK(video(p)[1].start == 300);
+    CHECK(audio(p)[1].start == 300);
+    CHECK(p.length() == 600);
+    CHECK(closeGap(p, kVideoTrack, 400) == RippleResult::Nothing);
+}
+
+TEST_CASE("Extracting a range keeps transitions between clips that still meet",
+          "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    placeClip(p, a, 0, 0, 300, {});
+    placeClip(p, a, 300, 400, 300, {});
+    REQUIRE(addTransition(p, kVideoTrack, 300, TransitionParams{}) != 0);
+    // Quitar un tramo dentro del segundo clip no toca la transición del corte.
+    REQUIRE(extractRange(p, 400, 500));
+    checkInvariants(p);
+    CHECK(p.tracks[kVideoTrack].transitions.size() == 1);
+    // Recortar los dos lados del corte: los mismos clips siguen juntos y la transición
+    // se queda (ajustada a lo que cabe).
+    REQUIRE(extractRange(p, 250, 350));
+    checkInvariants(p);
+    REQUIRE(p.tracks[kVideoTrack].transitions.size() == 1);
+    CHECK(video(p)[1].start == 250);
+    // Quitar el clip entrante entero se la lleva.
+    REQUIRE(extractRange(p, 250, 450));
+    checkInvariants(p);
+    CHECK(p.tracks[kVideoTrack].transitions.empty());
+}
+
+TEST_CASE("Markers are added once per frame and can be renamed and moved", "[timeline][markers]") {
+    Project p;
+    const ObjectId m1 = addMarker(p, 120, "Inicio");
+    const ObjectId m2 = addMarker(p, 60);
+    REQUIRE(m1 != 0);
+    REQUIRE(m2 != 0);
+    CHECK(addMarker(p, 120) == 0);
+    CHECK(addMarker(p, -1) == 0);
+    REQUIRE(p.markers.size() == 2);
+    CHECK(p.markers[0].id == m2); // ordenados por fotograma
+    CHECK(renameMarker(p, m2, "Jefe final"));
+    CHECK_FALSE(renameMarker(p, m2, "Jefe final"));
+    CHECK(moveMarker(p, m2, 300));
+    CHECK(p.markers[1].id == m2);
+    CHECK(removeMarker(p, m1));
+    CHECK_FALSE(removeMarker(p, m1));
+    CHECK(p.markers.size() == 1);
+}
+
+TEST_CASE("Markers live in their sequence and are copied with new ids", "[document][markers]") {
+    Document d = documentFromProject(Project{}, "Uno");
+    const ObjectId seq = d.sequences.front().id;
+    REQUIRE(edit(d, seq, [](Project& p) { return addMarker(p, 30, "aquí") != 0; }));
+    REQUIRE(d.sequences.front().markers.size() == 1);
+    const ObjectId copy = duplicateSequence(d, seq, "Dos", std::nullopt);
+    const Sequence* duplicated = d.sequence(copy);
+    REQUIRE(duplicated->markers.size() == 1);
+    CHECK(duplicated->markers[0].frame == 30);
+    CHECK(duplicated->markers[0].id != d.sequences.front().markers[0].id);
+}

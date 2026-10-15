@@ -238,6 +238,9 @@ Window {
     Shortcut { sequence: "Right"; enabled: ventana.conSecuencia; onActivated: editor.step(1) }
     Shortcut { sequence: "Shift+Left"; enabled: ventana.conSecuencia; onActivated: editor.step(-10) }
     Shortcut { sequence: "Shift+Right"; enabled: ventana.conSecuencia; onActivated: editor.step(10) }
+    // Flechas arriba/abajo (como en Premiere): al corte anterior / siguiente.
+    Shortcut { sequence: "Up"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(-1) }
+    Shortcut { sequence: "Down"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(1) }
     Shortcut {
         sequence: "Home"
         enabled: ventana.conSecuencia

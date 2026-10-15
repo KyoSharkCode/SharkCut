@@ -717,6 +717,12 @@ ctest --preset windows-debug
        (plano de alfa en VideoFrame y en el compositor). No tienen proxy (H.264 no
        guarda transparencia). Los .webm VP9 con alfa necesitarían el decodificador
        libvpx: quedan pendientes.
+     - Arreglos tras el primer video editado por Kyo: flechas arriba/abajo saltan al
+       corte anterior/siguiente de cualquier pista; clic o arrastre en la zona de pistas
+       mueve el cabezal (con imán a cortes y marcadores) y una línea tenue con su tiempo
+       sigue al ratón; los clips de video muestran fotogramas en miniatura
+       (FrameThumbnailProvider, del proxy si existe); el zoom con la rueda ya no deja la
+       vista atascada pasado el final.
      - Pendiente: visor sin copias (textura D3D11 de NVDEC directa al compositor). Es
        código solo de Windows que no se puede compilar ni probar en la nube: se hará en
        una sesión de prueba con Kyo en su PC.

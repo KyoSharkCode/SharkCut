@@ -156,7 +156,23 @@ Rectangle {
     function zoomEn(factor, xVista) {
         const frame = (vista.contentX + xVista) / escala
         escala = Math.max(escalaMinima, Math.min(escalaMaxima, escala * factor))
-        vista.contentX = Math.max(0, frame * escala - xVista)
+        vista.contentX = frame * escala - xVista
+        limitarVista()
+    }
+
+    // La vista nunca se queda más allá del contenido (al alejar estando al final, la
+    // barra desaparece y no habría forma de volver).
+    function limitarVista() {
+        const maximo = Math.max(0, vista.contentWidth - vista.width)
+        if (vista.contentX > maximo || vista.contentX < 0)
+            vista.contentX = Math.max(0, Math.min(maximo, vista.contentX))
+    }
+
+    // Fotograma para el cabezal en la x del contenido: con el imán, se pega a cortes y
+    // marcadores (a menos de 8 píxeles).
+    function cabezalEn(xContenido) {
+        const frame = frameEn(xContenido)
+        return iman ? editor.snapFrame(frame, [], 8 / escala, false) : frame
     }
 
     function encajar() {
@@ -385,13 +401,16 @@ Rectangle {
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.horizontal: BarraDesplazamiento {}
                     ScrollBar.vertical: BarraDesplazamiento {}
+                    onContentWidthChanged: Qt.callLater(raiz.limitarVista)
+                    onWidthChanged: Qt.callLater(raiz.limitarVista)
 
                     Item {
                         id: contenido
                         width: vista.contentWidth
                         height: vista.contentHeight
 
-                        // Fondo de cada pista: clic en vacío = quitar la selección.
+                        // Fondo de cada pista: clic en vacío = quitar la selección y llevar
+                        // el cabezal ahí (arrastrando, se recorre el video).
                         Repeater {
                             model: raiz.filas
                             delegate: Rectangle {
@@ -408,10 +427,17 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    preventStealing: true
                                     onPressed: (m) => {
                                         raiz.editor.clearSelection()
                                         if (m.button === Qt.RightButton)
                                             menuPista.abrir(parent.modelData.pista, raiz.frameEn(m.x))
+                                        else
+                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                    }
+                                    onPositionChanged: (m) => {
+                                        if (pressedButtons & Qt.LeftButton)
+                                            raiz.editor.seek(raiz.cabezalEn(m.x))
                                     }
                                 }
                             }
@@ -578,6 +604,60 @@ Rectangle {
                                     }
                                 }
 
+                                // Miniaturas del video: solo las casillas que se ven, con el
+                                // instante redondeado a una rejilla (así al desplazarse o hacer
+                                // zoom se reaprovechan las ya calculadas).
+                                Loader {
+                                    anchors.fill: parent
+                                    active: elemento.esVideo && !elemento.bloque && elemento.width > 24
+                                            && (elemento.modelData.thumbSource || "") !== ""
+                                    sourceComponent: Item {
+                                        id: tira
+                                        readonly property real alto: elemento.height - 2
+                                        readonly property real ancho: Math.round(alto * 16 / 9)
+                                        readonly property int primera: Math.max(0,
+                                            Math.floor((vista.contentX - elemento.x) / ancho))
+                                        readonly property int ultima: Math.min(
+                                            Math.ceil(elemento.width / ancho) - 1,
+                                            Math.floor((vista.contentX + vista.width - elemento.x) / ancho))
+                                        readonly property real fps: Math.max(1, raiz.editor.fps)
+                                        // Paso de la rejilla: potencia de 2 (en segundos) no menor
+                                        // que lo que dura una casilla.
+                                        readonly property real paso: {
+                                            const casilla = ancho / raiz.escala / fps
+                                            let p = 0.25
+                                            while (p < casilla)
+                                                p *= 2
+                                            return p
+                                        }
+                                        readonly property string fuente:
+                                            encodeURIComponent(elemento.modelData.thumbSource)
+                                        Repeater {
+                                            model: Math.max(0, tira.ultima - tira.primera + 1)
+                                            delegate: Image {
+                                                required property int index
+                                                readonly property int casilla: tira.primera + index
+                                                readonly property real segundos: {
+                                                    const f = elemento.entradaVista
+                                                        + (casilla + 0.5) * tira.ancho / raiz.escala
+                                                    return Math.round(f / tira.fps / tira.paso) * tira.paso
+                                                }
+                                                x: casilla * tira.ancho
+                                                y: 1
+                                                width: Math.min(tira.ancho, elemento.width - x)
+                                                height: tira.alto
+                                                fillMode: Image.PreserveAspectCrop
+                                                horizontalAlignment: Image.AlignLeft
+                                                asynchronous: true
+                                                sourceSize.width: 160
+                                                opacity: 0.6
+                                                source: "image://fotogramas/" + tira.fuente + "@"
+                                                        + Math.round(segundos * 1e6)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Loader {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
@@ -594,6 +674,9 @@ Rectangle {
                                             Layout.fillWidth: true
                                             text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
                                             color: Theme.texto
+                                            // Contorno oscuro: legible sobre las miniaturas
+                                            style: elemento.esVideo ? Text.Outline : Text.Normal
+                                            styleColor: Theme.visorFondo
                                             font.pixelSize: Theme.tamTextoPequeno
                                             elide: Text.ElideRight
                                         }
@@ -1020,10 +1103,10 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent
                                 preventStealing: true
-                                onPressed: (m) => raiz.editor.seek(raiz.frameEn(m.x))
+                                onPressed: (m) => raiz.editor.seek(raiz.cabezalEn(m.x))
                                 onPositionChanged: (m) => {
                                     if (pressed)
-                                        raiz.editor.seek(raiz.frameEn(m.x))
+                                        raiz.editor.seek(raiz.cabezalEn(m.x))
                                 }
                             }
 
@@ -1125,6 +1208,42 @@ Rectangle {
                                             radius: 4
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        // Dónde caería el cabezal: línea tenue y su tiempo bajo el ratón.
+                        HoverHandler {
+                            id: sobreLinea
+                        }
+                        Item {
+                            visible: sobreLinea.hovered && raiz.arrastre === null
+                            x: sobreLinea.point.position.x
+                            y: vista.contentY
+                            width: 1
+                            height: vista.height
+                            z: 7
+                            Rectangle {
+                                width: 1
+                                height: parent.height
+                                color: Theme.textoSecundario
+                                opacity: 0.45
+                            }
+                            Rectangle {
+                                x: 4
+                                y: 2
+                                width: tiempoRaton.implicitWidth + 8
+                                height: tiempoRaton.implicitHeight + 2
+                                radius: 3
+                                color: Theme.panelElevado
+                                border.color: Theme.borde
+                                Text {
+                                    id: tiempoRaton
+                                    anchors.centerIn: parent
+                                    text: raiz.editor.timecodeFor(raiz.frameEn(sobreLinea.point.position.x))
+                                    color: Theme.textoSecundario
+                                    font.pixelSize: 10
+                                    font.family: "Consolas, monospace"
                                 }
                             }
                         }

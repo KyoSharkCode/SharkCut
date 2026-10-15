@@ -335,6 +335,9 @@ public:
     Q_INVOKABLE void moveMarker(qint64 markerId, qint64 frame);
     // Lleva el cabezal al marcador siguiente (`direction` > 0) o al anterior.
     Q_INVOKABLE void goToMarker(int direction);
+    // Flechas arriba/abajo: el cabezal al corte (inicio o final de un clip, de cualquier
+    // pista) anterior (`direction` < 0) o siguiente.
+    Q_INVOKABLE void goToEdit(int direction);
     Q_INVOKABLE void trimStart(qint64 clipId, qint64 frame);
     Q_INVOKABLE void trimEnd(qint64 clipId, qint64 frame);
     Q_INVOKABLE qint64 limitTrimStart(qint64 clipId, qint64 frame) const;
@@ -367,8 +370,9 @@ public:
     // --- Ayudas para la línea de tiempo (sin recorrer los clips desde QML) ---
     // Imán: el borde de clip, marcador, inicio o cabezal más cercano a `frame` a menos de
     // `maxDistance` fotogramas (sin contar los clips `exclude`); si no hay, `frame`.
-    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude,
-                                 double maxDistance) const;
+    // `withPlayhead` = false al mover el propio cabezal.
+    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance,
+                                 bool withPlayhead = true) const;
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
     // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
     Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;

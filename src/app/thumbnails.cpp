@@ -50,6 +50,53 @@ QImage toImage(const sharkcut::VideoFrame& frame, int width) {
     return image;
 }
 
+// Caché de los fotogramas de la línea de tiempo (≈ 25 MB de imágenes de 160 px).
+QMutex frameCacheMutex;
+QCache<QString, QImage> frameCache(400);
+constexpr int kFrameThumbnailWidth = 160;
+
+class FrameResponse : public QQuickImageResponse, public QRunnable {
+public:
+    FrameResponse(QString key, QString path, qint64 us)
+        : m_key(std::move(key)), m_path(std::move(path)), m_us(us) {
+        setAutoDelete(false);
+    }
+
+    QQuickTextureFactory* textureFactory() const override {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
+
+    void run() override {
+        {
+            QMutexLocker lock(&frameCacheMutex);
+            if (const QImage* cached = frameCache.object(m_key)) {
+                m_image = *cached;
+            }
+        }
+        if (m_image.isNull()) {
+            try {
+                sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
+                decoder.seekToFrame(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
+                                                                  decoder.info().frameRate));
+                if (auto frame = decoder.nextFrame()) {
+                    m_image = toImage(*frame, kFrameThumbnailWidth);
+                    QMutexLocker lock(&frameCacheMutex);
+                    frameCache.insert(m_key, new QImage(m_image));
+                }
+            } catch (const std::exception&) {
+                // archivo que falta: el clip se ve sin miniaturas
+            }
+        }
+        emit finished();
+    }
+
+private:
+    QString m_key;
+    QString m_path;
+    qint64 m_us = 0;
+    QImage m_image;
+};
+
 class ThumbnailResponse : public QQuickImageResponse, public QRunnable {
 public:
     explicit ThumbnailResponse(QString path) : m_path(std::move(path)) { setAutoDelete(false); }
@@ -87,6 +134,16 @@ private:
 };
 
 } // namespace
+
+QQuickImageResponse* FrameThumbnailProvider::requestImageResponse(const QString& id, const QSize&) {
+    // "<ruta codificada>@<microsegundos>" (la ruta va codificada: no lleva '@' suelta).
+    const qsizetype at = id.lastIndexOf(QLatin1Char('@'));
+    const QString path = QUrl::fromPercentEncoding(id.left(at).toUtf8());
+    const qint64 us = at >= 0 ? id.mid(at + 1).toLongLong() : 0;
+    auto* response = new FrameResponse(id, path, us);
+    QThreadPool::globalInstance()->start(response);
+    return response;
+}
 
 QQuickImageResponse* ThumbnailProvider::requestImageResponse(const QString& id, const QSize&) {
     auto* response = new ThumbnailResponse(QUrl::fromPercentEncoding(id.toUtf8()));

@@ -342,10 +342,18 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("volumeDb")] = clip.volumeDb;
     entry[QStringLiteral("transformed")] = clip.transform != sharkcut::ClipTransform{};
     entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    // Para las miniaturas de la línea de tiempo: el proxy si lo hay (mucho más rápido),
+    // y los fps del medio (el tramo del clip va en fotogramas de la secuencia).
+    if (item && item->hasVideo) {
+        const QString original = QString::fromStdString(item->path);
+        const QString proxy = m_proxies.readyPath(original);
+        entry[QStringLiteral("thumbSource")] = proxy.isEmpty() ? original : proxy;
+    }
     return entry;
 }
 
-qint64 Editor::snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance) const {
+qint64 Editor::snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance,
+                         bool withPlayhead) const {
     std::vector<ObjectId> skip;
     for (const QVariant& v : exclude) {
         skip.push_back(static_cast<ObjectId>(v.toLongLong()));
@@ -360,7 +368,9 @@ qint64 Editor::snapFrame(qint64 frame, const QVariantList& exclude, double maxDi
         }
     };
     test(0);
-    test(m_currentFrame);
+    if (withPlayhead) {
+        test(m_currentFrame);
+    }
     const Project& p = project();
     for (const sharkcut::Marker& marker : p.markers) {
         test(marker.frame);
@@ -2264,6 +2274,25 @@ void Editor::goToMarker(int direction) {
     if (target) {
         pause();
         seek(*target);
+    }
+}
+
+void Editor::goToEdit(int direction) {
+    const Project& p = project();
+    std::optional<std::int64_t> target;
+    for (const sharkcut::Track& track : p.tracks) {
+        for (const Clip& clip : track.clips) {
+            for (const std::int64_t edge : {clip.start, clip.end()}) {
+                const bool ahead = direction > 0 ? edge > m_currentFrame : edge < m_currentFrame;
+                if (ahead && (!target || (direction > 0 ? edge < *target : edge > *target))) {
+                    target = edge;
+                }
+            }
+        }
+    }
+    if (target) {
+        pause();
+        seek(*target); // el final de la secuencia se muestra en su último fotograma
     }
 }
 

@@ -62,6 +62,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   (qml/PaginaProyectos.qml), Editor (qml/PanelMedios.qml con qml/PanelBiblioteca.qml ·
   qml/PanelPropiedades.qml · Programa, y qml/LineaTiempo.qml) y Exportar
   (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  Fotogramas de los clips en la línea de tiempo: FrameThumbnailProvider
+  ("image://fotogramas/<ruta>@<µs>", thumbnails.h).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
   Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
   (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.

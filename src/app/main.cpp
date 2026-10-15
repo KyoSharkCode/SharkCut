@@ -22,6 +22,7 @@ int main(int argc, char* argv[]) {
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
     engine.addImageProvider(QStringLiteral("miniaturas"), new ThumbnailProvider);
+    engine.addImageProvider(QStringLiteral("fotogramas"), new FrameThumbnailProvider);
     engine.loadFromModule("SharkCut", "Main");
 
     return QGuiApplication::exec();

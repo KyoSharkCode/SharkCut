@@ -738,6 +738,14 @@ ctest --preset windows-debug
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).
+     - Idea de Kyo, «punto de anclaje» (seguimiento de movimiento): un clip (texto,
+       imagen, video pequeño) se pega a algo que se mueve en otro clip, por ejemplo
+       una mano, y lo sigue sin despegarse. Se marca un recuadro sobre la zona a seguir
+       en el visor; SharkCut la busca fotograma a fotograma (seguimiento de una zona con
+       textura, en src/media, sin Qt) y guarda el recorrido como un keyframe por
+       fotograma de la posición del clip anclado, que se puede corregir a mano donde el
+       seguimiento se pierda. Opcional: dos puntos para seguir también escala y giro.
+       Va después de los keyframes, porque los usa.
 9. Fase 5: entrega (instalador, licencias, sonidos, 0.1.0 Early Access).
 
 ### Decisiones tomadas

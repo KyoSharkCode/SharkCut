@@ -60,26 +60,21 @@ bool fileExists(const std::filesystem::path& path) {
     return std::filesystem::exists(path, ignored);
 }
 
-// Comprueba que el proyecto leído es coherente; corrige lo que es seguro corregir.
-void validate(Project& project, int version) {
+using IdSet = std::set<ObjectId>;
+
+void claim(IdSet& ids, ObjectId id) {
+    if (id == 0 || !ids.insert(id).second) {
+        throw ProjectError("Identificador repetido o no válido en el proyecto");
+    }
+}
+
+// Comprueba que una secuencia leída es coherente; corrige lo que es seguro corregir.
+// `project` es su vista (con la biblioteca del documento).
+void validateSequence(Project& project, int version, IdSet& ids) {
     const ProjectSettings& s = project.settings;
     if (s.width <= 0 || s.height <= 0 || s.width > kMaxCanvas || s.height > kMaxCanvas) {
         throw ProjectError("Resolución no válida en el proyecto");
     }
-
-    std::set<ObjectId> ids;
-    auto claim = [&ids](ObjectId id) {
-        if (id == 0 || !ids.insert(id).second) {
-            throw ProjectError("Identificador repetido o no válido en el proyecto");
-        }
-    };
-    for (const MediaItem& item : project.media) {
-        claim(item.id);
-        if (item.durationUs < 0) {
-            throw ProjectError("Duración de medio no válida en el proyecto");
-        }
-    }
-
     if (project.trackCount(TrackKind::Video) == 0 || project.trackCount(TrackKind::Audio) == 0) {
         throw ProjectError("El proyecto debe tener al menos una pista de video y una de audio");
     }
@@ -88,7 +83,7 @@ void validate(Project& project, int version) {
                           [](const Track& t) { return t.kind == TrackKind::Video; });
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
-            claim(clip.id);
+            claim(ids, clip.id);
             if (!project.findMedia(clip.media)) {
                 throw ProjectError("Un clip hace referencia a un medio que no existe");
             }
@@ -111,7 +106,7 @@ void validate(Project& project, int version) {
             }
         }
         for (Transition& t : track.transitions) {
-            claim(t.id);
+            claim(ids, t.id);
             t.before = std::max<std::int64_t>(0, t.before);
             t.after = std::max<std::int64_t>(0, t.after);
             t.params.intensity =
@@ -120,14 +115,52 @@ void validate(Project& project, int version) {
                 std::clamp(std::isfinite(t.params.blur) ? t.params.blur : 0.6, 0.0, 1.0);
         }
     }
-
-    const ObjectId maxId = ids.empty() ? 0 : *ids.rbegin();
-    project.nextId = std::max(project.nextId, maxId + 1);
+    for (Marker& marker : project.markers) {
+        claim(ids, marker.id);
+        marker.frame = std::max<std::int64_t>(0, marker.frame);
+    }
+    std::stable_sort(project.markers.begin(), project.markers.end(),
+                     [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
     if (version < 2) {
         linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
     } else {
         repairLinks(project); // también quita las transiciones que no están en un corte
     }
+}
+
+// Comprueba el documento entero (biblioteca, carpetas y cada secuencia).
+void validate(Document& document, int version) {
+    IdSet ids;
+    for (const MediaItem& item : document.media) {
+        claim(ids, item.id);
+        if (item.durationUs < 0) {
+            throw ProjectError("Duración de medio no válida en el proyecto");
+        }
+    }
+    for (const Folder& folder : document.folders) {
+        claim(ids, folder.id);
+    }
+    if (document.sequences.empty()) {
+        throw ProjectError("El proyecto no tiene ninguna secuencia");
+    }
+    for (Sequence& sequence : document.sequences) {
+        claim(ids, sequence.id);
+        if (sequence.folder != 0 && !document.folder(sequence.folder)) {
+            sequence.folder = 0;
+        }
+        Project view = document.view(sequence.id);
+        validateSequence(view, version, ids);
+        sequence.settings = view.settings;
+        sequence.tracks = view.tracks;
+        sequence.markers = view.markers;
+    }
+    for (MediaItem& item : document.media) {
+        if (item.folder != 0 && !document.folder(item.folder)) {
+            item.folder = 0;
+        }
+    }
+    const ObjectId maxId = ids.empty() ? 0 : *ids.rbegin();
+    document.nextId = std::max(document.nextId, maxId + 1);
 }
 
 std::string toString(std::string_view text) {
@@ -212,41 +245,32 @@ std::string utf8FromPath(const std::filesystem::path& path) {
     return std::string(text.begin(), text.end());
 }
 
-std::string projectToJson(const Project& project, const std::filesystem::path& projectFile) {
-    json root;
-    root["app"] = "SharkCut";
-    root["version"] = kProjectFileVersion;
-    root["settings"] = {
-        {"frameRate", rateToJson(project.settings.frameRate)},
-        {"width", project.settings.width},
-        {"height", project.settings.height},
-        {"adoptCanvas", project.settings.adoptCanvas},
-        {"adoptFrameRate", project.settings.adoptFrameRate},
+namespace {
+
+json settingsToJson(const ProjectSettings& settings) {
+    return {
+        {"frameRate", rateToJson(settings.frameRate)},
+        {"width", settings.width},
+        {"height", settings.height},
+        {"adoptCanvas", settings.adoptCanvas},
+        {"adoptFrameRate", settings.adoptFrameRate},
     };
+}
 
-    json media = json::array();
-    for (const MediaItem& item : project.media) {
-        json entry = {
-            {"id", item.id},
-            {"path", item.path},
-            {"name", item.name},
-            {"durationUs", item.durationUs},
-            {"frameRate", rateToJson(item.frameRate)},
-            {"width", item.width},
-            {"height", item.height},
-            {"video", item.hasVideo},
-            {"audio", item.hasAudio},
-        };
-        const std::string relative = relativeMediaPath(item.path, projectFile);
-        if (!relative.empty()) {
-            entry["relativePath"] = relative;
-        }
-        media.push_back(std::move(entry));
-    }
-    root["media"] = std::move(media);
+ProjectSettings settingsFromJson(const json& value) {
+    ProjectSettings settings;
+    settings.frameRate = rateFromJson(value.at("frameRate"));
+    settings.width = value.at("width").get<int>();
+    settings.height = value.at("height").get<int>();
+    // Proyectos anteriores a estos campos: el formato ya quedó fijado.
+    settings.adoptCanvas = value.value("adoptCanvas", false);
+    settings.adoptFrameRate = value.value("adoptFrameRate", false);
+    return settings;
+}
 
-    json tracks = json::array();
-    for (const Track& track : project.tracks) {
+json tracksToJson(const std::vector<Track>& tracks) {
+    json result = json::array();
+    for (const Track& track : tracks) {
         const bool video = track.kind == TrackKind::Video;
         json clips = json::array();
         for (const Clip& clip : track.clips) {
@@ -279,10 +303,113 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
             }
             entry["transitions"] = std::move(transitions);
         }
-        tracks.push_back(std::move(entry));
+        result.push_back(std::move(entry));
     }
-    root["tracks"] = std::move(tracks);
-    root["nextId"] = project.nextId;
+    return result;
+}
+
+std::vector<Track> tracksFromJson(const json& value) {
+    std::vector<Track> tracks;
+    for (const json& entry : value) {
+        Track track;
+        const std::string kind = entry.at("kind").get<std::string>();
+        if (kind == "video") {
+            track.kind = TrackKind::Video;
+        } else if (kind == "audio") {
+            track.kind = TrackKind::Audio;
+        } else {
+            throw ProjectError("Tipo de pista desconocido: " + kind);
+        }
+        track.hidden = track.kind == TrackKind::Video && entry.value("hidden", false);
+        track.muted = track.kind == TrackKind::Audio && entry.value("muted", false);
+        track.locked = entry.value("locked", false);
+        for (const json& c : entry.at("clips")) {
+            Clip clip;
+            clip.id = c.at("id").get<ObjectId>();
+            clip.media = c.at("media").get<ObjectId>();
+            clip.link = c.value("link", ObjectId{0});
+            clip.start = c.at("start").get<std::int64_t>();
+            clip.in = c.at("in").get<std::int64_t>();
+            clip.length = c.at("length").get<std::int64_t>();
+            if (const auto t = c.find("transform"); t != c.end()) {
+                clip.transform = transformFromJson(*t);
+            }
+            clip.volumeDb = c.value("volumeDb", 0.0);
+            track.clips.push_back(clip);
+        }
+        if (const auto list = entry.find("transitions"); list != entry.end()) {
+            for (const json& t : *list) {
+                track.transitions.push_back(transitionFromJson(t));
+            }
+        }
+        tracks.push_back(std::move(track));
+    }
+    return tracks;
+}
+
+} // namespace
+
+std::string documentToJson(const Document& document, const std::filesystem::path& projectFile,
+                           const Workspace& workspace) {
+    json root;
+    root["app"] = "SharkCut";
+    root["version"] = kProjectFileVersion;
+
+    json media = json::array();
+    for (const MediaItem& item : document.media) {
+        json entry = {
+            {"id", item.id},
+            {"path", item.path},
+            {"name", item.name},
+            {"durationUs", item.durationUs},
+            {"frameRate", rateToJson(item.frameRate)},
+            {"width", item.width},
+            {"height", item.height},
+            {"video", item.hasVideo},
+            {"audio", item.hasAudio},
+        };
+        if (item.folder != 0) {
+            entry["folder"] = item.folder;
+        }
+        const std::string relative = relativeMediaPath(item.path, projectFile);
+        if (!relative.empty()) {
+            entry["relativePath"] = relative;
+        }
+        media.push_back(std::move(entry));
+    }
+    root["media"] = std::move(media);
+
+    json folders = json::array();
+    for (const Folder& folder : document.folders) {
+        folders.push_back({{"id", folder.id}, {"name", folder.name}});
+    }
+    root["folders"] = std::move(folders);
+
+    json sequences = json::array();
+    for (const Sequence& sequence : document.sequences) {
+        json entry = {
+            {"id", sequence.id},
+            {"name", sequence.name},
+            {"settings", settingsToJson(sequence.settings)},
+            {"tracks", tracksToJson(sequence.tracks)},
+        };
+        if (sequence.folder != 0) {
+            entry["folder"] = sequence.folder;
+        }
+        if (!sequence.markers.empty()) {
+            json markers = json::array();
+            for (const Marker& marker : sequence.markers) {
+                markers.push_back(
+                    {{"id", marker.id}, {"frame", marker.frame}, {"name", marker.name}});
+            }
+            entry["markers"] = std::move(markers);
+        }
+        sequences.push_back(std::move(entry));
+    }
+    root["sequences"] = std::move(sequences);
+    root["openSequences"] = workspace.openSequences;
+    root["activeSequence"] = workspace.activeSequence;
+    root["nextId"] = document.nextId;
 
     try {
         return root.dump(2) + "\n";
@@ -291,8 +418,9 @@ std::string projectToJson(const Project& project, const std::filesystem::path& p
     }
 }
 
-Project projectFromJson(std::string_view text, const std::filesystem::path& projectFile) {
-    Project project;
+LoadedDocument documentFromJson(std::string_view text, const std::filesystem::path& projectFile) {
+    LoadedDocument loaded;
+    Document& document = loaded.document;
     int version = 0;
     try {
         const json root = json::parse(text.begin(), text.end());
@@ -303,14 +431,6 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
         if (version < 1) {
             throw ProjectError("Versión de proyecto no válida");
         }
-
-        const json& settings = root.at("settings");
-        project.settings.frameRate = rateFromJson(settings.at("frameRate"));
-        project.settings.width = settings.at("width").get<int>();
-        project.settings.height = settings.at("height").get<int>();
-        // Proyectos anteriores a estos campos: el formato ya quedó fijado.
-        project.settings.adoptCanvas = settings.value("adoptCanvas", false);
-        project.settings.adoptFrameRate = settings.value("adoptFrameRate", false);
 
         const std::filesystem::path dir = projectDir(projectFile);
         for (const json& entry : root.at("media")) {
@@ -324,6 +444,7 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
             item.height = entry.value("height", 0);
             item.hasVideo = entry.at("video").get<bool>();
             item.hasAudio = entry.at("audio").get<bool>();
+            item.folder = entry.value("folder", ObjectId{0});
             // El proyecto se movió con sus medios: buscar por la ruta relativa.
             const std::string relative = entry.value("relativePath", std::string());
             if (!relative.empty() && !dir.empty() && !fileExists(pathFromUtf8(item.path))) {
@@ -332,54 +453,92 @@ Project projectFromJson(std::string_view text, const std::filesystem::path& proj
                     item.path = utf8FromPath(candidate);
                 }
             }
-            project.media.push_back(std::move(item));
+            document.media.push_back(std::move(item));
         }
+        document.nextId = root.value("nextId", ObjectId{1});
 
-        project.tracks.clear();
-        for (const json& entry : root.at("tracks")) {
-            Track track;
-            const std::string kind = entry.at("kind").get<std::string>();
-            if (kind == "video") {
-                track.kind = TrackKind::Video;
-            } else if (kind == "audio") {
-                track.kind = TrackKind::Audio;
-            } else {
-                throw ProjectError("Tipo de pista desconocido: " + kind);
+        if (version < 4) {
+            // Antes de la versión 4 había una sola secuencia, en la raíz del archivo.
+            Sequence sequence;
+            sequence.name =
+                projectFile.empty() ? std::string("Secuencia 1") : utf8FromPath(projectFile.stem());
+            sequence.settings = settingsFromJson(root.at("settings"));
+            sequence.tracks = tracksFromJson(root.at("tracks"));
+            document.sequences.push_back(std::move(sequence));
+        } else {
+            for (const json& entry : root.value("folders", json::array())) {
+                document.folders.push_back(
+                    {entry.at("id").get<ObjectId>(), entry.value("name", std::string())});
             }
-            track.hidden = track.kind == TrackKind::Video && entry.value("hidden", false);
-            track.muted = track.kind == TrackKind::Audio && entry.value("muted", false);
-            track.locked = entry.value("locked", false);
-            for (const json& c : entry.at("clips")) {
-                Clip clip;
-                clip.id = c.at("id").get<ObjectId>();
-                clip.media = c.at("media").get<ObjectId>();
-                clip.link = c.value("link", ObjectId{0});
-                clip.start = c.at("start").get<std::int64_t>();
-                clip.in = c.at("in").get<std::int64_t>();
-                clip.length = c.at("length").get<std::int64_t>();
-                if (const auto t = c.find("transform"); t != c.end()) {
-                    clip.transform = transformFromJson(*t);
+            for (const json& entry : root.at("sequences")) {
+                Sequence sequence;
+                sequence.id = entry.at("id").get<ObjectId>();
+                sequence.name = entry.value("name", std::string());
+                sequence.folder = entry.value("folder", ObjectId{0});
+                sequence.settings = settingsFromJson(entry.at("settings"));
+                sequence.tracks = tracksFromJson(entry.at("tracks"));
+                // Marcadores: campo opcional de la versión 4 (no existía al crearla).
+                for (const json& m : entry.value("markers", json::array())) {
+                    sequence.markers.push_back({m.at("id").get<ObjectId>(),
+                                                m.at("frame").get<std::int64_t>(),
+                                                m.value("name", std::string())});
                 }
-                clip.volumeDb = c.value("volumeDb", 0.0);
-                track.clips.push_back(clip);
+                document.sequences.push_back(std::move(sequence));
             }
-            if (const auto list = entry.find("transitions"); list != entry.end()) {
-                for (const json& t : *list) {
-                    track.transitions.push_back(transitionFromJson(t));
-                }
-            }
-            project.tracks.push_back(std::move(track));
+            loaded.workspace.openSequences = root.value("openSequences", std::vector<ObjectId>{});
+            loaded.workspace.activeSequence = root.value("activeSequence", ObjectId{0});
         }
-        project.nextId = root.value("nextId", ObjectId{1});
     } catch (const json::exception& e) {
         throw ProjectError(std::string("El archivo de proyecto está dañado (") + e.what() + ")");
     }
-    validate(project, version);
+    if (version < 4) {
+        // La secuencia necesita un id que no use nada más del archivo.
+        ObjectId maxId = document.nextId;
+        for (const MediaItem& item : document.media) {
+            maxId = std::max(maxId, item.id + 1);
+        }
+        for (const Track& track : document.sequences.front().tracks) {
+            for (const Clip& clip : track.clips) {
+                maxId = std::max(maxId, clip.id + 1);
+            }
+            for (const Transition& t : track.transitions) {
+                maxId = std::max(maxId, t.id + 1);
+            }
+        }
+        document.sequences.front().id = maxId;
+        document.nextId = maxId + 1;
+    }
+    validate(document, version);
+
+    // Pestañas abiertas: solo secuencias que existen; al menos una.
+    Workspace& ws = loaded.workspace;
+    std::erase_if(ws.openSequences, [&document](ObjectId id) { return !document.sequence(id); });
+    if (ws.openSequences.empty()) {
+        ws.openSequences.push_back(document.sequences.front().id);
+    }
+    if (std::find(ws.openSequences.begin(), ws.openSequences.end(), ws.activeSequence) ==
+        ws.openSequences.end()) {
+        ws.activeSequence = ws.openSequences.front();
+    }
+    return loaded;
+}
+
+std::string projectToJson(const Project& project, const std::filesystem::path& projectFile) {
+    const Document document = documentFromProject(project, "Secuencia 1");
+    return documentToJson(document, projectFile,
+                          {{document.sequences.front().id}, document.sequences.front().id});
+}
+
+Project projectFromJson(std::string_view text, const std::filesystem::path& projectFile) {
+    const LoadedDocument loaded = documentFromJson(text, projectFile);
+    Project project = loaded.document.view(loaded.workspace.activeSequence);
+    project.nextId = loaded.document.nextId;
     return project;
 }
 
-void saveProject(const Project& project, const std::filesystem::path& file) {
-    const std::string text = projectToJson(project, file);
+namespace {
+
+void writeAtomically(const std::string& text, const std::filesystem::path& file) {
     std::filesystem::path temp = file;
     temp += ".tmp";
     {
@@ -401,16 +560,35 @@ void saveProject(const Project& project, const std::filesystem::path& file) {
     }
 }
 
-Project loadProject(const std::filesystem::path& file) {
+std::string readFile(const std::filesystem::path& file) {
     std::ifstream in(file, std::ios::binary);
     if (!in) {
         throw ProjectError("No se pudo abrir el proyecto " + utf8FromPath(file));
     }
-    const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
     if (in.bad()) {
         throw ProjectError("No se pudo leer el proyecto " + utf8FromPath(file));
     }
-    return projectFromJson(text, file);
+    return text;
+}
+
+} // namespace
+
+void saveDocument(const Document& document, const Workspace& workspace,
+                  const std::filesystem::path& file) {
+    writeAtomically(documentToJson(document, file, workspace), file);
+}
+
+LoadedDocument loadDocument(const std::filesystem::path& file) {
+    return documentFromJson(readFile(file), file);
+}
+
+void saveProject(const Project& project, const std::filesystem::path& file) {
+    writeAtomically(projectToJson(project, file), file);
+}
+
+Project loadProject(const std::filesystem::path& file) {
+    return projectFromJson(readFile(file), file);
 }
 
 } // namespace sharkcut

@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace sharkcut {
 
@@ -40,7 +41,18 @@ public:
     // Coloca el decodificador para que nextFrame() devuelva exactamente el fotograma
     // `index` (limitado al rango del clip). Si el clip termina antes de lo que indica
     // su duración, nextFrame() devuelve el último fotograma disponible.
-    void seekToFrame(std::int64_t index);
+    //
+    // Si el destino está poco por delante de lo último entregado, sigue decodificando
+    // en vez de volver al fotograma clave (arrastrar el cabezal hacia delante).
+    //
+    // `keepBefore`: además, guarda los `keepBefore` fotogramas anteriores al destino que
+    // se decodifican de camino (hay que pasar por ellos de todos modos); se recogen con
+    // takeKeptFrames() tras el siguiente nextFrame(). Sirve para ir hacia atrás (J) sin
+    // volver al fotograma clave en cada paso.
+    void seekToFrame(std::int64_t index, std::int64_t keepBefore = 0);
+
+    // Los fotogramas guardados por seekToFrame(…, keepBefore), en orden.
+    std::vector<VideoFrame> takeKeptFrames();
 
 private:
     struct Impl;

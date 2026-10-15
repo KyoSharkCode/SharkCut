@@ -1,18 +1,22 @@
 #pragma once
 
 #include "compositionsource.h"
+#include "core/document.h"
 #include "core/edit.h"
 #include "core/history.h"
 #include "core/project.h"
+#include "core/project_file.h"
 #include "media/decode_worker.h"
 #include "playbackclock.h"
-#include "player.h"
+#include "proxies.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QThreadPool>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
@@ -30,10 +34,16 @@ class AudioWorker;
 class SequenceExporter;
 } // namespace sharkcut
 
-// Editor: el proyecto con su línea de tiempo, las herramientas de edición y la
-// reproducción de la línea de tiempo en el visor.
+// Editor: los proyectos abiertos (cada uno con su biblioteca, carpetas y secuencias), las
+// pestañas de secuencias de la línea de tiempo, las herramientas de edición y la
+// reproducción de la secuencia activa en el visor.
 //
-// Toda modificación del proyecto pasa por el historial (deshacer/rehacer).
+// Hay siempre al menos un proyecto abierto. El proyecto activo es el del panel de
+// medios; la pestaña activa, si la hay, es una de sus secuencias (al cambiar de pestaña
+// a la de otro proyecto, ese pasa a ser el activo). Guardar, deshacer y el título de la
+// ventana se refieren al proyecto activo.
+//
+// Toda modificación de un proyecto pasa por su historial (deshacer/rehacer).
 // Reproducción: por cada pista de video visible, dos hilos de decodificación, uno para
 // el clip que se ve y otro preparado en el primer fotograma del clip siguiente, así los
 // cortes no se atascan. La mezcla de audio de la línea de tiempo marca el reloj.
@@ -41,9 +51,26 @@ class Editor : public CompositionSource {
     Q_OBJECT
     QML_ELEMENT
 
-    // Proyecto
-    Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY projectChanged)
-    Q_PROPERTY(QVariantList clips READ clips NOTIFY projectChanged)
+    // Proyectos abiertos: {uid, name, modified, active, saved}
+    Q_PROPERTY(QVariantList projects READ projects NOTIFY projectsChanged)
+    Q_PROPERTY(qint64 activeProject READ activeProject NOTIFY projectsChanged)
+    // Pestañas de secuencias: {index, project, sequence, name, projectName, active}
+    Q_PROPERTY(QVariantList tabs READ tabs NOTIFY projectsChanged)
+    Q_PROPERTY(int activeTab READ activeTab NOTIFY projectsChanged)
+    Q_PROPERTY(bool hasSequence READ hasSequence NOTIFY projectsChanged)
+    Q_PROPERTY(QString sequenceName READ sequenceName NOTIFY projectsChanged)
+    // Biblioteca del proyecto activo: carpetas {id, name, count}, secuencias {id, name,
+    // folder, canvas, details, duration, open} y medios (con su carpeta)
+    Q_PROPERTY(QVariantList folders READ folders NOTIFY projectChanged)
+    Q_PROPERTY(QVariantList sequences READ sequences NOTIFY projectChanged)
+    // (cada medio lleva también su proxy: "" | "queued" | "working" | "ready" | "failed",
+    // y proxyProgress 0–1)
+    Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY libraryChanged)
+    // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
+    // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
+    Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
+    Q_PROPERTY(bool proxiesAvailable READ proxiesAvailable NOTIFY proxiesChanged)
+    Q_PROPERTY(QString proxyStatus READ proxyStatus NOTIFY proxiesChanged)
     // Pistas en el orden de `tracks` del proyecto: {index, name, kind, number, hidden,
     // muted, locked}
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY projectChanged)
@@ -84,11 +111,26 @@ class Editor : public CompositionSource {
     Q_PROPERTY(double meterLeft READ meterLeft NOTIFY metersChanged)
     Q_PROPERTY(double meterRight READ meterRight NOTIFY metersChanged)
     // Exportación
+    // Últimos ajustes usados (los usa "Exportar rápido"): {codec: "h264"|"h265", scale,
+    // fps (0 = los de la secuencia), quality (0 Ligera, 1 Alta, 2 Máxima, 3 a medida),
+    // mbps (a medida), audio, audioKbps, folder (url)}
+    Q_PROPERTY(QVariantMap exportSettings READ exportSettings NOTIFY exportSettingsChanged)
+    // Archivo de la última exportación terminada ("" si no hay)
+    Q_PROPERTY(QString lastExportPath READ lastExportPath NOTIFY exportChanged)
+    // Proyectos abiertos hace poco: {path, name, folder, exists, date}
+    Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
+    // Copias de recuperación de una sesión que no se cerró bien: {key, name, path, date}
+    Q_PROPERTY(QVariantList recoverableProjects READ recoverableProjects NOTIFY recoveryChanged)
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportChanged)
     Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
     Q_PROPERTY(QString exportMessage READ exportMessage NOTIFY exportChanged)
     // Reproducción
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
+    // Velocidad de reproducción (J/K/L): 0 en pausa, 1 normal, 2/4/8 hacia delante,
+    // −1/−2/−4/−8 hacia atrás. Solo suena a velocidad normal.
+    Q_PROPERTY(int playbackSpeed READ playbackSpeed NOTIFY playingChanged)
+    // Marcadores de la secuencia activa: {id, frame, name}
+    Q_PROPERTY(QVariantList markers READ markers NOTIFY projectChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(qint64 currentFrame READ currentFrame NOTIFY currentFrameChanged)
     Q_PROPERTY(QString timecode READ timecode NOTIFY currentFrameChanged)
@@ -100,10 +142,26 @@ public:
     explicit Editor(QObject* parent = nullptr);
     ~Editor() override;
 
-    const sharkcut::Project& project() const { return m_history.project(); }
+    // Vista de la secuencia activa (vacía si no hay ninguna abierta).
+    const sharkcut::Project& project() const { return m_view; }
+
+    QVariantList projects() const;
+    qint64 activeProject() const { return static_cast<qint64>(m_activeProject); }
+    QVariantList tabs() const;
+    int activeTab() const { return m_activeTab; }
+    bool hasSequence() const { return activeSequenceId() != 0; }
+    QString sequenceName() const;
+    QVariantList folders() const;
+    QVariantList sequences() const;
 
     QVariantList mediaItems() const;
-    QVariantList clips() const;
+    bool useProxies() const { return m_useProxies; }
+    void setUseProxies(bool use);
+    bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
+    QString proxyStatus() const;
+    // Datos de un clip para la línea de tiempo (TimelineClipsModel): {id, link, track,
+    // video, media, start, length, in, volumeDb, transformed, name}.
+    QVariantMap clipEntry(std::size_t track, const sharkcut::Clip& clip) const;
     QVariantList tracks() const;
     QVariantList transitions() const;
     QStringList transitionNames() const;
@@ -114,8 +172,8 @@ public:
     qint64 frameCount() const { return project().length(); }
     double fps() const;
     QString projectDescription() const;
-    bool canUndo() const { return m_history.canUndo(); }
-    bool canRedo() const { return m_history.canRedo(); }
+    bool canUndo() const { return current().history.canUndo(); }
+    bool canRedo() const { return current().history.canRedo(); }
     QString undoText() const;
     QString redoText() const;
     bool importing() const { return m_importing > 0; }
@@ -132,14 +190,25 @@ public:
     QUrl defaultExportFolder() const;
     double meterLeft() const { return m_meter[0]; }
     double meterRight() const { return m_meter[1]; }
-    QString projectPath() const { return m_projectPath; }
-    bool modified() const { return m_history.modified(); }
+    QString projectPath() const { return current().path; }
+    bool modified() const { return current().history.modified(); }
     bool fileBusy() const { return m_fileBusy; }
     bool exporting() const { return m_exporter != nullptr; }
+    QVariantMap exportSettings() const { return m_exportSettings; }
+    QString lastExportPath() const { return m_lastExportPath; }
+    QVariantList recentProjects() const { return m_recentProjects; }
+    QVariantList recoverableProjects() const { return m_recoverable; }
     double exportProgress() const { return m_exportProgress; }
     QString exportMessage() const { return m_exportMessage; }
 
     bool playing() const { return m_playing; }
+    int playbackSpeed() const { return m_playing ? m_speed : 0; }
+    QVariantList markers() const;
+
+    // Pista "nueva": al soltar un medio en la zona vacía de la línea de tiempo (encima de
+    // la última pista de video o debajo de la última de audio), se crean una pista de
+    // video y una de audio nuevas para él (las que necesite).
+    static constexpr int kNewTracks = -2;
     bool busy() const { return m_busy; }
     qint64 currentFrame() const { return m_currentFrame; }
     QString timecode() const;
@@ -151,30 +220,87 @@ public:
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
 
-    // --- Archivo del proyecto (lectura y escritura en segundo plano) ---
-    // Proyecto vacío. `width`/`height` = 0: el lienzo lo fija el primer clip; `fps` = 0:
-    // también los fotogramas por segundo. `name` se propone al guardar.
+    // --- Proyectos (lectura y escritura en segundo plano) ---
+    // Abre un proyecto nuevo (sin cerrar los demás) con una secuencia. `width`/`height`
+    // = 0: el lienzo lo fija el primer clip; `fps` = 0: también los fotogramas por
+    // segundo. `name` se propone al guardar y da nombre a la secuencia.
     Q_INVOKABLE void newProject(const QString& name = {}, int width = 0, int height = 0,
                                 int fps = 0);
+    // Abre un proyecto junto a los demás (si ya está abierto, solo lo activa).
     Q_INVOKABLE void openProject(const QUrl& file);
     Q_INVOKABLE void openProjectPath(const QString& path);
-    // Guarda en el archivo actual; false si aún no tiene (hay que usar saveAs).
+    // Guarda el proyecto activo en su archivo; false si aún no tiene (usar saveAs).
     Q_INVOKABLE bool save();
     Q_INVOKABLE void saveAs(const QUrl& file);
+    Q_INVOKABLE void activateProject(qint64 uid);
+    // Cierra un proyecto sin preguntar (la interfaz pregunta antes si hay cambios). Si era
+    // el último, queda uno nuevo vacío.
+    Q_INVOKABLE void closeProject(qint64 uid);
+    Q_INVOKABLE bool projectModified(qint64 uid) const;
+    // Proyectos con cambios sin guardar (uids), para preguntar al cerrar la ventana.
+    Q_INVOKABLE QVariantList unsavedProjects() const;
 
-    // Exporta la línea de tiempo a MP4 (mismo compositor que la vista previa).
-    // `quality`: 0 ligera (8 Mbps), 1 alta (16 Mbps), 2 máxima (40 Mbps).
-    Q_INVOKABLE void exportTo(const QUrl& file, int quality = 1);
-    Q_INVOKABLE void exportToFolder(const QUrl& folder, const QString& name, int quality);
+    // --- Secuencias y pestañas ---
+    Q_INVOKABLE void openSequence(qint64 sequenceId); // del proyecto activo
+    Q_INVOKABLE void activateTab(int index);
+    Q_INVOKABLE void closeTab(int index);
+    Q_INVOKABLE void newSequence(const QString& name, int width, int height, int fps);
+    Q_INVOKABLE void renameSequence(qint64 sequenceId, const QString& name);
+    // Copia de la secuencia (con `vertical`, en un lienzo 9:16) y la abre.
+    Q_INVOKABLE void duplicateSequence(qint64 sequenceId, bool vertical);
+    Q_INVOKABLE void removeSequence(qint64 sequenceId);
+
+    // --- Carpetas de la biblioteca ---
+    Q_INVOKABLE void newFolder(const QString& name);
+    Q_INVOKABLE void renameFolder(qint64 folderId, const QString& name);
+    Q_INVOKABLE void removeFolder(qint64 folderId);
+    // Mueve medios y secuencias (ids) a una carpeta (0 = raíz).
+    Q_INVOKABLE void moveToFolder(const QVariantList& items, qint64 folderId);
+
+    // --- Exportación (mismo compositor que la vista previa) ---
+    // Exporta una secuencia del proyecto activo. `options`: los de exportSettings y además
+    // sequence (id; 0 = la activa), name (sin ".mp4"), rangeStart y rangeEnd (fotogramas
+    // de la secuencia; -1 = desde el principio / hasta el final). Los ajustes quedan como
+    // los últimos usados. Nunca reemplaza un archivo: si existe, "nombre (2).mp4".
+    Q_INVOKABLE void exportSequence(const QVariantMap& options);
+    // La secuencia activa entera, con los últimos ajustes, a la última carpeta y con el
+    // nombre de la secuencia.
+    Q_INVOKABLE void quickExport();
     Q_INVOKABLE void cancelExport();
+    // Abre en el explorador la carpeta del último archivo exportado.
+    Q_INVOKABLE void showLastExport() const;
+    // Resoluciones que se ofrecen para una secuencia: {width, height, scale, label}
+    Q_INVOKABLE QVariantList exportSizes(qint64 sequenceId) const;
+    // Tasa de video recomendada (Mbps) para una calidad (0–2) y códec ("h264"/"h265").
+    Q_INVOKABLE double recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
+                                       const QString& codec) const;
+    // Códigos de tiempo de una secuencia (con sus fps). parseTimecode: -1 si no vale.
+    Q_INVOKABLE QString sequenceTimecode(qint64 sequenceId, qint64 frame) const;
+    Q_INVOKABLE qint64 parseTimecode(qint64 sequenceId, const QString& text) const;
+
+    // --- Proyectos recientes ---
+    Q_INVOKABLE void forgetRecentProject(const QString& path);
+
+    // --- Recuperación ---
+    // Abre la copia de recuperación (con sus cambios sin guardar; al guardar va a su
+    // archivo original, si tenía) o la descarta.
+    Q_INVOKABLE void recoverProject(const QString& key);
+    Q_INVOKABLE void discardRecovery(const QString& key);
 
     // --- Biblioteca ---
     // Analiza los archivos en segundo plano y los añade a la biblioteca. Con
     // `placeAt` >= 0 también los coloca, uno tras otro, desde ese fotograma, en la pista
-    // `track` (índice; -1 = V1 y A1) y su pareja del otro tipo (V2 ↔ A2…).
-    Q_INVOKABLE void importFiles(const QList<QUrl>& urls, qint64 placeAt = -1, int track = -1);
-    Q_INVOKABLE void importPaths(const QStringList& paths, qint64 placeAt = -1, int track = -1);
+    // `track` (índice; -1 = V1 y A1; kNewTracks = pistas nuevas) y su pareja del otro tipo
+    // (V2 ↔ A2…). Los medios
+    // nuevos van a la carpeta `folder` (0 = raíz) del proyecto activo.
+    Q_INVOKABLE void importFiles(const QList<QUrl>& urls, qint64 placeAt = -1, int track = -1,
+                                 qint64 folder = 0);
+    Q_INVOKABLE void importPaths(const QStringList& paths, qint64 placeAt = -1, int track = -1,
+                                 qint64 folder = 0);
     Q_INVOKABLE void removeMedia(qint64 mediaId);
+    // Crea los proxies de esos medios (ids; vacío = todos los videos del proyecto).
+    Q_INVOKABLE void createProxies(const QVariantList& mediaIds);
+    Q_INVOKABLE void cancelProxies();
     Q_INVOKABLE QString mediaPath(qint64 mediaId) const;
 
     // --- Pistas ---
@@ -186,13 +312,29 @@ public:
 
     // --- Edición ---
     // Coloca el medio entero en `frame` (sobrescribiendo); `frame` < 0: al final.
-    // `track`: pista donde se suelta (índice; -1 = V1 y A1), como en importFiles.
+    // `track`: pista donde se suelta (índice; -1 = V1 y A1; kNewTracks = pistas nuevas),
+    // como en importFiles.
     Q_INVOKABLE void addMedia(qint64 mediaId, qint64 frame = -1, int track = -1);
-    // Coloca el tramo marcado del reproductor de origen: al final o en el cabezal.
-    Q_INVOKABLE void addFromSource(Player* source, bool atPlayhead);
     Q_INVOKABLE void splitAtPlayhead();                      // divide lo que hay bajo el cabezal
     Q_INVOKABLE void splitClip(qint64 clipId, qint64 frame); // cuchilla
     Q_INVOKABLE void removeSelection();
+    // Edición con rizo (cierra el hueco desplazando lo posterior en las pistas no
+    // bloqueadas): Q quita desde el borde anterior hasta el cabezal, W desde el cabezal
+    // hasta el borde siguiente; rippleDeleteSelection quita la selección (Mayús+Supr).
+    Q_INVOKABLE void rippleTrimPrevious();
+    Q_INVOKABLE void rippleTrimNext();
+    Q_INVOKABLE void rippleDeleteSelection();
+    // Hueco de la pista `track` en `frame` (para el menú): true si se puede cerrar.
+    Q_INVOKABLE bool hasGapAt(int track, qint64 frame) const;
+    Q_INVOKABLE void closeGap(int track, qint64 frame);
+
+    // --- Marcadores ---
+    Q_INVOKABLE void addMarkerAtPlayhead(); // M
+    Q_INVOKABLE void removeMarker(qint64 markerId);
+    Q_INVOKABLE void renameMarker(qint64 markerId, const QString& name);
+    Q_INVOKABLE void moveMarker(qint64 markerId, qint64 frame);
+    // Lleva el cabezal al marcador siguiente (`direction` > 0) o al anterior.
+    Q_INVOKABLE void goToMarker(int direction);
     Q_INVOKABLE void trimStart(qint64 clipId, qint64 frame);
     Q_INVOKABLE void trimEnd(qint64 clipId, qint64 frame);
     Q_INVOKABLE qint64 limitTrimStart(qint64 clipId, qint64 frame) const;
@@ -221,6 +363,20 @@ public:
     Q_INVOKABLE void setClipVolume(qint64 clipId, double volumeDb);
     // Separa el video y el audio de los clips seleccionados.
     Q_INVOKABLE void unlinkSelection();
+
+    // --- Ayudas para la línea de tiempo (sin recorrer los clips desde QML) ---
+    // Imán: el borde de clip, marcador, inicio o cabezal más cercano a `frame` a menos de
+    // `maxDistance` fotogramas (sin contar los clips `exclude`); si no hay, `frame`.
+    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude,
+                                 double maxDistance) const;
+    // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
+    // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
+    Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;
+    // Clips que se mueven juntos al arrastrar `clipId`: la selección entera si el clip
+    // está en ella, y siempre con sus enlazados.
+    Q_INVOKABLE QVariantList clipGroup(qint64 clipId) const;
+    // Primer fotograma y final de un grupo de clips: {start, end}.
+    Q_INVOKABLE QVariantMap groupRange(const QVariantList& clips) const;
 
     // --- Transiciones ---
     // Pone la transición `typeIndex` (de transitionNames) en el corte `cut` de la pista
@@ -251,17 +407,26 @@ public:
     Q_INVOKABLE void togglePlay();
     Q_INVOKABLE void seek(qint64 frame);
     Q_INVOKABLE void step(int frames);
+    // J (`direction` < 0) y L (> 0): reproduce en ese sentido; cada pulsación más dobla
+    // la velocidad (hasta 8×). Pulsar el sentido contrario vuelve a 1×. K es pause().
+    Q_INVOKABLE void shuttle(int direction);
     // Avanza la reproducción según el reloj; se llama una vez por refresco de pantalla.
     Q_INVOKABLE void advance();
 
 signals:
     void projectChanged();
+    void libraryChanged(); // medios de la biblioteca (o el estado de sus proxies)
+    void proxiesChanged();
+    void projectsChanged(); // proyectos abiertos, pestañas o secuencias
     void fileChanged();
     void modifiedChanged();
     void fileBusyChanged();
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
+    void exportSettingsChanged();
+    void recentProjectsChanged();
+    void recoveryChanged();
     void metersChanged();
     void selectionChanged();
     void selectedClipChanged();
@@ -277,6 +442,7 @@ private:
     // Un hilo de decodificación colocado para un clip concreto.
     struct VideoSlot {
         sharkcut::ObjectId media = 0;
+        std::string path; // lo que tiene abierto: el original o su proxy
         std::unique_ptr<sharkcut::DecodeWorker> worker;
         sharkcut::ObjectId clip = 0; // clip para el que está colocado
         std::int64_t seekIndex = -1; // fotograma del medio al que se colocó
@@ -307,8 +473,41 @@ private:
         std::int64_t index = 0;
     };
 
-    // Aplica una edición registrándola en el historial.
+    // Un proyecto abierto: su documento con su historial y su archivo.
+    struct OpenProject {
+        quint64 uid = 0;
+        sharkcut::DocumentHistory history;
+        QString path;    // vacío: proyecto sin guardar
+        QString newName; // nombre propuesto de un proyecto aún sin guardar
+        // Copia de recuperación (autoguardado): su nombre en la carpeta de recuperación
+        // ("" = aún no tiene) y el estado que se copió por última vez.
+        QString recoveryKey;
+        std::shared_ptr<const sharkcut::Document> autosaved;
+    };
+    // Una pestaña de la línea de tiempo: una secuencia de un proyecto abierto.
+    struct Tab {
+        quint64 project = 0;
+        sharkcut::ObjectId sequence = 0;
+        qint64 frame = 0; // posición del cabezal al salir de la pestaña
+    };
+
+    OpenProject& current();
+    const OpenProject& current() const;
+    OpenProject* findProject(quint64 uid);
+    const OpenProject* findProject(quint64 uid) const;
+    const sharkcut::Document& document() const { return current().history.state(); }
+    sharkcut::ObjectId activeSequenceId() const;
+    QString nameOf(const OpenProject& project) const;
+    OpenProject& addProject(sharkcut::Document document, QString path, QString newName);
+    // Cambia la pestaña activa (-1 = ninguna) y pone al día la vista y la reproducción.
+    void switchTo(int tab);
+    void refreshView();
+    sharkcut::Workspace workspaceOf(const OpenProject& project) const;
+
+    // Aplica una edición de la secuencia activa registrándola en el historial.
     bool edit(const QString& label, const std::function<bool(sharkcut::Project&)>& change);
+    // Edición del proyecto activo entero (secuencias, carpetas, biblioteca).
+    bool editDocument(const QString& label, const std::function<bool(sharkcut::Document&)>& change);
     void onProjectChanged(); // tras editar, deshacer o rehacer
     void restartAudio();
     void resetVideoSlots();
@@ -343,20 +542,41 @@ private:
                            std::string_view soundId);
 
     void setCurrentFrame(qint64 frame);
+    void advanceShuttle(sharkcut::FrameRate rate);
     void setPlaying(bool playing);
     void setBusy(bool busy);
     void setError(const QString& message);
-    void finishImport(std::vector<sharkcut::MediaItem> items, QStringList errors, qint64 placeAt,
-                      int track);
-    void saveToPath(const QString& path);
-    void finishSave(const std::shared_ptr<const sharkcut::Project>& written, const QString& path,
-                    const QString& error);
-    void finishOpen(const std::shared_ptr<sharkcut::Project>& project, const QString& path,
-                    const QString& error, const QStringList& missing);
+    void finishImport(quint64 uid, std::vector<sharkcut::MediaItem> items, QStringList errors,
+                      qint64 placeAt, int track, qint64 folder);
+    // Cierra las pestañas cuya secuencia ya no existe (tras deshacer o quitarla).
+    void pruneTabs();
+    void saveToPath(quint64 uid, const QString& path);
+    // Ajustes de exportación con los valores por defecto donde falten.
+    static QVariantMap completeExportSettings(QVariantMap settings);
+    void startExport(const sharkcut::Project& sequence, const QVariantMap& settings,
+                     const QString& folder, const QString& name, qint64 rangeStart,
+                     qint64 rangeEnd);
+    // Pone `path` el primero de los recientes y vuelve a leer la lista (en segundo plano).
+    void addRecentProject(const QString& path);
+    void refreshRecentProjects();
+    void finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Document>& written,
+                    const QString& path, const QString& error);
+    static QString recoveryDirectory();
+    void autosave();
+    void removeRecovery(const QString& key);
+    void scanRecovery();
+    // `recoveryKey` y `recoveredName`: al abrir una copia de recuperación.
+    void finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded, const QString& path,
+                    const QString& error, const QStringList& missing,
+                    const QString& recoveryKey = {}, const QString& recoveredName = {});
     void setFileBusy(bool busy);
 
-    sharkcut::History m_history;
-    QString m_projectPath; // vacío: proyecto sin guardar
+    std::vector<std::unique_ptr<OpenProject>> m_projects;
+    quint64 m_nextUid = 1;
+    quint64 m_activeProject = 0;
+    std::vector<Tab> m_tabs;
+    int m_activeTab = -1;
+    sharkcut::Project m_view; // secuencia activa
     bool m_fileBusy = false;
     std::vector<sharkcut::ObjectId> m_selection;
     sharkcut::ObjectId m_selectedTransition = 0; // excluye la selección de clips
@@ -369,6 +589,13 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    ProxyManager m_proxies;
+    bool m_useProxies = false;
+    // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.
+    std::string decodePath(const sharkcut::MediaItem& item) const;
+    // Cierra los hilos de video y vuelve a pedir el fotograma (cambió qué se decodifica).
+    void reloadVideo();
+    QStringList mediaPaths() const;
 
     std::unique_ptr<sharkcut::AudioOutput> m_audioOutput;
     std::unique_ptr<sharkcut::AudioWorker> m_audioWorker;
@@ -377,17 +604,27 @@ private:
     qint64 m_currentFrame = 0;
     qint64 m_pendingFrame = -1; // fotograma pedido en pausa que aún no ha llegado
     bool m_playing = false;
+    // J/K/L: a una velocidad distinta de 1 no suena y el tiempo lo lleva un temporizador
+    // desde `m_shuttleFrom`.
+    int m_speed = 1;
+    QElapsedTimer m_shuttleTimer;
+    qint64 m_shuttleFrom = 0;
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
 
     std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
     std::unique_ptr<sharkcut::SequenceExporter> m_exporter;
+    QVariantMap m_exportSettings;
+    QString m_lastExportPath;
+    QVariantList m_recentProjects;
+    QVariantList m_recoverable;
+    QTimer m_autosaveTimer;
+    QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;
 
-    QString m_newName; // nombre propuesto de un proyecto aún sin guardar
     std::array<double, 2> m_meter{-60.0, -60.0};
     QElapsedTimer m_meterTimer;
     void updateMeters();

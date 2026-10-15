@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -17,6 +18,11 @@ namespace sharkcut {
 
 // Decodifica un clip en un hilo propio y mantiene una pequeña cola de fotogramas
 // preparados por adelantado. Así la interfaz nunca espera a disco ni a la GPU.
+//
+// Guarda además los últimos fotogramas que pasaron por él (unos 64 MB): volver a uno de
+// ellos (un paso atrás, J, arrastrar el cabezal hacia la izquierda) no decodifica nada.
+// Al ir hacia atrás, cada búsqueda aprovecha para guardar los fotogramas anteriores al
+// destino, así los pasos siguientes también salen de la caché.
 //
 // Las funciones de rellamada se invocan desde el hilo de decodificación.
 class DecodeWorker {
@@ -61,6 +67,16 @@ private:
     std::condition_variable m_wake;
     std::deque<std::shared_ptr<const VideoFrame>> m_queue;
     std::int64_t m_seekTarget = -1; // búsqueda pendiente (-1 = ninguna)
+    std::int64_t m_keepBefore = 0;  // fotogramas a guardar antes del destino (hacia atrás)
+    // Tras servir una búsqueda desde la caché, dónde seguir decodificando cuando se acabe
+    // lo servido (-1 = nada pendiente).
+    std::int64_t m_resumeAt = -1;
+    std::int64_t m_lastRequest = -1; // último destino pedido (para notar que se va atrás)
+    std::map<std::int64_t, std::shared_ptr<const VideoFrame>> m_cache;
+    std::size_t m_cacheBytes = 0;
+
+    // Guarda en la caché (con el mutex tomado) y quita lo más lejano a lo último pedido.
+    void remember(const std::shared_ptr<const VideoFrame>& frame);
     bool m_endOfStream = false;
     bool m_stop = false;
     std::string m_hwAccelName;

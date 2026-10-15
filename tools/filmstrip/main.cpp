@@ -7,9 +7,12 @@
 // Uso: sharkcut_filmstrip <clipA> <clipB> <salida.png> [fotogramaA] [fotogramaB]
 //      sharkcut_filmstrip --export <clipA> <clipB> <salida.mp4> [transición 0–6]
 //        (exporta los clips enteros con SequenceExporter, como el botón de la app)
-//      sharkcut_filmstrip --export-project <proyecto.sharkp> <salida.mp4>
-//        (exporta la línea de tiempo de un proyecto, como "Exportar" del editor)
+//      sharkcut_filmstrip --export-project <proyecto.sharkp> <salida.mp4> [opciones]
+//        (exporta la secuencia activa de un proyecto, como "Exportar" del editor)
+//        opciones: --escala E (1 = el lienzo) · --fps N · --desde F --hasta F (fotogramas)
+//                  · --h265 · --sin-audio · --mbps N
 
+#include "core/export_settings.h"
 #include "core/project_file.h"
 #include "core/sequence.h"
 #include "core/transition.h"
@@ -24,6 +27,7 @@
 #include <QPainter>
 #include <rhi/qrhi.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -90,8 +94,10 @@ int runExport(const sharkcut::ExportJob& job, std::int64_t frames) {
         std::printf("\r%lld / %lld", static_cast<long long>(d), static_cast<long long>(t));
         std::fflush(stdout);
     };
-    callbacks.finished = [&](bool success, const std::string& message, const std::string& encoder) {
-        std::printf("\n%s (%s) %s\n", success ? "OK" : "ERROR", encoder.c_str(), message.c_str());
+    callbacks.finished = [&](bool success, const std::string& message, const std::string& encoder,
+                             const std::string& path) {
+        std::printf("\n%s (%s) %s %s\n", success ? "OK" : "ERROR", encoder.c_str(), path.c_str(),
+                    message.c_str());
         ok = success;
         done = true;
     };
@@ -109,7 +115,10 @@ int runExport(const sharkcut::ExportJob& job, std::int64_t frames) {
 
 int exportProjectMode(int argc, char* argv[]) {
     if (argc < 4) {
-        std::fprintf(stderr, "Uso: %s --export-project <proyecto.sharkp> <salida.mp4>\n", argv[0]);
+        std::fprintf(stderr,
+                     "Uso: %s --export-project <proyecto.sharkp> <salida.mp4> [--escala E] "
+                     "[--fps N] [--desde F] [--hasta F] [--h265] [--sin-audio] [--mbps N]\n",
+                     argv[0]);
         return 2;
     }
     sharkcut::Project project;
@@ -120,10 +129,44 @@ int exportProjectMode(int argc, char* argv[]) {
         return 1;
     }
     sharkcut::ExportJob job;
+    job.overwrite = true; // como hasta ahora: la herramienta reescribe la salida
     job.rate = project.settings.frameRate;
-    job.canvasSize = QSize(project.settings.width, project.settings.height);
+    double scale = 1.0;
+    double mbps = 0.0;
+    for (int i = 4; i < argc; ++i) {
+        const std::string option = argv[i];
+        const bool hasValue = i + 1 < argc;
+        if (option == "--escala" && hasValue) {
+            scale = std::stod(argv[++i]);
+        } else if (option == "--fps" && hasValue) {
+            job.rate = {std::stoll(argv[++i]), 1};
+        } else if (option == "--desde" && hasValue) {
+            job.rangeStart = std::stoll(argv[++i]);
+        } else if (option == "--hasta" && hasValue) {
+            job.rangeEnd = std::stoll(argv[++i]);
+        } else if (option == "--mbps" && hasValue) {
+            mbps = std::stod(argv[++i]);
+        } else if (option == "--h265") {
+            job.codec = sharkcut::VideoCodec::H265;
+        } else if (option == "--sin-audio") {
+            job.audio = false;
+        } else {
+            std::fprintf(stderr, "Opción desconocida: %s\n", option.c_str());
+            return 2;
+        }
+    }
+    const sharkcut::ExportSize size =
+        sharkcut::exportSize(project.settings.width, project.settings.height, scale);
+    job.canvasSize = QSize(size.width, size.height);
+    job.videoBitrate =
+        mbps > 0 ? static_cast<std::int64_t>(mbps * 1e6)
+                 : sharkcut::recommendedBitrate(size.width, size.height, job.rate, 1, job.codec);
     job.outputPath = argv[3];
-    const std::int64_t frames = project.length();
+    const std::int64_t end =
+        job.rangeEnd < 0 ? project.length() : std::min(job.rangeEnd, project.length());
+    const std::int64_t frames =
+        sharkcut::ExportTiming{project.settings.frameRate, job.rate, job.rangeStart, end}
+            .frameCount();
     job.content = std::move(project);
 #ifndef Q_OS_WIN
     job.fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
@@ -149,6 +192,7 @@ int exportMode(int argc, char* argv[]) {
     test.pathB = argv[3];
     const std::int64_t frames = test.layout.length();
     sharkcut::ExportJob job;
+    job.overwrite = true;
     job.content = test;
     job.rate = infoA.video->frameRate;
     job.canvasSize = QSize(infoA.video->width, infoA.video->height);

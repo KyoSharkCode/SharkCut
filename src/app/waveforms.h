@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QQuickPaintedItem>
 #include <QString>
+#include <QStringList>
 #include <QThreadPool>
 #include <QtQml/qqmlregistration.h>
 
@@ -32,9 +33,12 @@ public:
     // `ready`) o si no tiene audio.
     std::shared_ptr<const sharkcut::Waveform> get(const QString& mediaPath);
 
-    // Carpeta de la caché en disco ("" = solo en memoria). Lo ya calculado se guarda
-    // también en la nueva carpeta.
+    // Carpeta de la caché en disco del proyecto activo ("" = solo en memoria).
     void setDirectory(const QString& directory);
+
+    // Guarda en `directory` las ondas ya calculadas de esos medios (al guardar por
+    // primera vez un proyecto, lo calculado mientras no tenía archivo).
+    void saveTo(const QString& directory, const QStringList& mediaPaths);
 
     // true mientras se lee de la caché o se calcula.
     bool pending(const QString& mediaPath) const;
@@ -49,7 +53,8 @@ private:
         bool failed = false;
     };
     void finish(const QString& path, std::shared_ptr<const sharkcut::Waveform> waveform);
-    void save(const QString& path, std::shared_ptr<const sharkcut::Waveform> waveform);
+    void save(const QString& directory, const QString& path,
+              std::shared_ptr<const sharkcut::Waveform> waveform);
 
     QThreadPool m_pool;
     std::map<QString, Entry> m_entries;

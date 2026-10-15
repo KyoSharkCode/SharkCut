@@ -5,6 +5,10 @@
 #include "media/video_decoder.h"
 #include "test_clip.h"
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
@@ -101,4 +105,33 @@ TEST_CASE("Mp4Writer avisa si no hay codificador", "[export]") {
     EncoderSettings settings;
     settings.videoEncoders = {"codificador-que-no-existe"};
     CHECK_THROWS_AS(Mp4Writer(file.path.string(), settings), MediaError);
+}
+
+TEST_CASE("Mp4Writer escribe H.265 sin audio", "[export]") {
+    if (!avcodec_find_encoder_by_name("libx265")) {
+        SKIP("FFmpeg sin libx265");
+    }
+    TempFile file;
+    EncoderSettings settings;
+    settings.width = 320;
+    settings.height = 180;
+    settings.rate = {30, 1};
+    settings.audio = false;
+    settings.codec = VideoCodec::H265;
+    settings.videoBitrate = 2'000'000;
+    settings.videoEncoders = {"libx265"};
+    {
+        Mp4Writer writer(file.path.string(), settings);
+        CHECK(writer.videoEncoderName() == "libx265");
+        std::vector<std::uint8_t> rgba(320 * 180 * 4, 128);
+        for (int i = 0; i < 30; ++i) {
+            writer.writeVideo(rgba.data(), 320 * 4);
+        }
+        writer.finish();
+    }
+    const MediaInfo info = probeMedia(file.path.string());
+    REQUIRE(info.video.has_value());
+    CHECK(info.video->codec == "hevc");
+    CHECK(info.video->frameCount == 30);
+    CHECK(info.audio.empty());
 }

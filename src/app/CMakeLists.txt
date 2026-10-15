@@ -3,7 +3,7 @@ qt_add_executable(SharkCut WIN32
 )
 
 # Theme.qml es un singleton (pragma Singleton); debe declararse antes del módulo.
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml qml/Trazos.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(SharkCut
     URI SharkCut
@@ -18,33 +18,39 @@ qt_add_qml_module(SharkCut
         qml/Deslizador.qml
         qml/CampoNumero.qml
         qml/Selector.qml
-        qml/BarraTiempo.qml
         qml/LineaTiempo.qml
         qml/Icono.qml
+        qml/Trazos.qml
         qml/BotonIcono.qml
         qml/Medidor.qml
         qml/ArrastreMedio.qml
         qml/ArrastreTransicion.qml
         qml/PanelMedios.qml
-        qml/DialogoExportar.qml
         qml/DialogoNuevoProyecto.qml
+        qml/DialogoNombre.qml
+        qml/MenuTema.qml
+        qml/BarraDesplazamiento.qml
+        qml/PanelBiblioteca.qml
+        qml/PanelPropiedades.qml
+        qml/PaginaProyectos.qml
+        qml/PaginaExportar.qml
     SOURCES
         appinfo.h
         appinfo.cpp
-        player.h
-        player.cpp
         videoviewer.h
         videoviewer.cpp
         compositionsource.h
         playbackclock.h
         playbackclock.cpp
-        transitionlab.h
-        transitionlab.cpp
         editor.h
         editor.cpp
         thumbnails.h
         thumbnails.cpp
         waveforms.h
+        timelinemodel.h
+        proxies.h
+        proxies.cpp
+        timelinemodel.cpp
         waveforms.cpp
 )
 

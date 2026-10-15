@@ -8,7 +8,9 @@
 // evitar desfases acumulados entre video y audio.
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace sharkcut {
 
@@ -63,5 +65,11 @@ std::int64_t microsecondsToFrame(std::int64_t us, FrameRate rate);
 // Código de tiempo "HH:MM:SS:FF" (sin drop-frame), usando los fps nominales.
 // Los valores negativos llevan el prefijo "-".
 std::string formatTimecode(std::int64_t frame, FrameRate rate);
+
+// Lee un código de tiempo escrito a mano: "HH:MM:SS:FF", y también formas cortas que se
+// completan por la izquierda ("MM:SS:FF", "SS:FF", "FF"). Separadores ':' o '.'; los
+// campos pueden pasarse de su máximo (90 fotogramas = 1 s y 30 fotogramas a 60 fps).
+// Devuelve el fotograma, o nada si el texto no es un código de tiempo válido.
+std::optional<std::int64_t> parseTimecode(std::string_view text, FrameRate rate);
 
 } // namespace sharkcut

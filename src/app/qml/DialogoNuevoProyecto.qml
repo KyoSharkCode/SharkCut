@@ -3,13 +3,14 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import SharkCut
 
-// Nuevo proyecto: nombre, lienzo (16:9, 9:16 o 1:1) y fotogramas por segundo.
-// El lienzo es del proyecto: se edita en él y se exporta en él.
+// Nuevo proyecto o nueva secuencia: nombre, lienzo (16:9, 9:16 o 1:1) y fotogramas
+// por segundo. El lienzo es de la secuencia: se edita en él y se exporta en él.
 Popup {
     id: dialogo
 
     property int lienzo: 0 // 0 horizontal, 1 vertical, 2 cuadrado
     property int ritmo: 0  // 0 → 60 fps, 1 → 30 fps, 2 → como el primer clip
+    property bool secuencia: false // true: nueva secuencia del proyecto activo
     signal crear(string nombre, int ancho, int alto, int fps)
 
     readonly property var lienzos: [
@@ -52,7 +53,7 @@ Popup {
             Layout.leftMargin: 20
             Text {
                 Layout.fillWidth: true
-                text: "Nuevo proyecto"
+                text: dialogo.secuencia ? "Nueva secuencia" : "Nuevo proyecto"
                 color: Theme.texto
                 font.pixelSize: 17
                 font.bold: true
@@ -79,7 +80,7 @@ Popup {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    placeholderText: "Sin título"
+                    placeholderText: dialogo.secuencia ? "Secuencia nueva" : "Sin título"
                     placeholderTextColor: Theme.textoDesactivado
                     color: Theme.texto
                     font.pixelSize: Theme.tamTexto
@@ -171,8 +172,8 @@ Popup {
                 lineHeight: 1.2
                 text: "Editarás en un lienzo " + dialogo.lienzos[dialogo.lienzo].que + " ("
                       + dialogo.lienzos[dialogo.lienzo].tam + "). Los videos de OBS (16:9) se "
-                      + "colocan ajustados al lienzo; para reencuadrarlos (mover y escalar) "
-                      + "llegan las propiedades del clip en la etapa 2."
+                      + "colocan ajustados al lienzo; para reencuadrarlos, usa las propiedades "
+                      + "del clip."
                 color: Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
             }
@@ -188,7 +189,7 @@ Popup {
             BotonIcono { texto: "Cancelar"; implicitHeight: 36; onPulsado: dialogo.close() }
             BotonIcono {
                 icono: "nuevo"
-                texto: "Crear proyecto"
+                texto: dialogo.secuencia ? "Crear secuencia" : "Crear proyecto"
                 acentuado: true
                 implicitHeight: 36
                 onPulsado: dialogo.aceptar()

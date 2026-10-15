@@ -85,6 +85,7 @@ class FrameSource {
 public:
     virtual ~FrameSource() = default;
     virtual std::int64_t length() const = 0;
+    virtual FrameRate rate() const = 0;
     virtual CompositorInput at(std::int64_t frame) = 0;
     virtual std::unique_ptr<AudioSource> openAudio() = 0; // nullptr: sin audio
 };
@@ -96,6 +97,7 @@ public:
         : m_test(test), m_rate(rate), m_a(test.pathA), m_b(test.pathB) {}
 
     std::int64_t length() const override { return m_test.layout.length(); }
+    FrameRate rate() const override { return m_rate; }
 
     CompositorInput at(std::int64_t frame) override {
         const auto at = m_test.layout.at(frame);
@@ -131,22 +133,28 @@ private:
 };
 
 // Línea de tiempo de un proyecto: las pistas de video visibles, una encima de otra,
-// sobre negro, con sus transiciones.
+// sobre negro, con sus transiciones. Si se exporta a otro tamaño (con la misma forma),
+// las posiciones, que están en píxeles del lienzo, se escalan.
 class TimelineFrames : public FrameSource {
 public:
-    explicit TimelineFrames(Project project) : m_project(std::move(project)) {}
+    TimelineFrames(Project project, QSize outputSize)
+        : m_project(std::move(project)),
+          m_scale(m_project.settings.width > 0
+                      ? static_cast<double>(outputSize.width()) / m_project.settings.width
+                      : 1.0) {}
 
     std::int64_t length() const override { return m_project.length(); }
+    FrameRate rate() const override { return m_project.settings.frameRate; }
 
     CompositorInput at(std::int64_t frame) override {
         CompositorInput input;
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
             CompositorLayer& out = input.layers.emplace_back();
             out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
-            out.transform = layer.clip->transform;
+            out.transform = scaled(layer.clip->transform);
             if (layer.transition) {
                 out.b = reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
-                out.transformB = layer.clipB->transform;
+                out.transformB = scaled(layer.clipB->transform);
                 out.transition = layer.transition->params;
                 out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);
             }
@@ -163,6 +171,12 @@ public:
     }
 
 private:
+    ClipTransform scaled(ClipTransform t) const {
+        t.x *= m_scale;
+        t.y *= m_scale;
+        return t;
+    }
+
     // Un lector por pista, archivo y papel (0: el clip que se ve o el saliente de una
     // transición; 1: el entrante). Así dos pistas con el mismo video, o una transición
     // entre dos trozos del mismo VOD, no obligan a saltar de un sitio a otro del archivo
@@ -196,9 +210,28 @@ private:
     static constexpr std::size_t kMaxOpen = 8;
 
     Project m_project;
+    double m_scale = 1.0;
     std::vector<Entry> m_readers;
     std::uint64_t m_clock = 0;
 };
+
+// `file`, o "nombre (2).ext", "nombre (3).ext"… si ya existe.
+std::filesystem::path availablePath(const std::filesystem::path& file) {
+    std::error_code ignored;
+    if (!std::filesystem::exists(file, ignored)) {
+        return file;
+    }
+    const std::u8string stem = file.stem().u8string();
+    const std::u8string extension = file.extension().u8string();
+    for (int n = 2;; ++n) {
+        const std::string suffix = " (" + std::to_string(n) + ")";
+        std::filesystem::path candidate =
+            file.parent_path() / (stem + std::u8string(suffix.begin(), suffix.end()) + extension);
+        if (!std::filesystem::exists(candidate, ignored)) {
+            return candidate;
+        }
+    }
+}
 
 } // namespace
 
@@ -215,13 +248,18 @@ void SequenceExporter::cancel() {
 }
 
 void SequenceExporter::run() {
-    auto finish = [this](bool ok, const std::string& message, const std::string& encoder) {
+    std::filesystem::path output(std::u8string(m_job.outputPath.begin(), m_job.outputPath.end()));
+    if (!m_job.overwrite) {
+        output = availablePath(output);
+    }
+    const std::u8string written = output.u8string();
+    const std::string writtenPath(written.begin(), written.end());
+    auto finish = [this, &writtenPath](bool ok, const std::string& message,
+                                       const std::string& encoder) {
         if (m_callbacks.finished) {
-            m_callbacks.finished(ok, message, encoder);
+            m_callbacks.finished(ok, message, encoder, writtenPath);
         }
     };
-    const std::filesystem::path output(
-        std::u8string(m_job.outputPath.begin(), m_job.outputPath.end()));
     auto removeOutput = [&output] {
         std::error_code ignored;
         std::filesystem::remove(output, ignored);
@@ -242,23 +280,33 @@ void SequenceExporter::run() {
         if (const auto* test = std::get_if<TransitionTest>(&m_job.content)) {
             source = std::make_unique<TransitionFrames>(*test, m_job.rate);
         } else {
-            source = std::make_unique<TimelineFrames>(std::get<Project>(m_job.content));
+            source = std::make_unique<TimelineFrames>(std::get<Project>(m_job.content),
+                                                      m_job.canvasSize);
         }
-        const std::unique_ptr<AudioSource> audio = source->openAudio(); // nullptr: solo video
+        const std::int64_t length = source->length();
+        const std::int64_t end = m_job.rangeEnd < 0 ? length : std::min(m_job.rangeEnd, length);
+        const ExportTiming timing{source->rate(), m_job.rate,
+                                  std::clamp<std::int64_t>(m_job.rangeStart, 0, end), end};
+        const std::int64_t total = timing.frameCount();
+        if (total <= 0) {
+            throw std::runtime_error("No hay nada que exportar");
+        }
+        // nullptr: solo video
+        const std::unique_ptr<AudioSource> audio = m_job.audio ? source->openAudio() : nullptr;
+        if (audio) {
+            audio->seekToSample(timing.audioStart());
+        }
 
         EncoderSettings settings;
         settings.width = m_job.canvasSize.width();
         settings.height = m_job.canvasSize.height();
         settings.rate = m_job.rate;
         settings.audio = audio != nullptr;
+        settings.audioBitrate = m_job.audioBitrate;
+        settings.codec = m_job.codec;
         settings.videoBitrate = m_job.videoBitrate;
-        Mp4Writer writer(m_job.outputPath, settings);
+        Mp4Writer writer(writtenPath, settings);
         encoder = writer.videoEncoderName();
-
-        const std::int64_t total = source->length();
-        if (total <= 0) {
-            throw std::runtime_error("No hay nada que exportar");
-        }
         const bool flipRows = rhi->isYUpInFramebuffer(); // OpenGL: filas de abajo arriba
         std::vector<float> samples;
         std::int64_t audioWritten = 0;
@@ -271,7 +319,7 @@ void SequenceExporter::run() {
                 return;
             }
 
-            const CompositorInput input = source->at(frame);
+            const CompositorInput input = source->at(timing.sequenceFrame(frame));
 
             QRhiCommandBuffer* cb = nullptr;
             if (rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess) {
@@ -296,8 +344,7 @@ void SequenceExporter::run() {
 
             // Audio hasta el final de este fotograma.
             if (audio) {
-                const std::int64_t until =
-                    rescale(frame + 1, m_job.rate.frameDuration(), kAudioSampleDuration);
+                const std::int64_t until = timing.audioSamplesBefore(frame + 1);
                 const auto count = static_cast<std::size_t>(until - audioWritten);
                 samples.resize(count * kAudioChannels);
                 const std::size_t got = audio->read(samples.data(), count);

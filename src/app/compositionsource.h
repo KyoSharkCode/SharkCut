@@ -5,8 +5,7 @@
 #include <QObject>
 #include <QSize>
 
-// Algo que el visor puede mostrar: un reproductor de un clip (Player) o la
-// secuencia de prueba de transiciones (TransitionLab).
+// Algo que el visor puede mostrar: hoy, la secuencia activa del editor (Editor).
 class CompositionSource : public QObject {
     Q_OBJECT
 

@@ -31,6 +31,7 @@ include(json)
 add_subdirectory(src/core)
 add_subdirectory(src/media)
 add_subdirectory(src/audio)
+add_subdirectory(tools/bench)
 
 if(SHARKCUT_BUILD_APP)
     # GuiPrivate: cabeceras de QRhi (rhi/qrhi.h), la capa gráfica que usa el visor.

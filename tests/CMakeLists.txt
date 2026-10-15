@@ -18,6 +18,7 @@ add_executable(sharkcut_tests
     test_audio.cpp
     test_transition.cpp
     test_export.cpp
+    test_export_settings.cpp
     test_timeline.cpp
     test_project_file.cpp
     test_clip.h

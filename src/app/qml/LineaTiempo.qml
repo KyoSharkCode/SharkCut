@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Shapes
 import SharkCut
 
 // Línea de tiempo del editor: herramientas en vertical a la izquierda, regla y pistas
@@ -11,14 +12,18 @@ import SharkCut
 // previa; la edición se aplica al soltar, como un único paso de deshacer.
 //
 // Cabecera de cada pista: ocultar (video) o silenciar (audio) y bloquear. Clic derecho:
-// añadir o quitar pistas. Rueda: desplazar en el tiempo; sobre las cabeceras o con Alt,
-// desplazar entre pistas; con Ctrl, zoom.
+// añadir o quitar pistas (y, sobre un hueco, cerrarlo). Rueda: desplazar en el tiempo;
+// sobre las cabeceras o con Alt, desplazar entre pistas; con Ctrl, zoom.
+//
+// Regla: marcadores (M). Encima de la última pista de video y debajo de la última de
+// audio hay una zona vacía: soltar ahí un medio crea pistas nuevas para él.
 Rectangle {
     id: raiz
 
     required property Editor editor
     property string herramienta: "seleccion" // "seleccion" o "cuchilla"
     property bool iman: true                 // ajustar a bordes y cabezal al arrastrar
+    signal nuevaSecuencia()
 
     // Vista previa del arrastre en curso:
     // {tipo: "mover" | "inicio" | "final", grupo: [ids], delta, valor, pistas, video}
@@ -26,6 +31,9 @@ Rectangle {
     property var arrastre: null
     property real marcaSoltar: -1 // fotograma donde caería lo que se arrastra encima
     property int pistaSoltar: -1  // pista donde caería
+    // Zona vacía donde se suelta un medio para crear pistas nuevas: "", "video" (encima de
+    // la última de video) o "audio" (debajo de la última de audio).
+    property string zonaNueva: ""
     property var corteSoltar: null // {track, cut} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
@@ -39,6 +47,10 @@ Rectangle {
     readonly property int separacionGrupos: 10 // entre las pistas de video y las de audio
     readonly property int filasVisibles: 6      // más pistas: desplazamiento vertical
     readonly property int anchoCabecera: 92
+    // Zona vacía encima y debajo de las pistas (soltar ahí crea pistas nuevas; debajo
+    // vale también todo el espacio libre hasta el final de la vista).
+    readonly property int bandaNueva: 30
+    readonly property int alturaPestanas: 30
 
     // Filas en pantalla, de arriba abajo: {pista, y} (y relativa a la primera fila).
     readonly property var filas: {
@@ -46,7 +58,7 @@ Rectangle {
         const videos = pistas.filter((p) => p.video).reverse()
         const audios = pistas.filter((p) => !p.video)
         const lista = []
-        let y = 0
+        let y = bandaNueva
         for (const p of videos) {
             lista.push({ pista: p, y: y })
             y += alturaPista + separacion
@@ -59,7 +71,7 @@ Rectangle {
         return lista
     }
     readonly property real altoPistas: filas.length > 0
-        ? filas[filas.length - 1].y + alturaPista : 0
+        ? filas[filas.length - 1].y + alturaPista + bandaNueva : 0
     readonly property real yPrimeraFila: alturaRegla + separacion
     readonly property var yPorPista: {
         const mapa = {}
@@ -73,7 +85,7 @@ Rectangle {
     border.color: zonaSoltar.containsDrag ? Theme.acento : Theme.borde
     // Alta para ver hasta `filasVisibles` pistas (más la barra de desplazamiento), y como
     // mínimo tanto como la barra de herramientas vertical.
-    implicitHeight: Math.max(yPrimeraFila
+    implicitHeight: Math.max(alturaPestanas + 4 + yPrimeraFila
                              + Math.min(altoPistas, filasVisibles * (alturaPista + separacion)
                                                     + separacionGrupos) + 20,
                              herramientas.implicitHeight) + 2 * Theme.margen
@@ -86,6 +98,18 @@ Rectangle {
 
     function yDePista(indice) {
         return yPrimeraFila + (yPorPista[indice] !== undefined ? yPorPista[indice] : 0)
+    }
+
+    // Zona de pistas nuevas bajo una coordenada y del contenido: "video", "audio" o "".
+    function zonaNuevaEn(yContenido) {
+        if (filas.length === 0)
+            return ""
+        const y = yContenido - yPrimeraFila
+        if (y < filas[0].y - separacion)
+            return "video"
+        if (y > filas[filas.length - 1].y + alturaPista + separacion)
+            return "audio"
+        return ""
     }
 
     // Pista (objeto de editor.tracks) bajo una coordenada y del contenido, o null.
@@ -101,25 +125,8 @@ Rectangle {
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a la x del
     // contenido, a menos de 60 píxeles: {track, cut}, o null.
     function corteCercano(pista, xContenido) {
-        const finales = {}
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            if (lista[i].track === pista)
-                finales[lista[i].start + lista[i].length] = true
-        }
-        let mejor = null
-        let distancia = 60
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (c.track !== pista || !finales[c.start])
-                continue
-            const d = Math.abs(c.start * escala - xContenido)
-            if (d < distancia) {
-                distancia = d
-                mejor = { track: pista, cut: c.start }
-            }
-        }
-        return mejor
+        const corte = editor.nearestCut(pista, Math.round(xContenido / escala), 60 / escala)
+        return corte.cut === undefined ? null : corte
     }
 
     // Índice de la pista `desplazamiento` posiciones más allá dentro de su tipo.
@@ -136,44 +143,14 @@ Rectangle {
     // Grupo de clips que se mueven juntos al arrastrar `clip`: la selección entera si
     // el clip está seleccionado, y siempre con sus enlazados.
     function grupoDe(clip) {
-        let ids = []
-        if (editor.selection.indexOf(clip.id) >= 0 || editor.selection.indexOf(clip.link) >= 0)
-            ids = editor.selection.slice()
-        else
-            ids = [clip.id]
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (ids.indexOf(c.id) >= 0 && c.link !== 0 && ids.indexOf(c.link) < 0)
-                ids.push(c.link)
-        }
-        return ids
+        return editor.clipGroup(clip.id)
     }
 
-    // Imán: el borde o cabezal más cercano a `frame` (a menos de 8 píxeles).
+    // Imán: el borde, marcador o cabezal más cercano a `frame` (a menos de 8 píxeles).
     function ajustar(frame, excluir) {
         if (!iman)
             return frame
-        let mejor = frame
-        let distancia = 8 / escala
-        const probar = (f) => {
-            const d = Math.abs(f - frame)
-            if (d <= distancia) {
-                distancia = d
-                mejor = f
-            }
-        }
-        probar(0)
-        probar(editor.currentFrame)
-        const lista = editor.clips
-        for (let i = 0; i < lista.length; ++i) {
-            const c = lista[i]
-            if (excluir.indexOf(c.id) >= 0)
-                continue
-            probar(c.start)
-            probar(c.start + c.length)
-        }
-        return mejor
+        return editor.snapFrame(frame, excluir, 8 / escala)
     }
 
     function zoomEn(factor, xVista) {
@@ -304,6 +281,40 @@ Rectangle {
             Layout.fillHeight: true
             spacing: 4
 
+            // Pestañas de las secuencias abiertas (de cualquier proyecto abierto)
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                Layout.preferredHeight: raiz.alturaPestanas
+                Layout.maximumHeight: raiz.alturaPestanas
+                spacing: 4
+                ListView {
+                    id: pestanas
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: contentWidth
+                    Layout.preferredHeight: raiz.alturaPestanas
+                    orientation: ListView.Horizontal
+                    spacing: 4
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: raiz.editor.tabs
+                    readonly property bool variosProyectos: raiz.editor.projects.length > 1
+                    delegate: PestanaSecuencia {
+                        required property var modelData
+                        pestana: modelData
+                        conProyecto: pestanas.variosProyectos
+                    }
+                }
+                BotonIcono {
+                    icono: "mas"
+                    ayuda: "Nueva secuencia"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.nuevaSecuencia()
+                }
+                Item { Layout.fillWidth: true }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -372,8 +383,8 @@ Rectangle {
                                                   * raiz.escala)
                     contentHeight: Math.max(height, raiz.yPrimeraFila + raiz.altoPistas + 4)
                     boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOn }
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ScrollBar.horizontal: BarraDesplazamiento {}
+                    ScrollBar.vertical: BarraDesplazamiento {}
 
                     Item {
                         id: contenido
@@ -388,38 +399,80 @@ Rectangle {
                                 y: raiz.yPrimeraFila + modelData.y
                                 width: contenido.width
                                 height: raiz.alturaPista
+                                readonly property color base: modelData.pista.video
+                                                              ? Theme.pistaVideo : Theme.pistaAudio
                                 color: raiz.pistaSoltar === modelData.pista.index
-                                       ? Qt.tint(Theme.fondo, Qt.rgba(Theme.acento.r, Theme.acento.g,
-                                                                      Theme.acento.b, 0.14))
-                                       : Theme.fondo
+                                       ? Qt.tint(base, Qt.rgba(Theme.acento.r, Theme.acento.g,
+                                                               Theme.acento.b, 0.14))
+                                       : base
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     onPressed: (m) => {
                                         raiz.editor.clearSelection()
                                         if (m.button === Qt.RightButton)
-                                            menuPista.abrir(parent.modelData.pista)
+                                            menuPista.abrir(parent.modelData.pista, raiz.frameEn(m.x))
                                     }
+                                }
+                            }
+                        }
+
+                        // Zonas vacías de arriba y de abajo: al arrastrar un medio encima se
+                        // ve que ahí se crea una pista nueva.
+                        Repeater {
+                            model: ["video", "audio"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                visible: raiz.zonaNueva === modelData
+                                x: vista.contentX + 4
+                                y: modelData === "video"
+                                   ? raiz.yPrimeraFila + 2
+                                   : raiz.yPrimeraFila + raiz.altoPistas - raiz.bandaNueva + raiz.separacion
+                                width: vista.width - 8
+                                height: modelData === "video"
+                                        ? raiz.bandaNueva - raiz.separacion - 2
+                                        : Math.max(raiz.bandaNueva - raiz.separacion - 2,
+                                                   vista.contentY + vista.height - y - 4)
+                                radius: 3
+                                color: Qt.rgba(Theme.acento.r, Theme.acento.g, Theme.acento.b, 0.12)
+                                border.color: Theme.acento
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.modelData === "video"
+                                          ? "Suelta aquí para crear una pista de video nueva"
+                                          : "Suelta aquí para crear una pista de audio nueva"
+                                    color: Theme.acento
+                                    font.pixelSize: Theme.tamTextoPequeno
                                 }
                             }
                         }
 
                         // Clips
                         Repeater {
-                            model: raiz.editor.clips
+                            // Solo los clips de la parte visible (más media pantalla a cada lado).
+                            model: TimelineClipsModel {
+                                editor: raiz.editor
+                                firstFrame: vista.contentX / raiz.escala
+                                lastFrame: (vista.contentX + vista.width) / raiz.escala
+                                pixelsPerFrame: raiz.escala
+                            }
                             delegate: Rectangle {
                                 id: elemento
 
-                                required property var modelData
+                                required property var datosClip
+                                readonly property var modelData: datosClip
+                                // Varios clips demasiado estrechos para verse (vista alejada):
+                                // una franja sin edición; al acercarse aparecen los clips.
+                                readonly property bool bloque: modelData.block === true
                                 readonly property bool esVideo: modelData.video
                                 readonly property var pista: raiz.editor.tracks[modelData.track]
                                 readonly property bool bloqueado: pista !== undefined && pista.locked
                                 readonly property bool apagado: pista !== undefined
                                     && (esVideo ? pista.hidden : pista.muted)
-                                readonly property bool seleccionado:
+                                readonly property bool seleccionado: !bloque && (
                                     raiz.editor.selection.indexOf(modelData.id) >= 0
                                     || (modelData.link !== 0
-                                        && raiz.editor.selection.indexOf(modelData.link) >= 0)
+                                        && raiz.editor.selection.indexOf(modelData.link) >= 0))
                                 readonly property bool enArrastre: raiz.arrastre !== null
                                     && raiz.arrastre.grupo.indexOf(modelData.id) >= 0
                                 readonly property real inicioVista: !enArrastre ? modelData.start
@@ -459,86 +512,119 @@ Rectangle {
                                 clip: true // el nombre no se sale del clip
 
                                 // Onda del audio: solo la parte visible del clip.
-                                WaveformView {
-                                    visible: !elemento.esVideo && width > 0
-                                    readonly property real izquierda:
-                                        Math.max(0, vista.contentX - elemento.x)
-                                    readonly property real derecha:
-                                        Math.min(elemento.width, vista.contentX + vista.width - elemento.x)
-                                    x: izquierda
-                                    y: 15
-                                    width: Math.max(0, derecha - izquierda)
-                                    height: elemento.height - 16
-                                    editor: raiz.editor
-                                    mediaId: elemento.modelData.media
-                                    firstFrame: elemento.entradaVista + izquierda / raiz.escala
-                                    framesPerPixel: 1 / raiz.escala
-                                    fps: raiz.editor.fps
-                                    gainDb: elemento.modelData.volumeDb
-                                    color: Theme.clipAudioClaro
+                                // (Se crea solo si se ve: con miles de clips, cada elemento cuenta.)
+                                Loader {
+                                    anchors.fill: parent
+                                    active: !elemento.esVideo && !elemento.bloque && elemento.width > 6
+                                    sourceComponent: Item {
+                                        WaveformView {
+                                            visible: width > 0
+                                            readonly property real izquierda:
+                                                Math.max(0, vista.contentX - elemento.x)
+                                            readonly property real derecha:
+                                                Math.min(elemento.width, vista.contentX + vista.width - elemento.x)
+                                            x: izquierda
+                                            y: 15
+                                            width: Math.max(0, derecha - izquierda)
+                                            height: elemento.height - 16
+                                            editor: raiz.editor
+                                            mediaId: elemento.modelData.media
+                                            firstFrame: elemento.entradaVista + izquierda / raiz.escala
+                                            framesPerPixel: 1 / raiz.escala
+                                            fps: raiz.editor.fps
+                                            gainDb: elemento.modelData.volumeDb
+                                            color: Theme.clipAudioClaro
 
-                                    // Mientras se calcula la onda (un VOD largo tarda unos segundos).
-                                    Row {
-                                        id: cargandoOnda
-                                        visible: parent.loading && parent.width > 40
-                                        x: 6
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        spacing: 6
-                                        Repeater {
-                                            model: 3
-                                            delegate: Rectangle {
-                                                required property int index
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: 3
-                                                height: 12
-                                                radius: 1
-                                                color: Theme.clipAudioClaro
-                                                SequentialAnimation on height {
-                                                    running: cargandoOnda.visible
-                                                    loops: Animation.Infinite
-                                                    PauseAnimation { duration: index * 120 }
-                                                    NumberAnimation { from: 4; to: 14; duration: 300; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 14; to: 4; duration: 300; easing.type: Easing.InOutQuad }
-                                                    PauseAnimation { duration: (2 - index) * 120 }
+                                            // Mientras se calcula la onda (un VOD largo tarda unos segundos).
+                                            Loader {
+                                                id: avisoOnda
+                                                active: parent.loading && parent.width > 40
+                                                anchors.fill: parent
+                                                sourceComponent: Item {
+                                                    Row {
+                                                        id: cargandoOnda
+                                                        x: 6
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        spacing: 6
+                                                        Repeater {
+                                                            model: 3
+                                                            delegate: Rectangle {
+                                                                required property int index
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                width: 3
+                                                                height: 12
+                                                                radius: 1
+                                                                color: Theme.clipAudioClaro
+                                                                SequentialAnimation on height {
+                                                                    running: true
+                                                                    loops: Animation.Infinite
+                                                                    PauseAnimation { duration: index * 120 }
+                                                                    NumberAnimation { from: 4; to: 14; duration: 300; easing.type: Easing.InOutQuad }
+                                                                    NumberAnimation { from: 14; to: 4; duration: 300; easing.type: Easing.InOutQuad }
+                                                                    PauseAnimation { duration: (2 - index) * 120 }
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            text: "Calculando la onda…"
+                                                            color: Theme.texto
+                                                            font.pixelSize: Theme.tamTextoPequeno
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: "Calculando la onda…"
-                                            color: Theme.texto
-                                            font.pixelSize: Theme.tamTextoPequeno
                                         }
                                     }
                                 }
 
-                                RowLayout {
+                                Loader {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    anchors.leftMargin: 5
-                                    anchors.rightMargin: 5
-                                    anchors.topMargin: 2
-                                    spacing: 4
-                                    visible: elemento.width > 30
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                    height: 18
+                                    active: elemento.width > 30 && !elemento.bloque
+                                    sourceComponent: RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 5
+                                        anchors.rightMargin: 5
+                                        anchors.topMargin: 2
+                                        spacing: 4
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            visible: !elemento.esVideo && elemento.modelData.volumeDb !== 0
+                                            text: raiz.textoVolumen(elemento.modelData.volumeDb)
+                                            color: Theme.texto
+                                            font.pixelSize: 10
+                                        }
+                                        Loader {
+                                            active: elemento.esVideo && elemento.modelData.transformed
+                                            visible: active
+                                            sourceComponent: Icono {
+                                                nombre: "rellenar"
+                                                tam: 11
+                                                color: Theme.texto
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Bloque de clips diminutos: cuántos son.
+                                Loader {
+                                    active: elemento.bloque && elemento.width > 160
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: Math.max(6, vista.contentX - elemento.x + 6)
+                                    sourceComponent: Text {
+                                        text: elemento.modelData.count + " clips · acércate para editarlos"
                                         color: Theme.texto
+                                        opacity: 0.7
                                         font.pixelSize: Theme.tamTextoPequeno
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        visible: !elemento.esVideo && elemento.modelData.volumeDb !== 0
-                                        text: raiz.textoVolumen(elemento.modelData.volumeDb)
-                                        color: Theme.texto
-                                        font.pixelSize: 10
-                                    }
-                                    Icono {
-                                        visible: elemento.esVideo && elemento.modelData.transformed
-                                        nombre: "rellenar"
-                                        tam: 11
-                                        color: Theme.texto
                                     }
                                 }
 
@@ -554,7 +640,7 @@ Rectangle {
                                 MouseArea {
                                     id: cuerpo
                                     anchors.fill: parent
-                                    enabled: !elemento.bloqueado
+                                    enabled: !elemento.bloqueado && !elemento.bloque
                                     preventStealing: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: raiz.herramienta === "cuchilla" ? Qt.IBeamCursor
@@ -593,15 +679,9 @@ Rectangle {
                                             return
                                         const c = elemento.modelData
                                         const grupo = raiz.grupoDe(c)
-                                        let inicio = Number.MAX_VALUE
-                                        let fin = 0
-                                        const lista = raiz.editor.clips
-                                        for (let i = 0; i < lista.length; ++i) {
-                                            if (grupo.indexOf(lista[i].id) >= 0) {
-                                                inicio = Math.min(inicio, lista[i].start)
-                                                fin = Math.max(fin, lista[i].start + lista[i].length)
-                                            }
-                                        }
+                                        const tramo = raiz.editor.groupRange(grupo)
+                                        const inicio = tramo.start
+                                        const fin = tramo.end
                                         let delta = Math.round(dx / raiz.escala)
                                         // Imán: el borde (inicial o final) más cercano manda.
                                         const porInicio = raiz.ajustar(inicio + delta, grupo) - inicio
@@ -632,7 +712,7 @@ Rectangle {
 
                                 // Bordes: recortar el inicio o el final.
                                 Repeater {
-                                    model: ["inicio", "final"]
+                                    model: elemento.bloque || elemento.width < 6 ? [] : ["inicio", "final"]
                                     delegate: MouseArea {
                                         id: borde
                                         required property string modelData
@@ -642,6 +722,7 @@ Rectangle {
                                         anchors.left: lado === "inicio" ? elemento.left : undefined
                                         anchors.right: lado === "final" ? elemento.right : undefined
                                         visible: raiz.herramienta === "seleccion" && !elemento.bloqueado
+                                                 && !elemento.bloque
                                         preventStealing: true
                                         hoverEnabled: true
                                         cursorShape: Qt.SizeHorCursor
@@ -835,7 +916,7 @@ Rectangle {
                             id: zonaSoltar
                             y: raiz.yPrimeraFila - raiz.separacion
                             width: parent.width
-                            height: raiz.altoPistas + 2 * raiz.separacion
+                            height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
                             keys: ["sharkcut/medio", "sharkcut/transicion", "text/uri-list"]
                             function esTransicion(d) {
                                 return d.keys.indexOf("sharkcut/transicion") >= 0
@@ -848,6 +929,7 @@ Rectangle {
                                 }
                                 raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
                                 raiz.pistaSoltar = p ? p.index : -1
+                                raiz.zonaNueva = p ? "" : raiz.zonaNuevaEn(d.y + y)
                             }
                             onPositionChanged: (d) => actualizar(d)
                             onEntered: (d) => actualizar(d)
@@ -855,15 +937,18 @@ Rectangle {
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
                                 raiz.corteSoltar = null
+                                raiz.zonaNueva = ""
                             }
                             onDropped: (d) => {
                                 const f = raiz.ajustar(raiz.frameEn(d.x), [])
                                 const p = raiz.pistaEnY(d.y + y)
-                                const pista = p ? p.index : -1
+                                // En la zona vacía de arriba o de abajo: pistas nuevas.
+                                const pista = p ? p.index : raiz.zonaNuevaEn(d.y + y) !== "" ? -2 : -1
                                 const corte = raiz.corteSoltar
                                 raiz.marcaSoltar = -1
                                 raiz.pistaSoltar = -1
                                 raiz.corteSoltar = null
+                                raiz.zonaNueva = ""
                                 if (esTransicion(d)) {
                                     if (corte !== null && d.source)
                                         Qt.callLater(raiz.editor.addTransition, corte.track, corte.cut,
@@ -941,6 +1026,107 @@ Rectangle {
                                         raiz.editor.seek(raiz.frameEn(m.x))
                                 }
                             }
+
+                            // Marcadores (M): clic para ir, arrastrar para moverlo, doble clic
+                            // para ponerle nombre y clic derecho para su menú.
+                            Repeater {
+                                model: raiz.editor.markers
+                                delegate: Item {
+                                    id: marcador
+                                    required property var modelData
+                                    property real arrastre: -1 // fotograma mientras se arrastra
+                                    readonly property real fotograma: arrastre >= 0 ? arrastre
+                                                                                    : modelData.frame
+                                    x: fotograma * raiz.escala - 6
+                                    y: regla.height - 14
+                                    width: 12
+                                    height: 14
+                                    z: 2
+                                    Shape {
+                                        anchors.fill: parent
+                                        preferredRendererType: Shape.CurveRenderer
+                                        ShapePath {
+                                            strokeColor: Theme.visorFondo
+                                            strokeWidth: 1
+                                            fillColor: Theme.marcador
+                                            startX: 0; startY: 0
+                                            PathLine { x: 12; y: 0 }
+                                            PathLine { x: 12; y: 8 }
+                                            PathLine { x: 6; y: 14 }
+                                            PathLine { x: 0; y: 8 }
+                                            PathLine { x: 0; y: 0 }
+                                        }
+                                    }
+                                    Text {
+                                        visible: marcador.modelData.name.length > 0
+                                        x: 14
+                                        y: -1
+                                        text: marcador.modelData.name
+                                        color: Theme.marcador
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        id: zonaMarcador
+                                        anchors.fill: parent
+                                        anchors.margins: -3
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        cursorShape: Qt.PointingHandCursor
+                                        property real inicioX: 0
+                                        onPressed: (m) => {
+                                            if (m.button === Qt.RightButton) {
+                                                menuMarcador.abrir(marcador.modelData)
+                                                return
+                                            }
+                                            inicioX = mapToItem(regla, m.x, m.y).x
+                                        }
+                                        onPositionChanged: (m) => {
+                                            if (!(pressedButtons & Qt.LeftButton))
+                                                return
+                                            const xr = mapToItem(regla, m.x, m.y).x
+                                            if (marcador.arrastre < 0 && Math.abs(xr - inicioX) < 4)
+                                                return
+                                            marcador.arrastre = raiz.ajustar(raiz.frameEn(xr), [])
+                                        }
+                                        onReleased: (m) => {
+                                            if (m.button !== Qt.LeftButton)
+                                                return
+                                            if (marcador.arrastre >= 0) {
+                                                const destino = marcador.arrastre
+                                                marcador.arrastre = -1
+                                                raiz.editor.moveMarker(marcador.modelData.id, destino)
+                                            } else {
+                                                raiz.editor.pause()
+                                                raiz.editor.seek(marcador.modelData.frame)
+                                            }
+                                        }
+                                        onDoubleClicked: (m) => {
+                                            if (m.button === Qt.LeftButton)
+                                                menuMarcador.renombrar(marcador.modelData)
+                                        }
+                                    }
+                                    ToolTip {
+                                        id: ayudaMarcador
+                                        visible: zonaMarcador.containsMouse && marcador.arrastre < 0
+                                        delay: 400
+                                        text: (marcador.modelData.name.length > 0 ? marcador.modelData.name
+                                                                                  : "Marcador")
+                                              + " · " + raiz.editor.timecodeFor(marcador.modelData.frame)
+                                        contentItem: Text {
+                                            text: ayudaMarcador.text
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                        }
+                                        background: Rectangle {
+                                            color: Theme.panelElevado
+                                            border.color: Theme.borde
+                                            radius: 4
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Cabezal de reproducción
@@ -972,8 +1158,11 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: raiz.editor.frameCount === 0
                 horizontalAlignment: Text.AlignHCenter
-                text: "Arrastra medios desde la biblioteca (o archivos desde el explorador) a una pista: "
-                      + "el video a V1, la facecam a V2, la música a A2…"
+                text: !raiz.editor.hasSequence
+                      ? "No hay ninguna secuencia abierta: abre una desde Medios (doble clic) o crea "
+                        + "una nueva con «+»."
+                      : "Arrastra medios desde la biblioteca (o archivos desde el explorador) a una pista: "
+                        + "el video a V1, la facecam a V2, la música a A2…"
                 color: Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
                 elide: Text.ElideRight
@@ -1004,12 +1193,24 @@ Rectangle {
     MenuTema {
         id: menuPista
         property var pista: null
-        function abrir(p) {
+        property real fotograma: -1 // dónde se hizo clic (-1: en la cabecera)
+        property bool hayHueco: false
+        function abrir(p, frame) {
             pista = p
+            fotograma = frame === undefined ? -1 : frame
+            hayHueco = fotograma >= 0 && raiz.editor.hasGapAt(p.index, fotograma)
             popup()
         }
         readonly property int delMismoTipo: pista === null ? 0
             : raiz.editor.tracks.filter((t) => t.video === pista.video).length
+        Action {
+            text: "Cerrar este hueco"
+            enabled: menuPista.hayHueco
+            onTriggered: raiz.editor.closeGap(menuPista.pista.index, menuPista.fotograma)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
         Action {
             text: "Añadir pista de video"
             onTriggered: raiz.editor.addTrack("video")
@@ -1027,6 +1228,38 @@ Rectangle {
                     + (menuPista.pista.empty ? "" : " y sus clips")
             enabled: menuPista.delMismoTipo > 1
             onTriggered: raiz.editor.removeTrack(menuPista.pista.index)
+        }
+    }
+
+    MenuTema {
+        id: menuMarcador
+        property var marcador: null
+        function abrir(m) {
+            marcador = m
+            popup()
+        }
+        function renombrar(m) {
+            const id = m.id
+            dialogoNombre.pedir("Nombre del marcador", m.name, "Aceptar",
+                                (nombre) => raiz.editor.renameMarker(id, nombre))
+        }
+        Action {
+            text: "Ir al marcador"
+            onTriggered: {
+                raiz.editor.pause()
+                raiz.editor.seek(menuMarcador.marcador.frame)
+            }
+        }
+        Action {
+            text: "Ponerle nombre…"
+            onTriggered: menuMarcador.renombrar(menuMarcador.marcador)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: "Quitar el marcador"
+            onTriggered: raiz.editor.removeMarker(menuMarcador.marcador.id)
         }
     }
 
@@ -1060,8 +1293,12 @@ Rectangle {
             onTriggered: raiz.editor.splitAtPlayhead()
         }
         Action {
-            text: "Quitar"
+            text: "Quitar (deja el hueco)"
             onTriggered: raiz.editor.removeSelection()
+        }
+        Action {
+            text: "Eliminar con rizo (Mayús+Supr)"
+            onTriggered: raiz.editor.rippleDeleteSelection()
         }
     }
 
@@ -1086,31 +1323,91 @@ Rectangle {
         }
     }
 
-    component MenuTema: Menu {
-        id: menu
-        padding: 4
-        background: Rectangle {
-            implicitWidth: 230
-            color: Theme.panelElevado
-            border.color: Theme.borde
-            radius: 4
-        }
-        delegate: MenuItem {
-            id: opcion
-            implicitHeight: 28
-            contentItem: Text {
-                leftPadding: 6
-                text: opcion.text
-                color: opcion.enabled ? Theme.texto : Theme.textoDesactivado
-                font.pixelSize: Theme.tamTexto
-                verticalAlignment: Text.AlignVCenter
+    // Pestaña de una secuencia abierta: clic para verla, doble clic para renombrarla.
+    component PestanaSecuencia: Rectangle {
+        id: tab
+        property var pestana
+        property bool conProyecto: false
+        readonly property bool activa: pestana.active
+        width: filaTab.implicitWidth + 18
+        height: pestanas.height
+        radius: Theme.radio
+        color: activa ? Theme.panelElevado : zonaTab.containsMouse ? Theme.fondo : "transparent"
+        border.color: activa ? Theme.acento : Theme.borde
+        MouseArea {
+            id: zonaTab
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: (m) => {
+                if (m.button === Qt.MiddleButton)
+                    raiz.editor.closeTab(tab.pestana.index)
+                else
+                    raiz.editor.activateTab(tab.pestana.index)
             }
-            background: Rectangle {
+            onDoubleClicked: (m) => {
+                if (m.button !== Qt.LeftButton)
+                    return
+                raiz.editor.activateTab(tab.pestana.index)
+                const id = tab.pestana.sequence
+                dialogoNombre.pedir("Renombrar secuencia", tab.pestana.name, "Renombrar",
+                                    (nombre) => raiz.editor.renameSequence(id, nombre))
+            }
+        }
+        Row {
+            id: filaTab
+            x: 9
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+            Icono {
+                anchors.verticalCenter: parent.verticalCenter
+                nombre: "secuencia"
+                tam: 13
+                color: tab.activa ? Theme.acento : Theme.textoSecundario
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: tab.conProyecto
+                text: tab.pestana.projectName + " ›"
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: tab.pestana.name
+                color: tab.activa ? Theme.texto : Theme.textoSecundario
+                font.pixelSize: Theme.tamTexto
+                font.bold: tab.activa
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: tab.pestana.canvas
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 18
+                height: 18
                 radius: 3
-                color: opcion.highlighted ? Theme.borde : "transparent"
+                color: zonaCerrarTab.containsMouse ? Theme.borde : "transparent"
+                Icono {
+                    anchors.centerIn: parent
+                    nombre: "cerrar"
+                    tam: 11
+                    color: zonaCerrarTab.containsMouse ? Theme.texto : Theme.textoDesactivado
+                }
+                MouseArea {
+                    id: zonaCerrarTab
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: raiz.editor.closeTab(tab.pestana.index)
+                }
             }
         }
     }
+
+    DialogoNombre { id: dialogoNombre }
 
     // Cabecera de una pista: nombre, ocultar o silenciar, y bloquear.
     component CabeceraPista: Rectangle {
@@ -1118,8 +1415,19 @@ Rectangle {
         property var pista
         width: raiz.anchoCabecera - 6
         radius: 3
-        color: Theme.panelElevado
+        color: pista.video ? Theme.cabeceraVideo : Theme.cabeceraAudio
         border.color: Theme.borde
+
+        // Franja del color del tipo de pista
+        Rectangle {
+            x: 1
+            y: 4
+            width: 3
+            height: parent.height - 8
+            radius: 1.5
+            color: cabecera.pista.video ? Theme.clipVideoClaro : Theme.clipAudioClaro
+            opacity: 0.8
+        }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter

@@ -92,12 +92,16 @@ void WaveformCache::setDirectory(const QString& directory) {
         return;
     }
     m_directory = directory;
+}
+
+void WaveformCache::saveTo(const QString& directory, const QStringList& mediaPaths) {
     if (directory.isEmpty()) {
         return;
     }
-    for (const auto& [path, entry] : m_entries) {
-        if (entry.waveform) {
-            save(path, entry.waveform);
+    for (const QString& path : mediaPaths) {
+        const auto it = m_entries.find(path);
+        if (it != m_entries.end() && it->second.waveform) {
+            save(directory, path, it->second.waveform);
         }
     }
 }
@@ -107,8 +111,8 @@ bool WaveformCache::pending(const QString& mediaPath) const {
     return it != m_entries.end() && it->second.pending;
 }
 
-void WaveformCache::save(const QString& path, std::shared_ptr<const sharkcut::Waveform> waveform) {
-    const QString directory = m_directory;
+void WaveformCache::save(const QString& directory, const QString& path,
+                         std::shared_ptr<const sharkcut::Waveform> waveform) {
     m_pool.start([path, directory, waveform] {
         const std::filesystem::path file = cacheFile(directory, path);
         std::error_code ignored;

@@ -11,8 +11,8 @@
 // - Colocar o mover un clip sobrescribe lo que hubiera debajo (como el modo
 //   "sobrescribir" de Premiere): los clips tapados se recortan, se parten o se quitan.
 //   Si un clip enlazado queda tapado solo en una de sus pistas, deja de estar enlazado.
-// - Quitar o mover un clip deja un hueco; no se desplaza el resto (eso es la
-//   eliminación con rizo, prevista para la fase 4).
+// - Quitar o mover un clip deja un hueco; no se desplaza el resto. Las operaciones
+//   "con rizo" (rippleTrim*, rippleDelete, closeGap) sí cierran el hueco.
 // - Las pistas bloqueadas no cambian: sus clips no se mueven, recortan, dividen ni
 //   quitan, y no se puede colocar nada en ellas.
 
@@ -20,6 +20,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace sharkcut {
@@ -104,6 +106,57 @@ bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
 
 // Separa los clips de sus enlazados: a partir de ahí se editan por separado.
 bool unlinkClips(Project& project, const std::vector<ObjectId>& clips);
+
+// --- Edición con rizo ---
+//
+// Como en Premiere con "bloqueo de sincronización": al cerrar un hueco se desplaza todo
+// lo que hay después en todas las pistas no bloqueadas (así el audio y la facecam siguen
+// sincronizados con el video). Las bloqueadas no se mueven. Los marcadores también se
+// desplazan.
+
+// Bordes de clip (inicios y finales) de las pistas no bloqueadas más cercanos a `frame`:
+// el último antes (0 si no hay) y el primero después (nada si no hay).
+std::int64_t previousEdit(const Project& project, std::int64_t frame);
+std::optional<std::int64_t> nextEdit(const Project& project, std::int64_t frame);
+
+// Quita el tramo [from, to) de todas las pistas no bloqueadas (partiendo los clips que lo
+// cruzan) y trae todo lo posterior `to - from` fotogramas hacia atrás.
+bool extractRange(Project& project, std::int64_t from, std::int64_t to);
+
+// Q: quita desde el borde anterior hasta el cabezal y cierra el hueco.
+// W: quita desde el cabezal hasta el borde siguiente y cierra el hueco.
+bool rippleTrimPrevious(Project& project, std::int64_t frame);
+bool rippleTrimNext(Project& project, std::int64_t frame);
+
+enum class RippleResult {
+    Nothing, // no había nada que hacer
+    Closed,  // hecho, con el hueco cerrado
+    Blocked, // (eliminar con rizo) se quitaron los clips, pero algún hueco no se pudo
+             // cerrar porque otras pistas tienen clips en ese tramo
+};
+
+// Quita los clips (y sus enlazados) y cierra los huecos que dejan, si en ese tramo no
+// queda nada en ninguna pista no bloqueada.
+RippleResult rippleDelete(Project& project, const std::vector<ObjectId>& clips);
+
+// Hueco de la pista que contiene `frame`: entre el clip anterior (o el 0) y el
+// siguiente. Nada si ahí hay un clip o si después no hay ninguno.
+struct Gap {
+    std::int64_t start = 0;
+    std::int64_t end = 0;
+};
+std::optional<Gap> gapAt(const Project& project, std::size_t track, std::int64_t frame);
+
+// Cierra el hueco de la pista en `frame` (Blocked si otras pistas tienen clips en él).
+RippleResult closeGap(Project& project, std::size_t track, std::int64_t frame);
+
+// --- Marcadores ---
+
+// Añade un marcador en `frame` (0 si ya hay uno ahí). Devuelve su id.
+ObjectId addMarker(Project& project, std::int64_t frame, std::string name = {});
+bool removeMarker(Project& project, ObjectId marker);
+bool renameMarker(Project& project, ObjectId marker, std::string name);
+bool moveMarker(Project& project, ObjectId marker, std::int64_t frame);
 
 // --- Transiciones ---
 //

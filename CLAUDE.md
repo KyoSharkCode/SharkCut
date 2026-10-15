@@ -16,7 +16,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 3, que abre la 1 y la 2).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 4, que abre la 1, la 2
+  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4).
+  Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
 
@@ -30,30 +32,48 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/core también: proyecto y línea de tiempo (project.h: pistas en número variable,
   primero las de video de V1 hacia arriba y después las de audio; transformación y
   volumen por clip; transiciones en los cortes de las pistas de video, que usan el
-  material sobrante del medio sin mover los clips), operaciones de edición (edit.h,
-  que mantienen coherentes enlaces y transiciones), deshacer/rehacer (history.h: cada
+  material sobrante del medio sin mover los clips; marcadores), operaciones de edición
+  (edit.h, que mantienen coherentes enlaces y transiciones; también las de rizo: Q/W,
+  eliminar con rizo, cerrar hueco), deshacer/rehacer (history.h: cada
   edición se aplica a una copia del proyecto) y el archivo .sharkp (project_file.h, con
   nlohmann/json).
+  src/core también: document.h, el proyecto completo (medios, carpetas y varias
+  secuencias, cada una con su lienzo, fps y pistas). Las operaciones de edit.h trabajan
+  sobre un `Project`, que es la vista de una secuencia (`Document::view`/`store`); el
+  historial de cada proyecto abierto es un `DocumentHistory`.
   src/media también: AudioSource, SequenceAudioSource (mezcla A/B con fundido).
   src/render (Qt Gui, sin Quick): Compositor QRhi (capas de abajo arriba, cada una con
   posición, escala, opacidad y recorte, o dos clips con transición → lienzo →
   presentación) y sus shaders; lo usan el visor y la exportación (mismo motor).
-  src/app: Player (origen, marcas I/O), TransitionLab (secuencia de prueba),
-  PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem + Compositor).
-  src/media también: Mp4Writer (H.264 por hardware con respaldo x264 + AAC),
+  src/app: PlaybackClock (reloj audio/temporizador), VideoViewer (QQuickRhiItem +
+  Compositor).
+  src/core también: export_settings.h (tramo y fps de la exportación, resoluciones y
+  tasas recomendadas) y parseTimecode en time.h.
+  src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
+  proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
+  src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
   TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
   caché en disco).
-  src/app también: Editor (proyecto + historial, herramientas y reproducción de la línea
-  de tiempo); interfaz en qml/LineaTiempo.qml, qml/PanelMedios.qml y los diálogos
-  qml/Dialogo*.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  src/app también: Editor (proyectos abiertos con su historial, pestañas de secuencias,
+  herramientas, reproducción de la secuencia activa, exportación y recientes; los
+  ajustes de la app van en QSettings). Interfaz: pestañas superiores Proyectos
+  (qml/PaginaProyectos.qml), Editor (qml/PanelMedios.qml con qml/PanelBiblioteca.qml ·
+  qml/PanelPropiedades.qml · Programa, y qml/LineaTiempo.qml) y Exportar
+  (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
+  Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
+  (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.
+  tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
+  edición de una línea de tiempo grande (sin Qt).
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
-  Iconos: qml/Icono.qml (trazos SVG dibujados con QtQuick.Shapes); añadir los nuevos ahí.
+  Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
+  añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
   (útil para revisar cambios en transition.frag); con --export exporta como la app y
-  con --export-project exporta la línea de tiempo de un .sharkp.
+  con --export-project exporta la secuencia activa de un .sharkp (con --escala, --fps,
+  --desde/--hasta, --h265, --sin-audio, --mbps).
   En Linux sin pantalla, ejecutar con xvfb-run.
 - Formato de audio interno: float estéreo intercalado a 48 kHz; la muestra 0 es el
   primer fotograma del video. El reloj de reproducción lo marca el audio.

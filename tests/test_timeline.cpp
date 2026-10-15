@@ -1,3 +1,4 @@
+#include "core/document.h"
 #include "core/edit.h"
 #include "core/history.h"
 #include "core/project.h"
@@ -719,4 +720,240 @@ TEST_CASE("Transition sounds go to a free audio track", "[timeline][transitions]
     REQUIRE(removeTransition(p, t));
     CHECK(p.clip(again) == nullptr);
     checkInvariants(p);
+}
+
+// --- Documentos: secuencias y carpetas --------------------------------------------------
+
+TEST_CASE("Sequences share the media of their project", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 10, true, true));
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    ProjectSettings vertical;
+    vertical.width = 1080;
+    vertical.height = 1920;
+    const ObjectId shortId = addSequence(d, "Short", vertical);
+    CHECK(d.sequence(shortId)->tracks.size() == 4); // V1, V2, A1, A2
+
+    // Editar una secuencia no toca la otra.
+    REQUIRE(edit(d, vod, [m](Project& p) { return placeClip(p, m, 0) != 0; }));
+    REQUIRE(edit(d, shortId, [m](Project& p) { return placeClip(p, m, 100, 0, 60) != 0; }));
+    CHECK(d.view(vod).length() == 600);
+    CHECK(d.view(shortId).length() == 160);
+    CHECK(d.view(shortId).settings.height == 1920);
+    CHECK_FALSE(edit(d, 12345, [](Project&) { return true; }));
+
+    // Los ids no se repiten entre secuencias.
+    const Project a = d.view(vod);
+    const Project b = d.view(shortId);
+    for (const Track& ta : a.tracks) {
+        for (const Clip& c : ta.clips) {
+            CHECK(b.clip(c.id) == nullptr);
+        }
+    }
+
+    // Quitar el medio lo quita de todas (también de pistas bloqueadas, que siguen así).
+    REQUIRE(edit(d, shortId, [](Project& p) { return setTrackLocked(p, kVideoTrack, true); }));
+    REQUIRE(removeMediaEverywhere(d, m));
+    CHECK(d.sequence(shortId)->tracks[kVideoTrack].locked);
+    CHECK(d.media.empty());
+    CHECK(d.view(vod).length() == 0);
+    CHECK(d.view(shortId).length() == 0);
+}
+
+TEST_CASE("Duplicated sequences get fresh ids and keep links and transitions", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 20, true, true));
+    placeClip(base, m, 0, 0, 300);
+    placeClip(base, m, 300, 400, 200);
+    const ObjectId t = addTransition(base, kVideoTrack, 300, TransitionParams{});
+    REQUIRE(t != 0);
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    const ObjectId copy = duplicateSequence(d, vod, "Vertical", std::pair{1080, 1920});
+    REQUIRE(copy != 0);
+    const Project original = d.view(vod);
+    const Project dup = d.view(copy);
+    CHECK(dup.settings.width == 1080);
+    CHECK(dup.settings.height == 1920);
+    CHECK(dup.length() == original.length());
+    for (const Track& track : dup.tracks) {
+        for (const Clip& c : track.clips) {
+            CHECK(original.clip(c.id) == nullptr);
+            if (c.link != 0) {
+                CHECK(dup.clip(c.link) != nullptr);
+            }
+        }
+    }
+    REQUIRE(dup.tracks[kVideoTrack].transitions.size() == 1);
+    const Transition& dt = dup.tracks[kVideoTrack].transitions.front();
+    CHECK(dt.id != t);
+    CHECK(dup.clip(dt.from) != nullptr);
+    CHECK(dup.cutOf(dt) == 300);
+
+    CHECK(renameSequence(d, copy, "Short vertical"));
+    CHECK(d.sequence(copy)->name == "Short vertical");
+    CHECK(removeSequence(d, copy));
+    CHECK_FALSE(removeSequence(d, vod)); // siempre queda una
+}
+
+TEST_CASE("Folders hold media and sequences", "[document]") {
+    Project base;
+    const ObjectId m = addMedia(base, media("a.mp4", 10, true, true));
+    Document d = documentFromProject(base, "VOD");
+    const ObjectId vod = d.sequences.front().id;
+    const ObjectId folder = addFolder(d, "Clips");
+    CHECK(moveToFolder(d, {m, vod}, folder));
+    CHECK(d.media.front().folder == folder);
+    CHECK(d.sequence(vod)->folder == folder);
+    CHECK_FALSE(moveToFolder(d, {m}, 999)); // carpeta que no existe
+    CHECK(renameFolder(d, folder, "Gameplay"));
+    CHECK(removeFolder(d, folder));
+    CHECK(d.media.front().folder == 0);
+    CHECK(d.sequence(vod)->folder == 0);
+}
+
+// --- Edición con rizo y marcadores ---
+
+TEST_CASE("Q and W remove up to the playhead and close the gap", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId b = addMedia(p, media("b.mp4", 10, true, true));
+    placeClip(p, a, 0);   // 0–600
+    placeClip(p, b, 600); // 600–1200
+    addMarker(p, 900, "final");
+
+    // Q a mitad del segundo clip: quita 600–750 y lo de después se adelanta.
+    REQUIRE(rippleTrimPrevious(p, 750));
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 2);
+    CHECK(video(p)[1].start == 600);
+    CHECK(video(p)[1].in == 150);
+    CHECK(video(p)[1].length == 450);
+    CHECK(audio(p)[1].start == 600); // el audio enlazado igual
+    CHECK(video(p)[1].link == audio(p)[1].id);
+    CHECK(p.markers[0].frame == 750);
+
+    // W a mitad del primero: quita 300–600.
+    REQUIRE(rippleTrimNext(p, 300));
+    checkInvariants(p);
+    CHECK(video(p)[0].length == 300);
+    CHECK(video(p)[1].start == 300);
+    CHECK(p.length() == 750);
+    CHECK(p.markers[0].frame == 450);
+
+    CHECK_FALSE(rippleTrimPrevious(p, 0));
+    CHECK_FALSE(rippleTrimNext(p, 750)); // después del final no hay borde
+}
+
+TEST_CASE("Ripple edits skip locked tracks", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId music = addMedia(p, media("m.mp3", 30, false, true));
+    placeClip(p, a, 0);
+    placeClip(p, music, 0, PlaceTarget{0, 1}); // A2
+    const std::size_t a2 = *p.trackIndex(TrackKind::Audio, 1);
+    setTrackLocked(p, a2, true);
+
+    REQUIRE(rippleTrimNext(p, 200)); // borde siguiente: el final del clip (600)
+    checkInvariants(p);
+    CHECK(video(p)[0].length == 200);
+    CHECK(p.tracks[a2].clips[0].length == 1800); // la música no se toca
+}
+
+TEST_CASE("Ripple delete closes the gap only when the range is free", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    const ObjectId b = addMedia(p, media("b.mp4", 5, true, true));
+    const ObjectId c = addMedia(p, media("c.mp4", 5, true, false));
+    const ObjectId first = placeClip(p, a, 0);    // 0–600
+    const ObjectId second = placeClip(p, b, 600); // 600–900
+    placeClip(p, b, 900);                         // 900–1200
+
+    CHECK(rippleDelete(p, {second}) == RippleResult::Closed);
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 2);
+    CHECK(video(p)[1].start == 600);
+    CHECK(audio(p)[1].start == 600);
+
+    // Con una facecam en V2 encima del tramo, el clip se quita pero el hueco se queda.
+    placeClip(p, c, 100, PlaceTarget{1, 0});
+    CHECK(rippleDelete(p, {first}) == RippleResult::Blocked);
+    checkInvariants(p);
+    REQUIRE(video(p).size() == 1);
+    CHECK(video(p)[0].start == 600);
+    CHECK(rippleDelete(p, {}) == RippleResult::Nothing);
+}
+
+TEST_CASE("Closing a gap moves everything after it", "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 5, true, true));
+    placeClip(p, a, 0);   // 0–300
+    placeClip(p, a, 500); // 500–800
+    REQUIRE(gapAt(p, kVideoTrack, 400).has_value());
+    CHECK(gapAt(p, kVideoTrack, 400)->start == 300);
+    CHECK(gapAt(p, kVideoTrack, 400)->end == 500);
+    CHECK_FALSE(gapAt(p, kVideoTrack, 100)); // es un clip
+    CHECK_FALSE(gapAt(p, kVideoTrack, 900)); // después no hay nada
+
+    CHECK(closeGap(p, kVideoTrack, 400) == RippleResult::Closed);
+    checkInvariants(p);
+    CHECK(video(p)[1].start == 300);
+    CHECK(audio(p)[1].start == 300);
+    CHECK(p.length() == 600);
+    CHECK(closeGap(p, kVideoTrack, 400) == RippleResult::Nothing);
+}
+
+TEST_CASE("Extracting a range keeps transitions between clips that still meet",
+          "[timeline][ripple]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 10, true, true));
+    placeClip(p, a, 0, 0, 300, {});
+    placeClip(p, a, 300, 400, 300, {});
+    REQUIRE(addTransition(p, kVideoTrack, 300, TransitionParams{}) != 0);
+    // Quitar un tramo dentro del segundo clip no toca la transición del corte.
+    REQUIRE(extractRange(p, 400, 500));
+    checkInvariants(p);
+    CHECK(p.tracks[kVideoTrack].transitions.size() == 1);
+    // Recortar los dos lados del corte: los mismos clips siguen juntos y la transición
+    // se queda (ajustada a lo que cabe).
+    REQUIRE(extractRange(p, 250, 350));
+    checkInvariants(p);
+    REQUIRE(p.tracks[kVideoTrack].transitions.size() == 1);
+    CHECK(video(p)[1].start == 250);
+    // Quitar el clip entrante entero se la lleva.
+    REQUIRE(extractRange(p, 250, 450));
+    checkInvariants(p);
+    CHECK(p.tracks[kVideoTrack].transitions.empty());
+}
+
+TEST_CASE("Markers are added once per frame and can be renamed and moved", "[timeline][markers]") {
+    Project p;
+    const ObjectId m1 = addMarker(p, 120, "Inicio");
+    const ObjectId m2 = addMarker(p, 60);
+    REQUIRE(m1 != 0);
+    REQUIRE(m2 != 0);
+    CHECK(addMarker(p, 120) == 0);
+    CHECK(addMarker(p, -1) == 0);
+    REQUIRE(p.markers.size() == 2);
+    CHECK(p.markers[0].id == m2); // ordenados por fotograma
+    CHECK(renameMarker(p, m2, "Jefe final"));
+    CHECK_FALSE(renameMarker(p, m2, "Jefe final"));
+    CHECK(moveMarker(p, m2, 300));
+    CHECK(p.markers[1].id == m2);
+    CHECK(removeMarker(p, m1));
+    CHECK_FALSE(removeMarker(p, m1));
+    CHECK(p.markers.size() == 1);
+}
+
+TEST_CASE("Markers live in their sequence and are copied with new ids", "[document][markers]") {
+    Document d = documentFromProject(Project{}, "Uno");
+    const ObjectId seq = d.sequences.front().id;
+    REQUIRE(edit(d, seq, [](Project& p) { return addMarker(p, 30, "aquí") != 0; }));
+    REQUIRE(d.sequences.front().markers.size() == 1);
+    const ObjectId copy = duplicateSequence(d, seq, "Dos", std::nullopt);
+    const Sequence* duplicated = d.sequence(copy);
+    REQUIRE(duplicated->markers.size() == 1);
+    CHECK(duplicated->markers[0].frame == 30);
+    CHECK(duplicated->markers[0].id != d.sequences.front().markers[0].id);
 }

@@ -26,6 +26,12 @@ struct TempDir {
     }
 };
 
+// Mismo contenido (al guardarse como documento, la secuencia gasta un id más).
+bool sameContent(const Project& a, const Project& b) {
+    return a.settings == b.settings && a.media == b.media && a.tracks == b.tracks &&
+           a.nextId <= b.nextId + 1 && b.nextId <= a.nextId + 1;
+}
+
 void touch(const fs::path& file) {
     fs::create_directories(file.parent_path());
     std::ofstream(file) << "x";
@@ -67,17 +73,17 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
     CHECK_FALSE(fs::exists(fs::path(file).concat(".tmp")));
 
     const Project loaded = loadProject(file);
-    CHECK(loaded == original);
+    CHECK(sameContent(loaded, original));
 
     // Guardar otra vez reemplaza el archivo.
     saveProject(loaded, file);
-    CHECK(loadProject(file) == original);
+    CHECK(sameContent(loadProject(file), loaded));
 }
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 3") != std::string::npos);
-    CHECK(projectFromJson(json, {}) == Project{});
+    CHECK(json.find("\"version\": 4") != std::string::npos);
+    CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
 TEST_CASE("Moved projects find their media by relative path", "[project]") {
@@ -103,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 3"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 4"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -129,7 +135,7 @@ TEST_CASE("Loading repairs the next id", "[project]") {
     // Un archivo editado a mano con nextId demasiado bajo.
     json.replace(json.find("\"nextId\": "), 10, "\"nextId\": 1, \"old\": ");
     const Project loaded = projectFromJson(json, {});
-    CHECK(loaded.nextId == p.nextId);
+    CHECK(loaded.nextId > p.nextId); // ningún id repetido
     CHECK(loaded.tracks == p.tracks);
 }
 
@@ -169,7 +175,7 @@ TEST_CASE("Version 2 keeps tracks, links, transforms and volume", "[project]") {
     REQUIRE(p.tracks.size() == 4);
 
     const Project loaded = projectFromJson(projectToJson(p, {}), {});
-    CHECK(loaded == p);
+    CHECK(sameContent(loaded, p));
     CHECK(loaded.clip(cam)->link == 0);
     CHECK(loaded.clip(cam)->transform == t);
     CHECK(loaded.clip(p.clip(gameplay)->link)->volumeDb == -6.5);
@@ -234,7 +240,7 @@ TEST_CASE("Version 3 keeps transitions and their sound", "[project]") {
     REQUIRE(placeTransitionSound(p, t, sound, 18, -3.0) != 0);
 
     const Project loaded = projectFromJson(projectToJson(p, {}), {});
-    CHECK(loaded == p);
+    CHECK(sameContent(loaded, p));
     const Transition* lt = loaded.transition(t);
     REQUIRE(lt != nullptr);
     CHECK(lt->params.type == TransitionType::ShakeDistort);
@@ -256,4 +262,79 @@ TEST_CASE("Transitions outside a cut are dropped when loading", "[project]") {
                  "\"to\": " + std::to_string(p.tracks[kVideoTrack].clips.back().id));
     const Project loaded = projectFromJson(json, {});
     CHECK(loaded.tracks[kVideoTrack].transitions.empty());
+}
+
+// --- Documentos: varias secuencias y carpetas ------------------------------------------
+
+namespace {
+
+Document sampleDocument() {
+    Document d = documentFromProject(sampleProject("/x.mp4"), "VOD completo");
+    const ObjectId vod = d.sequences.front().id;
+    ProjectSettings vertical;
+    vertical.width = 1080;
+    vertical.height = 1920;
+    vertical.adoptCanvas = false;
+    const ObjectId shorts = addFolder(d, "Shorts");
+    addSequence(d, "Short 1", vertical, shorts);
+    duplicateSequence(d, vod, "Short 2", std::pair{1080, 1920});
+    moveToFolder(d, {d.media.front().id}, shorts);
+    return d;
+}
+
+} // namespace
+
+TEST_CASE("Version 4 keeps sequences, folders and open tabs", "[project]") {
+    const Document d = sampleDocument();
+    REQUIRE(d.sequences.size() == 3);
+    const Workspace ws{{d.sequences[0].id, d.sequences[2].id}, d.sequences[2].id};
+    const LoadedDocument loaded = documentFromJson(documentToJson(d, {}, ws), {});
+    CHECK(loaded.document == d);
+    CHECK(loaded.workspace.openSequences == ws.openSequences);
+    CHECK(loaded.workspace.activeSequence == ws.activeSequence);
+}
+
+TEST_CASE("Older files open as a document with one sequence", "[project]") {
+    const std::string json = R"({"version": 3,
+        "settings": {"frameRate": [60, 1], "width": 1920, "height": 1080},
+        "media": [{"id": 1, "path": "/a.mp4", "durationUs": 10000000, "frameRate": [60, 1],
+                   "video": true, "audio": true}],
+        "tracks": [{"kind": "video", "clips": [{"id": 2, "media": 1, "link": 0, "start": 0,
+                                                 "in": 0, "length": 100}]},
+                   {"kind": "audio", "clips": []}],
+        "nextId": 3})";
+    const LoadedDocument loaded = documentFromJson(json, "/proyectos/Mi VOD.sharkp");
+    REQUIRE(loaded.document.sequences.size() == 1);
+    const Sequence& s = loaded.document.sequences.front();
+    CHECK(s.name == "Mi VOD");
+    CHECK(s.id >= 3);
+    CHECK(loaded.document.nextId > s.id);
+    CHECK(loaded.workspace.activeSequence == s.id);
+    CHECK(loaded.document.view(s.id).clip(2) != nullptr);
+}
+
+TEST_CASE("Broken workspace entries are ignored", "[project]") {
+    const Document d = sampleDocument();
+    const LoadedDocument loaded =
+        documentFromJson(documentToJson(d, {}, {{999, d.sequences[1].id}, 998}), {});
+    CHECK(loaded.workspace.openSequences == std::vector<ObjectId>{d.sequences[1].id});
+    CHECK(loaded.workspace.activeSequence == d.sequences[1].id);
+}
+
+TEST_CASE("Markers survive a round trip and broken ones are fixed", "[project][markers]") {
+    Document d = sampleDocument();
+    const ObjectId seq = d.sequences[1].id;
+    REQUIRE(edit(d, seq, [](Project& p) {
+        return addMarker(p, 90, "Jefe") != 0 && addMarker(p, 10, "Inicio") != 0;
+    }));
+    const LoadedDocument loaded = documentFromJson(documentToJson(d, {}, {}), {});
+    CHECK(loaded.document == d);
+
+    // Fotograma negativo: se lleva al 0. Id repetido: el archivo no vale.
+    std::string text = documentToJson(d, {}, {});
+    const auto pos = text.find("\"frame\": 10");
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, 11, "\"frame\": -5");
+    const LoadedDocument fixed = documentFromJson(text, {});
+    CHECK(fixed.document.sequence(seq)->markers.front().frame == 0);
 }

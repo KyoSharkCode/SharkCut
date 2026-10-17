@@ -5,6 +5,8 @@
 #include "media/video_frame.h"
 
 #include <QColor>
+#include <QImage>
+#include <QRectF>
 #include <QSize>
 
 #include <memory>
@@ -36,9 +38,18 @@ struct CompositorLayer {
     ClipTransform transformB; // de `b`
 };
 
-// Lo que hay que dibujar en un fotograma: las capas, de abajo arriba, sobre negro.
+// Imagen ya dibujada (un subtítulo) que va encima de las capas, en `rect` (píxeles del
+// lienzo). La imagen es RGBA8888 con alfa premultiplicado.
+struct CompositorOverlay {
+    std::shared_ptr<const QImage> image;
+    QRectF rect;
+};
+
+// Lo que hay que dibujar en un fotograma: las capas, de abajo arriba, sobre negro, y
+// encima las superposiciones.
 struct CompositorInput {
     std::vector<CompositorLayer> layers;
+    std::vector<CompositorOverlay> overlays;
 };
 
 // Motor de composición en la GPU (QRhi). Es el mismo para la vista previa y para la
@@ -74,6 +85,11 @@ public:
 private:
     struct Source;
     struct TransitionTargets;
+    struct Overlay;
+    Overlay& overlay(std::size_t index);
+    // Sube la imagen (si cambió) y prepara los uniformes para dibujarla en su sitio.
+    void prepareOverlay(Overlay& overlay, const CompositorOverlay& input,
+                        QRhiResourceUpdateBatch* updates);
     void releaseAll();
     void createCanvas();
     void createTransitionTargets(TransitionTargets& targets);
@@ -98,6 +114,8 @@ private:
     std::unique_ptr<QRhiGraphicsPipeline> m_layerPipeline;     // a una textura de transición
     std::unique_ptr<QRhiGraphicsPipeline> m_blendPipeline;     // directo al lienzo, con mezcla
     std::unique_ptr<QRhiGraphicsPipeline> m_compositePipeline; // transición → lienzo
+    std::vector<std::unique_ptr<Overlay>> m_overlays;
+    std::unique_ptr<QRhiGraphicsPipeline> m_overlayPipeline; // subtítulos → lienzo
 
     std::unique_ptr<QRhiTexture> m_canvas;
     std::unique_ptr<QRhiTextureRenderTarget> m_canvasTarget;

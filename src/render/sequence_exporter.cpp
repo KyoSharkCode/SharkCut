@@ -5,6 +5,7 @@
 #include "media/sequence_audio.h"
 #include "media/timeline_audio.h"
 #include "media/video_decoder.h"
+#include "render/caption_renderer.h"
 #include "render/compositor.h"
 
 #include <QOffscreenSurface>
@@ -138,7 +139,7 @@ private:
 class TimelineFrames : public FrameSource {
 public:
     TimelineFrames(Project project, QSize outputSize)
-        : m_project(std::move(project)),
+        : m_project(std::move(project)), m_outputSize(outputSize),
           m_scale(m_project.settings.width > 0
                       ? static_cast<double>(outputSize.width()) / m_project.settings.width
                       : 1.0) {}
@@ -159,6 +160,7 @@ public:
                 out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);
             }
         }
+        input.overlays = m_captions.overlaysAt(m_project, frame, m_outputSize);
         return input;
     }
 
@@ -210,7 +212,9 @@ private:
     static constexpr std::size_t kMaxOpen = 8;
 
     Project m_project;
+    QSize m_outputSize;
     double m_scale = 1.0;
+    CaptionImageCache m_captions;
     std::vector<Entry> m_readers;
     std::uint64_t m_clock = 0;
 };

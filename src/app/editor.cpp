@@ -782,6 +782,8 @@ sharkcut::CompositorInput Editor::composition() const {
             out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
         }
     }
+    const QSize canvas(project().settings.width, project().settings.height);
+    input.overlays = m_captionImages.overlaysAt(project(), m_currentFrame, canvas);
     return input;
 }
 

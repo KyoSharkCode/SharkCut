@@ -9,6 +9,7 @@
 #include "media/decode_worker.h"
 #include "playbackclock.h"
 #include "proxies.h"
+#include "render/caption_renderer.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -640,7 +641,8 @@ private:
     QVariantList m_recoverable;
     QTimer m_autosaveTimer;
     bool m_detectingKey = false;
-    QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
+    mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
+    QThreadPool m_recoveryPool;                          // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;

@@ -118,6 +118,14 @@ struct Compositor::TransitionTargets {
     std::unique_ptr<QRhiShaderResourceBindings> bindings;
 };
 
+// Una imagen superpuesta (subtítulo) en la GPU.
+struct Compositor::Overlay {
+    std::unique_ptr<QRhiTexture> texture;
+    std::shared_ptr<const QImage> uploaded;
+    std::unique_ptr<QRhiBuffer> uniforms;
+    std::unique_ptr<QRhiShaderResourceBindings> bindings;
+};
+
 Compositor::Compositor() = default;
 
 Compositor::~Compositor() {
@@ -130,6 +138,8 @@ void Compositor::releaseAll() {
     m_presentUniforms.reset();
     m_presentPass = nullptr;
     m_compositePipeline.reset();
+    m_overlayPipeline.reset();
+    m_overlays.clear();
     m_blendPipeline.reset();
     m_layerPipeline.reset();
     m_transitions.clear();
@@ -262,6 +272,55 @@ Compositor::Source& Compositor::source(std::size_t index) {
     return *m_sources[index];
 }
 
+Compositor::Overlay& Compositor::overlay(std::size_t index) {
+    while (m_overlays.size() <= index) {
+        auto created = std::make_unique<Overlay>();
+        created->uniforms.reset(
+            m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(QuadUniforms)));
+        created->uniforms->create();
+        created->texture.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        created->texture->create();
+        created->bindings.reset(m_rhi->newShaderResourceBindings());
+        const auto stage =
+            QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
+        created->bindings->setBindings({
+            QRhiShaderResourceBinding::uniformBuffer(0, stage, created->uniforms.get()),
+            QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                      created->texture.get(), m_sampler.get()),
+        });
+        created->bindings->create();
+        m_overlays.push_back(std::move(created));
+    }
+    return *m_overlays[index];
+}
+
+void Compositor::prepareOverlay(Overlay& o, const CompositorOverlay& input,
+                                QRhiResourceUpdateBatch* updates) {
+    const QImage& image = *input.image;
+    if (o.uploaded != input.image) {
+        if (o.texture->pixelSize() != image.size()) {
+            o.texture->setPixelSize(image.size());
+            o.texture->create(); // los enlaces siguen valiendo con la textura recreada
+            o.bindings->create();
+        }
+        updates->uploadTexture(o.texture.get(), image);
+        o.uploaded = input.image;
+    }
+    // El cuadro (−1…1) ocupa `rect` del lienzo (y hacia abajo).
+    const double w = m_canvasSize.width();
+    const double h = m_canvasSize.height();
+    const QPointF center = input.rect.center();
+    QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
+    mvp.translate(static_cast<float>(center.x() / w * 2.0 - 1.0),
+                  static_cast<float>(1.0 - center.y() / h * 2.0));
+    mvp.scale(static_cast<float>(input.rect.width() / w),
+              static_cast<float>(input.rect.height() / h));
+    QuadUniforms u{};
+    std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
+    u.p0[0] = 1.0f;
+    updates->updateDynamicBuffer(o.uniforms.get(), 0, sizeof(u), &u);
+}
+
 Compositor::TransitionTargets& Compositor::transitionTargets(std::size_t index) {
     while (m_transitions.size() <= index) {
         auto created = std::make_unique<TransitionTargets>();
@@ -311,6 +370,20 @@ void Compositor::ensurePipelines() {
         m_compositePipeline->setRenderPassDescriptor(m_canvasPass.get());
         m_compositePipeline->setTargetBlends({premultipliedBlend()});
         m_compositePipeline->create();
+    }
+    if (!m_overlayPipeline) {
+        Overlay& any = overlay(0);
+        m_overlayPipeline.reset(m_rhi->newGraphicsPipeline());
+        m_overlayPipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        m_overlayPipeline->setShaderStages({
+            {QRhiShaderStage::Vertex, loadShader("quad.vert")},
+            {QRhiShaderStage::Fragment, loadShader("overlay.frag")},
+        });
+        m_overlayPipeline->setVertexInputLayout(quadLayout());
+        m_overlayPipeline->setShaderResourceBindings(any.bindings.get());
+        m_overlayPipeline->setRenderPassDescriptor(m_canvasPass.get());
+        m_overlayPipeline->setTargetBlends({premultipliedBlend()});
+        m_overlayPipeline->create();
     }
 }
 
@@ -491,6 +564,13 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
         draws.push_back({&s, nullptr});
     }
 
+    std::size_t overlayCount = 0;
+    for (const CompositorOverlay& o : input.overlays) {
+        if (o.image && !o.image->isNull() && o.rect.width() > 0 && o.rect.height() > 0) {
+            prepareOverlay(overlay(overlayCount++), o, canvasUpdates);
+        }
+    }
+
     cb->beginPass(m_canvasTarget.get(), Qt::black, {1.0f, 0}, canvasUpdates);
     for (const Draw& draw : draws) {
         if (draw.source) {
@@ -501,6 +581,15 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
         cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
                          static_cast<float>(m_canvasSize.height())});
         cb->setShaderResources(draw.transition->bindings.get());
+        const QRhiCommandBuffer::VertexInput vertices(m_quad.get(), 0);
+        cb->setVertexInput(0, 1, &vertices);
+        cb->draw(4);
+    }
+    for (std::size_t i = 0; i < overlayCount; ++i) {
+        cb->setGraphicsPipeline(m_overlayPipeline.get());
+        cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
+                         static_cast<float>(m_canvasSize.height())});
+        cb->setShaderResources(m_overlays[i]->bindings.get());
         const QRhiCommandBuffer::VertexInput vertices(m_quad.get(), 0);
         cb->setVertexInput(0, 1, &vertices);
         cb->draw(4);

@@ -32,6 +32,7 @@ struct Sequence {
     ProjectSettings settings;
     std::vector<Track> tracks{Track{TrackKind::Video, {}}, Track{TrackKind::Audio, {}}};
     std::vector<Marker> markers{};
+    std::vector<CaptionTrack> captionTracks{};
 
     friend bool operator==(const Sequence&, const Sequence&) = default;
 };

@@ -16,6 +16,7 @@
 // - Las pistas bloqueadas no cambian: sus clips no se mueven, recortan, dividen ni
 //   quitan, y no se puede colocar nada en ellas.
 
+#include "core/captions.h"
 #include "core/project.h"
 
 #include <cstddef>
@@ -208,5 +209,40 @@ void repairLinks(Project& project);
 // Formato antiguo (versión 1 del .sharkp, sin enlaces fiables): enlaza el clip de V1
 // con el de A1 que comparte medio, posición y tramo.
 void linkMatchingClips(Project& project);
+
+// --- Subtítulos ---------------------------------------------------------------------
+// Las pistas de subtítulos bloqueadas no se pueden editar. Las ediciones con rizo
+// (extractRange y las que la usan) también mueven y recortan los subtítulos.
+
+// Medidas válidas (tamaño, grosores, opacidades y posición dentro de sus límites).
+CaptionStyle clampCaptionStyle(CaptionStyle style);
+
+// Pista nueva al final (encima de las demás). Devuelve su índice.
+std::size_t addCaptionTrack(Project& project, const CaptionStyle& style = {});
+bool removeCaptionTrack(Project& project, std::size_t track);
+bool setCaptionTrackHidden(Project& project, std::size_t track, bool hidden);
+bool setCaptionTrackLocked(Project& project, std::size_t track, bool locked);
+
+// Reemplaza los subtítulos de la pista (ids nuevos; se ordenan y los que se solapan se
+// recortan).
+bool setCaptions(Project& project, std::size_t track, std::vector<Caption> captions);
+// Subtítulo nuevo en `start`, recortado al hueco libre de la pista. 0 si no cabe.
+ObjectId addCaption(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                    std::string text);
+bool removeCaptions(Project& project, const std::vector<ObjectId>& captions);
+// Cambiar el texto descarta los tiempos de sus palabras.
+bool setCaptionText(Project& project, ObjectId caption, std::string text);
+// Mueve el subtítulo a `start`, sin pisar a sus vecinos (se queda lo más cerca posible).
+bool moveCaption(Project& project, ObjectId caption, std::int64_t start);
+// Nuevo tramo [start, end), limitado por los vecinos (al menos un fotograma).
+bool trimCaption(Project& project, ObjectId caption, std::int64_t start, std::int64_t end);
+// Estilo propio de unos subtítulos (std::nullopt: vuelven al de su pista).
+bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
+                     const std::optional<CaptionStyle>& style);
+// Estilo de la pista; con `clearOwn`, sus subtítulos dejan su estilo propio.
+bool setCaptionTrackStyle(Project& project, std::size_t track, const CaptionStyle& style,
+                          bool clearOwn);
+// Vuelve a dividir la pista con otras medidas, a partir de sus palabras.
+bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& layout);
 
 } // namespace sharkcut

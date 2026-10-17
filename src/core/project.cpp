@@ -19,6 +19,11 @@ std::int64_t Project::length() const {
             result = std::max(result, track.clips.back().end());
         }
     }
+    for (const CaptionTrack& track : captionTracks) {
+        if (!track.captions.empty()) {
+            result = std::max(result, track.captions.back().end());
+        }
+    }
     return result;
 }
 
@@ -224,6 +229,43 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
         }
     }
     return layers;
+}
+
+// --- Subtítulos -------------------------------------------------------------------
+
+std::optional<Project::CaptionRef> Project::findCaption(ObjectId id) const {
+    if (id == 0) {
+        return std::nullopt;
+    }
+    for (std::size_t t = 0; t < captionTracks.size(); ++t) {
+        const auto& list = captionTracks[t].captions;
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            if (list[i].id == id) {
+                return CaptionRef{t, i};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+const Caption* Project::caption(ObjectId id) const {
+    const auto ref = findCaption(id);
+    return ref ? &captionTracks[ref->track].captions[ref->index] : nullptr;
+}
+
+const Caption* Project::captionAt(std::size_t track, std::int64_t frame) const {
+    if (track >= captionTracks.size()) {
+        return nullptr;
+    }
+    const auto& list = captionTracks[track].captions;
+    // El primero que termina después de `frame` (están ordenados y sin solaparse).
+    const auto it = std::upper_bound(list.begin(), list.end(), frame,
+                                     [](std::int64_t f, const Caption& c) { return f < c.end(); });
+    return it != list.end() && it->start <= frame ? &*it : nullptr;
+}
+
+const CaptionStyle& Project::styleOf(std::size_t track, const Caption& caption) const {
+    return caption.style ? *caption.style : captionTracks[track].style;
 }
 
 } // namespace sharkcut

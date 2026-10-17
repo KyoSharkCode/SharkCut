@@ -25,8 +25,9 @@
 
 namespace sharkcut {
 
-// 5: pantalla verde por clip (transform.chromaKey). Abre también la 1 a la 4.
-inline constexpr int kProjectFileVersion = 5;
+// 5: pantalla verde por clip (transform.chromaKey). 6: pistas de subtítulos
+// (captionTracks de cada secuencia). Abre también la 1 a la 5.
+inline constexpr int kProjectFileVersion = 6;
 inline constexpr std::string_view kProjectExtension = ".sharkp";
 
 class ProjectError : public std::runtime_error {

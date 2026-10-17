@@ -122,6 +122,28 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     }
     std::stable_sort(project.markers.begin(), project.markers.end(),
                      [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
+    for (CaptionTrack& track : project.captionTracks) {
+        track.style = clampCaptionStyle(track.style);
+        for (Caption& c : track.captions) {
+            claim(ids, c.id);
+            if (c.length <= 0 || c.start < 0) {
+                throw ProjectError("Subtítulo con posición o duración no válida en el proyecto");
+            }
+            if (c.style) {
+                c.style = clampCaptionStyle(*c.style);
+            }
+            std::erase_if(c.words, [&c](const CaptionWord& w) {
+                return w.start < 0 || w.end <= w.start || w.end > c.length;
+            });
+        }
+        std::stable_sort(track.captions.begin(), track.captions.end(),
+                         [](const Caption& a, const Caption& b) { return a.start < b.start; });
+        for (std::size_t i = 1; i < track.captions.size(); ++i) {
+            if (track.captions[i].start < track.captions[i - 1].end()) {
+                throw ProjectError("Hay subtítulos solapados en una pista del proyecto");
+            }
+        }
+    }
     if (version < 2) {
         linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
     } else {
@@ -154,6 +176,7 @@ void validate(Document& document, int version) {
         sequence.settings = view.settings;
         sequence.tracks = view.tracks;
         sequence.markers = view.markers;
+        sequence.captionTracks = view.captionTracks;
     }
     for (MediaItem& item : document.media) {
         if (item.folder != 0 && !document.folder(item.folder)) {
@@ -279,6 +302,106 @@ ClipTransform transformFromJson(const json& value) {
         k.spill = key->value("spill", defaults.spill);
     }
     return t;
+}
+
+json captionStyleToJson(const CaptionStyle& st) {
+    return {
+        {"font", st.font},
+        {"size", st.size},
+        {"bold", st.bold},
+        {"italic", st.italic},
+        {"uppercase", st.uppercase},
+        {"color", colorToHex(st.color)},
+        {"outlineColor", colorToHex(st.outlineColor)},
+        {"outline", st.outline},
+        {"shadowColor", colorToHex(st.shadowColor)},
+        {"shadow", st.shadow},
+        {"boxColor", colorToHex(st.boxColor)},
+        {"box", st.box},
+        {"x", st.x},
+        {"y", st.y},
+        {"maxWidth", st.maxWidth},
+    };
+}
+
+CaptionStyle captionStyleFromJson(const json& v) {
+    const CaptionStyle d;
+    CaptionStyle st;
+    st.font = v.value("font", d.font);
+    st.size = v.value("size", d.size);
+    st.bold = v.value("bold", d.bold);
+    st.italic = v.value("italic", d.italic);
+    st.uppercase = v.value("uppercase", d.uppercase);
+    st.color = colorFromHex(v.value("color", std::string()), d.color);
+    st.outlineColor = colorFromHex(v.value("outlineColor", std::string()), d.outlineColor);
+    st.outline = v.value("outline", d.outline);
+    st.shadowColor = colorFromHex(v.value("shadowColor", std::string()), d.shadowColor);
+    st.shadow = v.value("shadow", d.shadow);
+    st.boxColor = colorFromHex(v.value("boxColor", std::string()), d.boxColor);
+    st.box = v.value("box", d.box);
+    st.x = v.value("x", d.x);
+    st.y = v.value("y", d.y);
+    st.maxWidth = v.value("maxWidth", d.maxWidth);
+    return st;
+}
+
+json captionTracksToJson(const std::vector<CaptionTrack>& tracks) {
+    json result = json::array();
+    for (const CaptionTrack& track : tracks) {
+        json captions = json::array();
+        for (const Caption& c : track.captions) {
+            json entry = {{"id", c.id}, {"start", c.start}, {"length", c.length}, {"text", c.text}};
+            if (c.style) {
+                entry["style"] = captionStyleToJson(*c.style);
+            }
+            if (!c.words.empty()) {
+                // [inicio, fin, texto] por palabra: compacto (miles de subtítulos).
+                json words = json::array();
+                for (const CaptionWord& w : c.words) {
+                    words.push_back(json::array({w.start, w.end, w.text}));
+                }
+                entry["words"] = std::move(words);
+            }
+            captions.push_back(std::move(entry));
+        }
+        json entry = {{"style", captionStyleToJson(track.style)},
+                      {"captions", std::move(captions)}};
+        if (track.hidden) {
+            entry["hidden"] = true;
+        }
+        if (track.locked) {
+            entry["locked"] = true;
+        }
+        result.push_back(std::move(entry));
+    }
+    return result;
+}
+
+std::vector<CaptionTrack> captionTracksFromJson(const json& value) {
+    std::vector<CaptionTrack> tracks;
+    for (const json& entry : value) {
+        CaptionTrack track;
+        track.style = captionStyleFromJson(entry.value("style", json::object()));
+        track.hidden = entry.value("hidden", false);
+        track.locked = entry.value("locked", false);
+        for (const json& c : entry.at("captions")) {
+            Caption caption;
+            caption.id = c.at("id").get<ObjectId>();
+            caption.start = c.at("start").get<std::int64_t>();
+            caption.length = c.at("length").get<std::int64_t>();
+            caption.text = c.value("text", std::string());
+            if (const auto st = c.find("style"); st != c.end()) {
+                caption.style = captionStyleFromJson(*st);
+            }
+            for (const json& w : c.value("words", json::array())) {
+                caption.words.push_back({w.at(0).get<std::int64_t>(), w.at(1).get<std::int64_t>(),
+                                         w.at(2).get<std::string>()});
+            }
+            track.captions.push_back(std::move(caption));
+        }
+        tracks.push_back(std::move(track));
+    }
+    return tracks;
 }
 
 } // namespace
@@ -451,6 +574,9 @@ std::string documentToJson(const Document& document, const std::filesystem::path
             }
             entry["markers"] = std::move(markers);
         }
+        if (!sequence.captionTracks.empty()) {
+            entry["captionTracks"] = captionTracksToJson(sequence.captionTracks);
+        }
         sequences.push_back(std::move(entry));
     }
     root["sequences"] = std::move(sequences);
@@ -529,6 +655,10 @@ LoadedDocument documentFromJson(std::string_view text, const std::filesystem::pa
                     sequence.markers.push_back({m.at("id").get<ObjectId>(),
                                                 m.at("frame").get<std::int64_t>(),
                                                 m.value("name", std::string())});
+                }
+                // Subtítulos: desde la versión 6.
+                if (const auto c = entry.find("captionTracks"); c != entry.end()) {
+                    sequence.captionTracks = captionTracksFromJson(*c);
                 }
                 document.sequences.push_back(std::move(sequence));
             }

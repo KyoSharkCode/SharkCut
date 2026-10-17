@@ -12,6 +12,8 @@ add_library(sharkcut_core STATIC
     sequence.cpp
     project.h
     project.cpp
+    captions.h
+    captions.cpp
     edit.h
     edit.cpp
     history.h

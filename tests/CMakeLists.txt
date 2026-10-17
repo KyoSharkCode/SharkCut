@@ -21,6 +21,7 @@ add_executable(sharkcut_tests
     test_export_settings.cpp
     test_timeline.cpp
     test_project_file.cpp
+    test_captions.cpp
     test_clip.h
     test_clip.cpp
 )

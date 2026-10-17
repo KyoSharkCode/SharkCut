@@ -82,7 +82,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 5") != std::string::npos);
+    CHECK(json.find("\"version\": 6") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 5"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 6"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.

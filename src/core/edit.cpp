@@ -909,6 +909,64 @@ bool rangeFree(const Project& project, std::int64_t from, std::int64_t to) {
     return true;
 }
 
+// Quita de la pista de subtítulos el tramo [from, to) y adelanta lo que sigue. Los que
+// lo cruzan se recortan (y pierden las palabras que caían dentro).
+bool extractCaptions(CaptionTrack& track, std::int64_t from, std::int64_t to) {
+    const std::int64_t length = to - from;
+    bool changed = false;
+    std::vector<Caption> kept;
+    for (Caption c : track.captions) {
+        if (c.end() <= from) {
+            kept.push_back(std::move(c));
+            continue;
+        }
+        changed = true;
+        if (c.start >= to) {
+            c.start -= length;
+            kept.push_back(std::move(c));
+            continue;
+        }
+        // Lo que queda antes y después del tramo quitado, unido.
+        const std::int64_t before = std::max<std::int64_t>(0, from - c.start);
+        const std::int64_t after = std::max<std::int64_t>(0, c.end() - to);
+        if (before + after <= 0) {
+            continue; // estaba entero dentro
+        }
+        // Nuevo inicio; las palabras se recolocan en tiempo absoluto.
+        const std::int64_t newStart = before > 0 ? c.start : from;
+        std::vector<CaptionWord> words;
+        for (CaptionWord w : c.words) {
+            const std::int64_t a = c.start + w.start;
+            const std::int64_t b = c.start + w.end;
+            if (b <= from) {
+                w.start = a - newStart;
+                w.end = b - newStart;
+                words.push_back(std::move(w));
+            } else if (a >= to) {
+                w.start = a - length - newStart;
+                w.end = b - length - newStart;
+                words.push_back(std::move(w));
+            }
+        }
+        if (!c.words.empty() && words.empty()) {
+            continue; // se quitaron todas sus palabras
+        }
+        if (!c.words.empty() && words.size() != c.words.size()) {
+            std::string text;
+            for (const CaptionWord& w : words) {
+                text += (text.empty() ? "" : " ") + w.text;
+            }
+            c.text = text;
+        }
+        c.words = std::move(words);
+        c.start = newStart;
+        c.length = before + after;
+        kept.push_back(std::move(c));
+    }
+    track.captions = std::move(kept);
+    return changed;
+}
+
 void sortMarkers(Project& project) {
     std::stable_sort(project.markers.begin(), project.markers.end(),
                      [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
@@ -944,6 +1002,11 @@ bool extractRange(Project& project, std::int64_t from, std::int64_t to) {
         } else if (marker.frame > from) {
             marker.frame = from; // estaba en lo que se quitó: queda en el corte
             changed = true;
+        }
+    }
+    for (CaptionTrack& track : project.captionTracks) {
+        if (!track.locked) {
+            changed = extractCaptions(track, from, to) || changed;
         }
     }
     if (!changed) {
@@ -1072,6 +1135,277 @@ bool moveMarker(Project& project, ObjectId marker, std::int64_t frame) {
         }
     }
     return false;
+}
+
+// --- Subtítulos -------------------------------------------------------------------
+
+namespace {
+
+Caption* findCaptionMutable(Project& project, ObjectId id) {
+    const auto ref = project.findCaption(id);
+    return ref ? &project.captionTracks[ref->track].captions[ref->index] : nullptr;
+}
+
+bool captionLocked(const Project& project, ObjectId id) {
+    const auto ref = project.findCaption(id);
+    return !ref || project.captionTracks[ref->track].locked;
+}
+
+// Ordena y recorta los solapes (cada uno empieza donde acaba el anterior, como mínimo).
+void normalizeCaptions(std::vector<Caption>& captions) {
+    std::stable_sort(captions.begin(), captions.end(),
+                     [](const Caption& a, const Caption& b) { return a.start < b.start; });
+    std::vector<Caption> result;
+    for (Caption& c : captions) {
+        c.start = std::max<std::int64_t>(0, c.start);
+        c.length = std::max<std::int64_t>(1, c.length);
+        if (!result.empty() && c.start < result.back().end()) {
+            Caption& previous = result.back();
+            if (c.start <= previous.start) {
+                c.start = previous.end(); // empieza igual: se pone detrás
+            } else {
+                previous.length = c.start - previous.start;
+                std::erase_if(previous.words, [&previous](const CaptionWord& w) {
+                    return w.start >= previous.length;
+                });
+                for (CaptionWord& w : previous.words) {
+                    w.end = std::min(w.end, previous.length);
+                }
+            }
+        }
+        result.push_back(std::move(c));
+    }
+    captions = std::move(result);
+}
+
+// Límites libres alrededor del subtítulo `index` de la pista: [fin del anterior, inicio
+// del siguiente) (el siguiente: sin límite si es el último).
+std::pair<std::int64_t, std::int64_t> captionRoom(const CaptionTrack& track, std::size_t index) {
+    const std::int64_t low = index > 0 ? track.captions[index - 1].end() : 0;
+    const std::int64_t high = index + 1 < track.captions.size()
+                                  ? track.captions[index + 1].start
+                                  : std::numeric_limits<std::int64_t>::max();
+    return {low, high};
+}
+
+} // namespace
+
+CaptionStyle clampCaptionStyle(CaptionStyle style) {
+    auto finite = [](double value, double fallback) {
+        return std::isfinite(value) ? value : fallback;
+    };
+    const CaptionStyle d;
+    if (style.font.empty()) {
+        style.font = d.font;
+    }
+    style.size = std::clamp(finite(style.size, d.size), 8.0, 400.0);
+    style.outline = std::clamp(finite(style.outline, d.outline), 0.0, 40.0);
+    style.shadow = std::clamp(finite(style.shadow, d.shadow), 0.0, 1.0);
+    style.box = std::clamp(finite(style.box, d.box), 0.0, 1.0);
+    style.x = std::clamp(finite(style.x, d.x), 0.0, 1.0);
+    style.y = std::clamp(finite(style.y, d.y), 0.0, 1.0);
+    style.maxWidth = std::clamp(finite(style.maxWidth, d.maxWidth), 0.1, 1.0);
+    style.color &= 0xFFFFFFu;
+    style.outlineColor &= 0xFFFFFFu;
+    style.shadowColor &= 0xFFFFFFu;
+    style.boxColor &= 0xFFFFFFu;
+    return style;
+}
+
+std::size_t addCaptionTrack(Project& project, const CaptionStyle& style) {
+    CaptionTrack track;
+    track.style = clampCaptionStyle(style);
+    project.captionTracks.push_back(std::move(track));
+    return project.captionTracks.size() - 1;
+}
+
+bool removeCaptionTrack(Project& project, std::size_t track) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    project.captionTracks.erase(project.captionTracks.begin() + static_cast<std::ptrdiff_t>(track));
+    return true;
+}
+
+bool setCaptionTrackHidden(Project& project, std::size_t track, bool hidden) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].hidden == hidden) {
+        return false;
+    }
+    project.captionTracks[track].hidden = hidden;
+    return true;
+}
+
+bool setCaptionTrackLocked(Project& project, std::size_t track, bool locked) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked == locked) {
+        return false;
+    }
+    project.captionTracks[track].locked = locked;
+    return true;
+}
+
+bool setCaptions(Project& project, std::size_t track, std::vector<Caption> captions) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    for (Caption& c : captions) {
+        c.id = newId(project);
+        if (c.style) {
+            c.style = clampCaptionStyle(*c.style);
+        }
+    }
+    normalizeCaptions(captions);
+    if (project.captionTracks[track].captions == captions) {
+        return false;
+    }
+    project.captionTracks[track].captions = std::move(captions);
+    return true;
+}
+
+ObjectId addCaption(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                    std::string text) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked || start < 0 ||
+        length <= 0) {
+        return 0;
+    }
+    std::vector<Caption>& list = project.captionTracks[track].captions;
+    if (project.captionAt(track, start)) {
+        return 0; // ya hay uno ahí
+    }
+    const auto next = std::find_if(list.begin(), list.end(),
+                                   [start](const Caption& c) { return c.start > start; });
+    if (next != list.end()) {
+        length = std::min(length, next->start - start);
+    }
+    Caption caption;
+    caption.id = newId(project);
+    caption.start = start;
+    caption.length = length;
+    caption.text = std::move(text);
+    const ObjectId id = caption.id;
+    list.insert(next, std::move(caption));
+    return id;
+}
+
+bool removeCaptions(Project& project, const std::vector<ObjectId>& captions) {
+    bool changed = false;
+    for (CaptionTrack& track : project.captionTracks) {
+        if (track.locked) {
+            continue;
+        }
+        changed =
+            std::erase_if(track.captions,
+                          [&captions](const Caption& c) { return contains(captions, c.id); }) > 0 ||
+            changed;
+    }
+    return changed;
+}
+
+bool setCaptionText(Project& project, ObjectId id, std::string text) {
+    Caption* c = captionLocked(project, id) ? nullptr : findCaptionMutable(project, id);
+    if (!c || c->text == text) {
+        return false;
+    }
+    c->text = std::move(text);
+    c->words.clear();
+    return true;
+}
+
+bool moveCaption(Project& project, ObjectId id, std::int64_t start) {
+    const auto ref = project.findCaption(id);
+    if (!ref || project.captionTracks[ref->track].locked) {
+        return false;
+    }
+    CaptionTrack& track = project.captionTracks[ref->track];
+    const auto [low, high] = captionRoom(track, ref->index);
+    Caption& c = track.captions[ref->index];
+    start = std::max(start, low);
+    if (high != std::numeric_limits<std::int64_t>::max()) {
+        start = std::min(start, high - c.length);
+    }
+    if (start < low || start == c.start) {
+        return false; // no cabe donde está (no debería pasar) o no se mueve
+    }
+    c.start = start;
+    return true;
+}
+
+bool trimCaption(Project& project, ObjectId id, std::int64_t start, std::int64_t end) {
+    const auto ref = project.findCaption(id);
+    if (!ref || project.captionTracks[ref->track].locked) {
+        return false;
+    }
+    CaptionTrack& track = project.captionTracks[ref->track];
+    const auto [low, high] = captionRoom(track, ref->index);
+    Caption& c = track.captions[ref->index];
+    start = std::max(start, low);
+    end = std::min(end, high);
+    if (end - start < 1 || (start == c.start && end == c.end())) {
+        return false;
+    }
+    // Las palabras siguen en su sitio de la línea de tiempo; las que se salen se quitan.
+    const std::int64_t shift = c.start - start;
+    const std::int64_t length = end - start;
+    std::vector<CaptionWord> words;
+    for (CaptionWord w : c.words) {
+        w.start += shift;
+        w.end += shift;
+        if (w.end > 0 && w.start < length) {
+            w.start = std::max<std::int64_t>(w.start, 0);
+            w.end = std::min(w.end, length);
+            words.push_back(std::move(w));
+        }
+    }
+    c.words = std::move(words);
+    c.start = start;
+    c.length = length;
+    return true;
+}
+
+bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
+                     const std::optional<CaptionStyle>& style) {
+    const std::optional<CaptionStyle> clamped =
+        style ? std::optional<CaptionStyle>(clampCaptionStyle(*style)) : std::nullopt;
+    bool changed = false;
+    for (const ObjectId id : captions) {
+        Caption* c = captionLocked(project, id) ? nullptr : findCaptionMutable(project, id);
+        if (c && c->style != clamped) {
+            c->style = clamped;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool setCaptionTrackStyle(Project& project, std::size_t track, const CaptionStyle& style,
+                          bool clearOwn) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    CaptionTrack& t = project.captionTracks[track];
+    bool changed = false;
+    const CaptionStyle clamped = clampCaptionStyle(style);
+    if (t.style != clamped) {
+        t.style = clamped;
+        changed = true;
+    }
+    if (clearOwn) {
+        for (Caption& c : t.captions) {
+            if (c.style) {
+                c.style.reset();
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& layout) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    const FrameRate rate = project.settings.frameRate;
+    const std::vector<TimedWord> words = captionWords(project.captionTracks[track], rate);
+    return setCaptions(project, track, layoutCaptions(words, layout, rate));
 }
 
 } // namespace sharkcut

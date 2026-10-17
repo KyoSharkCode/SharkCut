@@ -145,6 +145,66 @@ struct Marker {
     friend bool operator==(const Marker&, const Marker&) = default;
 };
 
+// --- Subtítulos -------------------------------------------------------------------
+//
+// Van en pistas propias (S1, S2…), aparte de las de video y audio, y se dibujan encima
+// de todo. Cada subtítulo es un texto con su tramo; puede guardar el momento de cada
+// palabra (de la transcripción automática) para volver a dividirlo con otras medidas.
+
+// Aspecto de un subtítulo. Las medidas en píxeles son para un lienzo de 1080 de lado
+// corto (1920×1080 o 1080×1920); con otros tamaños se escalan.
+struct CaptionStyle {
+    std::string font = "Arial";
+    double size = 64.0; // alto de letra
+    bool bold = true;
+    bool italic = false;
+    bool uppercase = false;
+    std::uint32_t color = 0xFFFFFF;        // 0xRRGGBB
+    std::uint32_t outlineColor = 0x000000; // contorno
+    double outline = 6.0;                  // grosor del contorno (0 = sin contorno)
+    std::uint32_t shadowColor = 0x000000;
+    double shadow = 0.0;               // opacidad de la sombra (0 = sin sombra)
+    std::uint32_t boxColor = 0x000000; // caja de fondo
+    double box = 0.0;                  // opacidad de la caja (0 = sin caja)
+    double x = 0.5;                    // centro del texto, en fracción del lienzo
+    double y = 0.82;
+    double maxWidth = 0.86; // ancho máximo del texto (fracción); las líneas se parten
+
+    friend bool operator==(const CaptionStyle&, const CaptionStyle&) = default;
+};
+
+// Palabra de un subtítulo: dónde empieza y acaba, en fotogramas desde el inicio del
+// subtítulo.
+struct CaptionWord {
+    std::int64_t start = 0;
+    std::int64_t end = 0;
+    std::string text;
+
+    friend bool operator==(const CaptionWord&, const CaptionWord&) = default;
+};
+
+struct Caption {
+    ObjectId id = 0;
+    std::int64_t start = 0;
+    std::int64_t length = 0;           // fotogramas (siempre > 0)
+    std::string text;                  // con '\n' entre líneas
+    std::optional<CaptionStyle> style; // propio; si no, el de la pista
+    std::vector<CaptionWord> words{};  // vacío si se escribió a mano o se cambió el texto
+
+    std::int64_t end() const { return start + length; }
+
+    friend bool operator==(const Caption&, const Caption&) = default;
+};
+
+struct CaptionTrack {
+    std::vector<Caption> captions; // ordenados por `start` y sin solaparse
+    CaptionStyle style{};
+    bool hidden = false;
+    bool locked = false;
+
+    friend bool operator==(const CaptionTrack&, const CaptionTrack&) = default;
+};
+
 // V1 es siempre la primera pista.
 inline constexpr std::size_t kVideoTrack = 0;
 
@@ -164,7 +224,8 @@ struct Project {
     ProjectSettings settings;
     std::vector<MediaItem> media;
     std::vector<Track> tracks{Track{TrackKind::Video, {}}, Track{TrackKind::Audio, {}}};
-    std::vector<Marker> markers{}; // ordenados por fotograma
+    std::vector<Marker> markers{};             // ordenados por fotograma
+    std::vector<CaptionTrack> captionTracks{}; // S1, S2… (se dibujan en ese orden)
     ObjectId nextId = 1;
 
     struct ClipRef {
@@ -191,7 +252,7 @@ struct Project {
         std::size_t index = 0;
     };
 
-    // Final de la línea de tiempo (fin del último clip de cualquier pista).
+    // Final de la línea de tiempo (fin del último clip o subtítulo de cualquier pista).
     std::int64_t length() const;
 
     // --- Pistas ---
@@ -233,6 +294,18 @@ struct Project {
     // Fotograma del medio (en sus propios fps) que se ve en `frame`. Fuera del clip
     // (en una transición) sigue el medio, limitado a su primer y último fotograma.
     std::int64_t mediaFrameIndex(const Clip& clip, std::int64_t frame) const;
+
+    // --- Subtítulos ---
+    struct CaptionRef {
+        std::size_t track = 0;
+        std::size_t index = 0;
+    };
+    std::optional<CaptionRef> findCaption(ObjectId id) const;
+    const Caption* caption(ObjectId id) const;
+    // Subtítulo de la pista que se ve en `frame`, o nullptr.
+    const Caption* captionAt(std::size_t track, std::int64_t frame) const;
+    // Estilo con el que se dibuja (el propio o el de su pista).
+    const CaptionStyle& styleOf(std::size_t track, const Caption& caption) const;
 
     // Lo que se ve en `frame`, de abajo (V1) arriba: un clip (o dos, en una
     // transición) por pista de video visible, sin los que apuntan a un medio que no

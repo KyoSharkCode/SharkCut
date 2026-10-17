@@ -758,6 +758,20 @@ ctest --preset windows-debug
        ancho) de uno, de varios o de toda la pista; ajustes de estilo de fábrica y
        guardados con nombre; importar y exportar .srt. Sirven también como texto suelto
        («Añadir un subtítulo o texto en el cabezal»). Archivo .sharkp versión 6.
+     - [ ] Fallo pendiente (17 oct 2026, volcado ultimo-cierre.dmp del PC de Kyo): la app
+       se cierra al transcribir con la excepción 0xC000001D (instrucción no válida) dentro
+       de SharkCut.exe, en una instrucción AVX-512 (vmovups con zmm) de ggml. El procesador
+       de Kyo es un AMD Zen 3 (familia 25, modelo 0x21, 16 hilos), sin AVX-512. Causa: con
+       MSVC y GGML_NATIVE=ON, ggml detecta el procesador con FindSIMD.cmake
+       (check_c_source_runs) y da AVX-512 por bueno aunque no lo haya, así que compila
+       ggml-cpu con /arch:AVX512. Solución propuesta (sin aplicar): en cmake/whisper.cmake,
+       antes de FetchContent_MakeAvailable, fijar con CACHE … FORCE GGML_NATIVE=OFF,
+       GGML_AVX=ON, GGML_AVX2=ON, GGML_FMA=ON, GGML_F16C=ON y GGML_AVX512=OFF (base AVX2,
+       que tienen todos los PC de los últimos ~10 años; sirve también para repartirlo en la
+       fase 5). Después hay que borrar build/windows-debug (o al menos su CMakeCache.txt y
+       _deps/whisper-build) para que no se quede el /arch:AVX512 de antes. Alternativa más
+       rápida en cada PC, pero más compleja: GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS
+       (elige la variante del procesador al arrancar; requiere ggml como DLL).
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

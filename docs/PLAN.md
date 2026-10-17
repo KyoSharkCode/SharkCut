@@ -413,7 +413,10 @@ echar de menos Premiere.
 
 ### Fase 5 — Entrega
 - Instalador, icono de los archivos .sharkp y asociación con SharkCut.
-- Carpeta de licencias (FFmpeg, Qt) y código disponible, para compartir SharkCut gratis.
+- Carpeta de licencias (FFmpeg, Qt, whisper.cpp/ggml —MIT—) y código disponible, para
+  compartir SharkCut gratis. Los modelos de whisper se descargan aparte (no van en el
+  instalador). Para repartirlo, compilar ggml sin GGML_NATIVE (que no dependa del
+  procesador del PC donde se compila).
 - Mejora de los efectos de sonido (generador o sonidos CC0 registrados).
 - 0.1.0 Early Access para Kyo y sus amigos (.zip o instalador, y si se quiere una web
   sencilla de descarga).
@@ -421,7 +424,7 @@ echar de menos Premiere.
 
 ### Fase 6 — Lo pro
 - Lo que quede de efectos y transiciones tras la fase 4 (glitch, spin…).
-- Subtítulos automáticos en local con **whisper.cpp** (C++, usa la GPU).
+- ~~Subtítulos automáticos en local con whisper.cpp~~: adelantados a la fase 4, etapa 5.
 - Herramientas para VODs: detección de silencios y marcadores automáticos.
 - Herramienta de texto genérica (sin plantillas de marca), si hace falta.
 
@@ -743,6 +746,18 @@ ctest --preset windows-debug
        el tono relativo al brillo, así quita también el fondo mal iluminado. Archivo
        .sharkp versión 5. Y lectura de videos AV1 (OBS): NVDEC si la tarjeta lo admite,
        si no dav1d por software.
+     - [x] Adelantado a petición de Kyo (lo necesitaba para los shorts): subtítulos.
+       «Crear subtítulos a partir de la transcripción» (pestaña Subtítulos), como en
+       Premiere: transcribe en local con whisper.cpp (modelo grande «turbo» o pequeño,
+       descargado una sola vez; sin internet después) y divide en subtítulos con una
+       línea, dos o una sola palabra, caracteres por línea, duración mínima, separación y
+       quitar puntuación; se puede volver a dividir sin transcribir otra vez (cada
+       subtítulo guarda el momento de sus palabras). Pistas de subtítulos S1, S2… encima
+       de las de video: mover, recortar, editar el texto y el estilo (fuente, tamaño,
+       negrita, cursiva, mayúsculas, color, contorno, sombra, caja de fondo, posición y
+       ancho) de uno, de varios o de toda la pista; ajustes de estilo de fábrica y
+       guardados con nombre; importar y exportar .srt. Sirven también como texto suelto
+       («Añadir un subtítulo o texto en el cabezal»). Archivo .sharkp versión 6.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

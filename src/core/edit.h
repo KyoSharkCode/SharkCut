@@ -242,7 +242,13 @@ bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
 // Estilo de la pista; con `clearOwn`, sus subtítulos dejan su estilo propio.
 bool setCaptionTrackStyle(Project& project, std::size_t track, const CaptionStyle& style,
                           bool clearOwn);
-// Vuelve a dividir la pista con otras medidas, a partir de sus palabras.
+// Final del último clip de video o audio (sin contar los subtítulos).
+std::int64_t mediaEnd(const Project& project);
+// La duración mínima no debe alargar la secuencia: el último subtítulo acaba, como
+// tarde, en `end` (si empieza antes).
+void limitCaptionsTo(std::vector<Caption>& captions, std::int64_t end);
+// Vuelve a dividir la pista con otras medidas, a partir de sus palabras (el último
+// subtítulo no pasa del final de los clips).
 bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& layout);
 
 } // namespace sharkcut

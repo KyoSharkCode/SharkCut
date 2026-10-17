@@ -43,6 +43,15 @@ Rectangle {
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
         readonly property var croma: t.chromaKey || ({})
+        readonly property var sub: panel.editor.selectedCaption
+        readonly property bool haySubtitulo: sub.count > 0
+        readonly property var estilo: haySubtitulo
+            ? (estiloPista ? sub.trackStyle : sub.style) : ({})
+        property bool estiloPista: false // el estilo se aplica a la pista entera
+        function vistaEstilo(valores) { panel.editor.previewCaptionStyle(valores, estiloPista) }
+        function aplicarEstilo(valores, etiqueta) {
+            panel.editor.setCaptionStyle(valores, estiloPista, etiqueta)
+        }
         readonly property bool hayCroma: hayVideo && croma.added === true
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
 
@@ -210,15 +219,303 @@ Rectangle {
                 }
             }
 
+            // --- Subtítulo seleccionado: texto y estilo ---
+            ColumnLayout {
+                id: propiedadesSubtitulo
+                visible: propiedades.haySubtitulo
+                Layout.fillWidth: true
+                spacing: 6
+                enabled: !propiedades.sub.locked
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        Layout.fillWidth: true
+                        text: propiedades.sub.count > 1
+                              ? propiedades.sub.count + " subtítulos seleccionados"
+                              : "Subtítulo · " + (propiedades.sub.trackName || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
+                    }
+                    Chip {
+                        visible: propiedades.sub.locked === true
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                Text {
+                    visible: propiedades.sub.count === 1
+                    text: panel.editor.timecodeFor(propiedades.sub.start || 0) + " → "
+                          + panel.editor.timecodeFor(propiedades.sub.end || 0)
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                // Texto (Ctrl+Intro o al salir del campo se aplica).
+                Rectangle {
+                    visible: propiedades.sub.count === 1
+                    Layout.fillWidth: true
+                    implicitHeight: Math.max(56, campoTexto.implicitHeight + 12)
+                    radius: Theme.radio
+                    color: Theme.fondo
+                    border.color: campoTexto.activeFocus ? Theme.acento : Theme.borde
+                    TextEdit {
+                        id: campoTexto
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        text: propiedades.sub.text || ""
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        wrapMode: TextEdit.Wrap
+                        selectByMouse: true
+                        function aplicar() {
+                            if (text !== propiedades.sub.text)
+                                panel.editor.setCaptionText(propiedades.sub.id, text)
+                            text = Qt.binding(() => propiedades.sub.text || "")
+                        }
+                        onEditingFinished: aplicar()
+                        Keys.onPressed: (e) => {
+                            if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter)
+                                    && (e.modifiers & Qt.ControlModifier)) {
+                                aplicar()
+                                campoTexto.focus = false
+                                e.accepted = true
+                            } else if (e.key === Qt.Key_Escape) {
+                                text = Qt.binding(() => propiedades.sub.text || "")
+                                campoTexto.focus = false
+                                e.accepted = true
+                            }
+                        }
+                    }
+                }
+                Text {
+                    visible: propiedades.sub.count === 1
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Intro: nueva línea · Ctrl+Intro: aplicar · doble clic en la pista: "
+                          + "subtítulo nuevo."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                Separador {}
+                Text {
+                    text: "ESTILO"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                // A qué se aplica: a lo seleccionado o a la pista entera.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        texto: propiedades.sub.count > 1 ? "Seleccionados" : "Este subtítulo"
+                        activo: !propiedades.estiloPista
+                        implicitHeight: 26
+                        onPulsado: propiedades.estiloPista = false
+                    }
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        texto: "Toda la pista"
+                        activo: propiedades.estiloPista
+                        implicitHeight: 26
+                        ayuda: "El estilo de la pista: lo usan todos sus subtítulos"
+                        onPulsado: propiedades.estiloPista = true
+                    }
+                }
+                Selector {
+                    etiqueta: "Ajuste guardado"
+                    model: ["Elegir…"].concat(panel.editor.captionPresets.map((p) => p.name))
+                    indice: 0
+                    onElegido: (i) => {
+                        if (i > 0)
+                            panel.editor.applyCaptionPreset(panel.editor.captionPresets[i - 1].name,
+                                                            propiedades.estiloPista)
+                    }
+                }
+                Selector {
+                    etiqueta: "Fuente"
+                    // La del estilo aunque no esté instalada (p. ej. un proyecto de otro PC).
+                    readonly property string actual: propiedades.estilo.font || ""
+                    readonly property var fuentes: {
+                        const lista = Qt.fontFamilies()
+                        return lista.indexOf(actual) >= 0 || actual === "" ? lista : [actual].concat(lista)
+                    }
+                    model: fuentes
+                    indice: Math.max(0, fuentes.indexOf(actual))
+                    onElegido: (i) => propiedades.aplicarEstilo({ font: fuentes[i] }, "Fuente")
+                }
+                CampoNumero {
+                    etiqueta: "Tamaño"
+                    unidad: "px"
+                    paso: 0.5
+                    desde: 8
+                    hasta: 400
+                    valor: propiedades.estilo.size || 64
+                    onCambiando: (v) => propiedades.vistaEstilo({ size: v })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ size: v }, "Tamaño")
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: [{ clave: "bold", texto: "Negrita" }, { clave: "italic", texto: "Cursiva" },
+                                { clave: "uppercase", texto: "MAYÚSCULAS" }]
+                        delegate: BotonIcono {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            texto: modelData.texto
+                            implicitHeight: 26
+                            activo: propiedades.estilo[modelData.clave] === true
+                            onPulsado: {
+                                const valores = {}
+                                valores[modelData.clave] = !propiedades.estilo[modelData.clave]
+                                propiedades.aplicarEstilo(valores, modelData.texto)
+                            }
+                        }
+                    }
+                }
+                CampoColor {
+                    etiqueta: "Color"
+                    color: propiedades.estilo.color || "#FFFFFF"
+                    onElegido: (c) => propiedades.aplicarEstilo({ color: c }, "Color")
+                }
+                CampoColor {
+                    etiqueta: "Contorno"
+                    color: propiedades.estilo.outlineColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ outlineColor: c }, "Contorno")
+                }
+                CampoNumero {
+                    etiqueta: "Grosor del contorno"
+                    anchoEtiqueta: 140
+                    unidad: "px"
+                    paso: 0.1
+                    decimales: 1
+                    desde: 0
+                    hasta: 40
+                    valor: propiedades.estilo.outline !== undefined ? propiedades.estilo.outline : 6
+                    onCambiando: (v) => propiedades.vistaEstilo({ outline: v })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ outline: v }, "Contorno")
+                }
+                CampoColor {
+                    etiqueta: "Sombra"
+                    color: propiedades.estilo.shadowColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ shadowColor: c }, "Sombra")
+                }
+                CampoNumero {
+                    etiqueta: "Opacidad de la sombra"
+                    anchoEtiqueta: 140
+                    unidad: "%"
+                    paso: 0.5
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.estilo.shadow || 0) * 100
+                    onCambiando: (v) => propiedades.vistaEstilo({ shadow: v / 100 })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ shadow: v / 100 }, "Sombra")
+                }
+                CampoColor {
+                    etiqueta: "Caja de fondo"
+                    color: propiedades.estilo.boxColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ boxColor: c }, "Caja de fondo")
+                }
+                CampoNumero {
+                    etiqueta: "Opacidad de la caja"
+                    anchoEtiqueta: 140
+                    unidad: "%"
+                    paso: 0.5
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.estilo.box || 0) * 100
+                    onCambiando: (v) => propiedades.vistaEstilo({ box: v / 100 })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ box: v / 100 }, "Caja de fondo")
+                }
+                Text {
+                    Layout.topMargin: 4
+                    text: "POSICIÓN"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Repeater {
+                    model: [{ clave: "x", nombre: "Horizontal" }, { clave: "y", nombre: "Vertical" },
+                            { clave: "maxWidth", nombre: "Ancho máximo" }]
+                    delegate: CampoNumero {
+                        required property var modelData
+                        etiqueta: modelData.nombre
+                        unidad: "%"
+                        decimales: 1
+                        paso: 0.2
+                        desde: modelData.clave === "maxWidth" ? 10 : 0
+                        hasta: 100
+                        valor: (propiedades.estilo[modelData.clave] || 0) * 100
+                        onCambiando: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / 100
+                            propiedades.vistaEstilo(valores)
+                        }
+                        onCambiado: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / 100
+                            propiedades.aplicarEstilo(valores, "Posición")
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    spacing: 6
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        icono: "guardar"
+                        texto: "Guardar como ajuste…"
+                        ayuda: "Guarda este estilo con un nombre para aplicarlo después"
+                        onPulsado: dialogoAjuste.pedir("Nombre del ajuste", "", "Guardar",
+                                                       (nombre) => panel.editor.saveCaptionPreset(nombre))
+                    }
+                    BotonIcono {
+                        icono: "restablecer"
+                        visible: propiedades.sub.ownStyle === true && !propiedades.estiloPista
+                        ayuda: "Quitar su estilo propio: vuelve al de la pista"
+                        onPulsado: panel.editor.resetCaptionStyle()
+                    }
+                }
+                // Ajustes guardados por ti: se pueden borrar.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: panel.editor.captionPresets.filter((p) => !p.builtin)
+                        delegate: Chip {
+                            required property var modelData
+                            texto: modelData.name + "  ✕"
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: panel.editor.removeCaptionPreset(parent.modelData.name)
+                            }
+                        }
+                    }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "quitar"
+                    texto: propiedades.sub.count > 1 ? "Quitar los subtítulos" : "Quitar el subtítulo"
+                    ayuda: "Supr"
+                    onPulsado: panel.editor.removeSelection()
+                }
+            }
+
             Text {
-                visible: !propiedades.hayTransicion
+                visible: !propiedades.hayTransicion && !propiedades.haySubtitulo
                 text: "CLIP SELECCIONADO"
                 color: Theme.textoDesactivado
                 font.pixelSize: Theme.tamTextoPequeno
                 font.letterSpacing: 0.6
             }
             Text {
-                visible: !propiedades.hayTransicion
+                visible: !propiedades.hayTransicion && !propiedades.haySubtitulo
                 Layout.fillWidth: true
                 text: panel.editor.selectionDescription.length > 0
                       ? panel.editor.selectionDescription : "Ningún clip seleccionado"
@@ -229,7 +526,7 @@ Rectangle {
             }
             Text {
                 Layout.fillWidth: true
-                visible: !propiedades.uno && !propiedades.hayTransicion
+                visible: !propiedades.uno && !propiedades.hayTransicion && !propiedades.haySubtitulo
                 wrapMode: Text.WordWrap
                 text: propiedades.sel.count > 1
                       ? "Selecciona un solo clip para ver y cambiar sus propiedades."
@@ -588,6 +885,74 @@ Rectangle {
             }
         }
     }
+    DialogoNombre { id: dialogoAjuste }
+
+    // Color con su muestra y su código (#RRGGBB) editable, y unos colores rápidos.
+    component CampoColor: RowLayout {
+        id: campo
+        property string etiqueta
+        property string color
+        signal elegido(string color)
+        Layout.fillWidth: true
+        spacing: 5
+        Text {
+            Layout.preferredWidth: 72
+            text: campo.etiqueta
+            color: Theme.textoSecundario
+            font.pixelSize: Theme.tamTextoPequeno
+            elide: Text.ElideRight
+        }
+        // Muestra del color elegido (es un color del video, no del tema).
+        Rectangle {
+            implicitWidth: 22
+            implicitHeight: 22
+            radius: 4
+            color: campo.color
+            border.color: Theme.borde
+        }
+        TextField {
+            id: codigo
+            Layout.preferredWidth: 70
+            implicitHeight: 24
+            text: campo.color
+            color: Theme.texto
+            font.pixelSize: Theme.tamTextoPequeno
+            font.family: "monospace"
+            selectByMouse: true
+            maximumLength: 7
+            validator: RegularExpressionValidator { regularExpression: /#?[0-9a-fA-F]{0,6}/ }
+            background: Rectangle {
+                radius: Theme.radio
+                color: Theme.fondo
+                border.color: codigo.activeFocus ? Theme.acento : Theme.borde
+            }
+            onEditingFinished: {
+                const hex = text.startsWith("#") ? text : "#" + text
+                if (/^#[0-9a-fA-F]{6}$/.test(hex) && hex.toUpperCase() !== campo.color.toUpperCase())
+                    campo.elegido(hex.toUpperCase())
+                text = Qt.binding(() => campo.color)
+            }
+        }
+        Repeater {
+            // Colores rápidos (del video, no del tema).
+            model: ["#FFFFFF", "#000000", "#FFD800"]
+            delegate: Rectangle {
+                required property string modelData
+                implicitWidth: 14
+                implicitHeight: 14
+                radius: 7
+                color: modelData
+                border.color: Theme.borde
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: campo.elegido(parent.modelData)
+                }
+            }
+        }
+        Item { Layout.fillWidth: true }
+    }
+
     component Separador: Rectangle {
         Layout.fillWidth: true
         Layout.topMargin: 2

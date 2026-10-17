@@ -264,3 +264,21 @@ TEST_CASE("Caption tracks survive a project round trip", "[captions][project]") 
     REQUIRE(loaded.captionTracks.size() == 1);
     CHECK(loaded.captionTracks == p.captionTracks);
 }
+
+TEST_CASE("Relayout never makes the sequence longer", "[captions]") {
+    Project p;
+    MediaItem item;
+    item.path = "/medios/voz.mp4";
+    item.durationUs = 2'000'000;
+    item.hasVideo = true;
+    item.hasAudio = true;
+    placeClip(p, addMedia(p, item), 0, 0, 120); // 2 s
+    const std::size_t track = addCaptionTrack(p);
+    REQUIRE(setCaptions(p, track, layoutCaptions(spoken({"hola", "mundo."}), {}, k60)));
+    CaptionLayout layout;
+    layout.lines = CaptionLayout::Lines::Word;
+    layout.minDurationUs = 3'000'000;
+    REQUIRE(relayoutCaptions(p, track, layout));
+    CHECK(p.captionTracks[track].captions.back().end() == 120);
+    CHECK(p.length() == 120);
+}

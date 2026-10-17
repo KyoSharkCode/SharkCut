@@ -83,6 +83,33 @@ Window {
         onAccepted: editor.saveAs(selectedFile)
         onRejected: ventana.accionPendiente = ""
     }
+    // --- Subtítulos: opciones y archivos .srt ---
+    DialogoSubtitulos {
+        id: dialogoSubtitulos
+        editor: editor
+        onAceptado: (opciones) => {
+            if (modo === "dividir")
+                editor.relayoutCaptionTrack(pista, opciones)
+            else
+                editor.createCaptions(opciones)
+        }
+    }
+    FileDialog {
+        id: dialogoImportarSrt
+        title: "Importar subtítulos"
+        nameFilters: ["Subtítulos (*.srt)", "Todos los archivos (*)"]
+        onAccepted: editor.importSrt(selectedFile)
+    }
+    FileDialog {
+        id: dialogoExportarSrt
+        property int pista: 0
+        title: "Exportar subtítulos"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "srt"
+        nameFilters: ["Subtítulos (*.srt)"]
+        onAccepted: editor.exportSrt(pista, selectedFile)
+    }
+
     DialogoNuevoProyecto {
         id: dialogoNuevo
         onCrear: (nombre, ancho, alto, fps) => {
@@ -421,6 +448,13 @@ Window {
                         editor: editor
                         fantasma: fantasma
                         onImportar: dialogoImportar.open()
+                        onCrearSubtitulos: dialogoSubtitulos.crear()
+                        onImportarSrt: dialogoImportarSrt.open()
+                        onDividirSubtitulos: (pista) => dialogoSubtitulos.dividir(pista)
+                        onExportarSrt: (pista) => {
+                            dialogoExportarSrt.pista = pista
+                            dialogoExportarSrt.open()
+                        }
                         onNuevaSecuencia: dialogoSecuencia.open()
                         onCerrarProyecto: (uid) => ventana.cerrarProyecto(uid)
                     }
@@ -586,6 +620,11 @@ Window {
                         id: lineaTiempo
                         editor: editor
                         onNuevaSecuencia: dialogoSecuencia.open()
+                        onExportarSrt: (pista) => {
+                            dialogoExportarSrt.pista = pista
+                            dialogoExportarSrt.open()
+                        }
+                        onDividirSubtitulos: (pista) => dialogoSubtitulos.dividir(pista)
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                     }

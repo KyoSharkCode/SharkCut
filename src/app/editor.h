@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compositionsource.h"
+#include "core/captions.h"
 #include "core/document.h"
 #include "core/edit.h"
 #include "core/history.h"
@@ -105,6 +106,17 @@ class Editor : public CompositionSource {
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
     Q_PROPERTY(bool detectingKey READ detectingKey NOTIFY detectingKeyChanged)
+    // Subtítulos. Pistas {index, name ("S1"), hidden, locked, count}; subtítulos
+    // seleccionados (ids); el seleccionado para Propiedades (ver selectedCaption()); y los
+    // ajustes de estilo guardados {name, builtin, style} (los de fábrica primero).
+    Q_PROPERTY(QVariantList captionTracks READ captionTracks NOTIFY projectChanged)
+    Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
+    Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
+    Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    // Transcripción automática en curso (descarga del modelo incluida)
+    Q_PROPERTY(bool transcribing READ transcribing NOTIFY transcriptionChanged)
+    Q_PROPERTY(double transcribeProgress READ transcribeProgress NOTIFY transcriptionChanged)
+    Q_PROPERTY(QString transcribeMessage READ transcribeMessage NOTIFY transcriptionChanged)
     // Lienzo del proyecto: "16:9", "9:16", "1:1"… y si lo fija el primer clip
     Q_PROPERTY(QString canvasLabel READ canvasLabel NOTIFY projectChanged)
     Q_PROPERTY(QSize canvas READ canvasSize NOTIFY projectChanged)
@@ -374,6 +386,62 @@ public:
     // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
     Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
     bool detectingKey() const { return m_detectingKey; }
+
+    // --- Subtítulos (editor_captions.cpp) ---
+    QVariantList captionTracks() const;
+    QVariantList captionSelection() const;
+    // {count, id, track, trackName, locked, start, end, text, words (bool), ownStyle,
+    // style (el que se ve), trackStyle}; vacío ({count: 0}) sin selección.
+    QVariantMap selectedCaption() const;
+    QVariantList captionPresets() const;
+    // Pista nueva encima de las demás; devuelve su índice.
+    Q_INVOKABLE int addCaptionTrack();
+    Q_INVOKABLE void removeCaptionTrack(int track);
+    Q_INVOKABLE void setCaptionTrackHidden(int track, bool hidden);
+    Q_INVOKABLE void setCaptionTrackLocked(int track, bool locked);
+    // Subtítulo nuevo de 3 s en el cabezal, en la pista (−1: la primera; se crea si no
+    // hay ninguna). Queda seleccionado.
+    Q_INVOKABLE void addCaptionAtPlayhead(int track = -1);
+    Q_INVOKABLE void selectCaption(qint64 id, bool add);
+    // Mueve el subtítulo (y los demás seleccionados, si lo está) `delta` fotogramas.
+    Q_INVOKABLE void moveCaptions(qint64 id, qint64 delta);
+    // `delta` limitado para que ninguno de los que se mueven pise a otro.
+    Q_INVOKABLE qint64 limitCaptionMove(qint64 id, qint64 delta) const;
+    // Dónde puede empezar y acabar: {low, high} (high = −1 si no hay límite).
+    Q_INVOKABLE QVariantMap captionRoom(qint64 id) const;
+    Q_INVOKABLE void trimCaption(qint64 id, qint64 start, qint64 end);
+    Q_INVOKABLE void setCaptionText(qint64 id, const QString& text);
+    // Estilo de los seleccionados (`wholeTrack`: de sus pistas enteras). `values` puede
+    // traer solo algunas claves: font, size, bold, italic, uppercase, color, outlineColor,
+    // outline, shadowColor, shadow, boxColor, box, x, y, maxWidth. previewCaptionStyle()
+    // solo lo muestra en el visor (mientras se arrastra un valor).
+    Q_INVOKABLE void previewCaptionStyle(const QVariantMap& values, bool wholeTrack);
+    Q_INVOKABLE void endCaptionPreview();
+    Q_INVOKABLE void setCaptionStyle(const QVariantMap& values, bool wholeTrack,
+                                     const QString& label = {});
+    Q_INVOKABLE void applyCaptionPreset(const QString& name, bool wholeTrack);
+    // Los seleccionados vuelven al estilo de su pista.
+    Q_INVOKABLE void resetCaptionStyle();
+    // Guarda el estilo del subtítulo seleccionado como ajuste (reemplaza uno con ese nombre).
+    Q_INVOKABLE void saveCaptionPreset(const QString& name);
+    Q_INVOKABLE void removeCaptionPreset(const QString& name);
+    // Vuelve a dividir la pista: {lines: "single"|"double"|"word", maxChars, minSeconds,
+    // gapFrames, removePunctuation}.
+    Q_INVOKABLE void relayoutCaptionTrack(int track, const QVariantMap& layout);
+    Q_INVOKABLE void importSrt(const QUrl& file);
+    Q_INVOKABLE void exportSrt(int track, const QUrl& file);
+
+    // --- Transcripción (editor_transcription.cpp) ---
+    bool transcribing() const { return m_transcription != nullptr; }
+    double transcribeProgress() const { return m_transcribeProgress; }
+    QString transcribeMessage() const { return m_transcribeMessage; }
+    // Transcribe el audio de la secuencia activa y crea con lo dicho una pista de
+    // subtítulos nueva (un paso de deshacer). Las opciones son las del diálogo de
+    // relayoutCaptionTrack más {language ("es", "en", "auto"), audioTrack (−1 = toda la
+    // mezcla), preset (nombre del ajuste de estilo), quality (0 alta, 1 rápida)}. Si el
+    // modelo no está, se descarga antes (una sola vez).
+    Q_INVOKABLE void createCaptions(const QVariantMap& options);
+    Q_INVOKABLE void cancelTranscription();
     // Clip de video visible más alto bajo un punto del lienzo (píxeles), o 0.
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;
     // Volumen de un clip de audio, en dB.
@@ -440,6 +508,10 @@ signals:
     void modifiedChanged();
     void fileBusyChanged();
     void detectingKeyChanged();
+    void captionPresetsChanged();
+    void transcriptionChanged();
+    void captionsCreated(int count);
+    void captionsExported(const QString& path);
     void keyColorDetected(bool found);
     void saved(bool ok);
     void opened(bool ok);
@@ -642,7 +714,36 @@ private:
     QTimer m_autosaveTimer;
     bool m_detectingKey = false;
     mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
-    QThreadPool m_recoveryPool;                          // un hilo: escrituras y borrados en orden
+    std::vector<sharkcut::ObjectId> m_selectedCaptions;
+    // Medidas de división del diálogo de subtítulos y estilo de un ajuste por su nombre
+    // (el de fábrica «Clásico» si no existe).
+    static sharkcut::CaptionLayout captionLayoutFrom(const QVariantMap& values);
+    sharkcut::CaptionStyle presetStyle(const QString& name) const;
+    // Estilo provisional mientras se arrastra un valor en Propiedades.
+    struct CaptionPreview {
+        std::vector<sharkcut::ObjectId> captions;
+        std::vector<std::size_t> tracks; // pistas enteras
+        sharkcut::CaptionStyle style;
+    };
+    std::optional<CaptionPreview> m_captionPreview;
+    // Transcripción en curso: lo que hace falta para terminarla (ver createCaptions).
+    struct Transcription;
+    std::shared_ptr<Transcription> m_transcription;
+    double m_transcribeProgress = 0.0;
+    QString m_transcribeMessage;
+    void setTranscribeState(double progress, const QString& message);
+    // Al cerrar: cancela la transcripción y espera a que pare la descarga.
+    void shutdownTranscription();
+    void startDownload(const std::shared_ptr<Transcription>& job);
+    void startTranscription(const std::shared_ptr<Transcription>& job);
+    void finishTranscription(const std::shared_ptr<Transcription>& job,
+                             std::vector<sharkcut::TimedWord> words, const QString& error);
+    // Estilo resultante de aplicar `values` al del primer subtítulo seleccionado.
+    std::optional<sharkcut::CaptionStyle> captionStyleWith(const QVariantMap& values,
+                                                           bool wholeTrack) const;
+    std::vector<std::size_t> selectedCaptionTracks() const;
+    void pruneCaptionSelection();
+    QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;
     QString m_exportMessage;

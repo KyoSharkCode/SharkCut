@@ -16,9 +16,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 5, que abre la 1, la 2
-  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4 y
-  la pantalla verde del clip, `transform.chromaKey`, llegó con la 5).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 6, que abre la 1, la 2
+  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
+  la pantalla verde del clip, `transform.chromaKey`, llegó con la 5 y las pistas de
+  subtítulos, `captionTracks` de cada secuencia, con la 6).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -56,6 +57,19 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   RTX 30+), comprobado con el primer fotograma; si no, dav1d por software.
   Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
   src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
+  Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de
+  pista y propio; src/core/captions.h divide palabras en subtítulos (caracteres, líneas,
+  duración mínima…) y lee/escribe .srt; las operaciones están en edit.h (las de rizo
+  también los mueven). src/render/caption_renderer.h los dibuja (QPainter) y el
+  compositor los pone encima como superposiciones (overlay.frag). src/speech (sin Qt):
+  transcripción local con whisper.cpp (cmake/whisper.cmake, siempre optimizado; GPU con
+  -DSHARKCUT_WHISPER_CUDA=ON o _VULKAN=ON); el modelo se descarga una vez a
+  <datos de la app>/modelos (ModelDownload, con su SHA-256). En el editor:
+  editor_captions.cpp (pistas, selección, estilo, ajustes guardados en QSettings, .srt) y
+  editor_transcription.cpp; interfaz: pestaña Subtítulos de PanelMedios, pistas S1… en
+  LineaTiempo (TimelineClipsModel con captions: true), sección en PanelPropiedades y
+  qml/DialogoSubtitulos.qml. Test [speech]: necesita SHARKCUT_WHISPER_MODEL y
+  SHARKCUT_WHISPER_SAMPLE (si no, se salta).
   src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
   proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),

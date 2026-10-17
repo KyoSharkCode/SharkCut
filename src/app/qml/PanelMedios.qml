@@ -3,7 +3,8 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import SharkCut
 
-// Panel izquierdo del editor, con pestañas: Medios (biblioteca), Transiciones y Efectos.
+// Panel izquierdo del editor, con pestañas: Medios (biblioteca), Transiciones, Efectos y
+// Subtítulos.
 // Las propiedades de lo seleccionado tienen su propio panel (PanelPropiedades).
 Rectangle {
     id: panel
@@ -12,6 +13,10 @@ Rectangle {
     required property Item fantasma          // lo que se ve al arrastrar un medio
     property int pestana: 0
     signal importar()
+    signal crearSubtitulos()
+    signal importarSrt()
+    signal exportarSrt(int pista)
+    signal dividirSubtitulos(int pista)
     signal nuevaSecuencia()
     signal cerrarProyecto(var uid)
     // Carpeta abierta en Medios: lo que se importa va ahí.
@@ -32,7 +37,7 @@ Rectangle {
             Layout.topMargin: 4
             spacing: 2
             Repeater {
-                model: ["Medios", "Transiciones", "Efectos"]
+                model: ["Medios", "Transiciones", "Efectos", "Subtítulos"]
                 delegate: Item {
                     required property string modelData
                     required property int index
@@ -160,6 +165,142 @@ Rectangle {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: "Para probar los ajustes con calma sigue estando la pestaña Transición."
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+            Item { Layout.fillHeight: true }
+        }
+
+        // --- Subtítulos ---
+        ColumnLayout {
+            visible: panel.pestana === 3
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: 12
+            spacing: 8
+
+            BotonIcono {
+                Layout.fillWidth: true
+                implicitHeight: 36
+                acentuado: true
+                texto: "Crear subtítulos a partir de la transcripción…"
+                enabled: panel.editor.hasSequence && !panel.editor.transcribing
+                ayuda: "Escucha el audio de la secuencia y crea una pista de subtítulos"
+                onPulsado: panel.crearSubtitulos()
+            }
+            // Transcripción en curso
+            ColumnLayout {
+                visible: panel.editor.transcribing
+                Layout.fillWidth: true
+                spacing: 4
+                Text {
+                    Layout.fillWidth: true
+                    text: panel.editor.transcribeMessage
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTextoPequeno
+                    wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 6
+                        radius: 3
+                        color: Theme.fondo
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, panel.editor.transcribeProgress))
+                            height: parent.height
+                            radius: 3
+                            color: Theme.acento
+                        }
+                    }
+                    BotonIcono {
+                        texto: "Cancelar"
+                        implicitHeight: 24
+                        onPulsado: panel.editor.cancelTranscription()
+                    }
+                }
+            }
+            BotonIcono {
+                Layout.fillWidth: true
+                icono: "mas"
+                texto: "Añadir un subtítulo o texto en el cabezal"
+                enabled: panel.editor.hasSequence
+                ayuda: "También: doble clic en una pista de subtítulos"
+                onPulsado: panel.editor.addCaptionAtPlayhead(-1)
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                BotonIcono {
+                    Layout.fillWidth: true
+                    texto: "Nueva pista"
+                    enabled: panel.editor.hasSequence
+                    onPulsado: panel.editor.addCaptionTrack()
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "importar"
+                    texto: "Importar .srt…"
+                    enabled: panel.editor.hasSequence
+                    onPulsado: panel.importarSrt()
+                }
+            }
+
+            Text {
+                Layout.topMargin: 6
+                visible: panel.editor.captionTracks.length > 0
+                text: "PISTAS DE SUBTÍTULOS"
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+                font.letterSpacing: 0.6
+            }
+            Repeater {
+                model: panel.editor.captionTracks
+                delegate: Rectangle {
+                    id: filaSub
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    radius: Theme.radio
+                    color: "transparent"
+                    border.color: Theme.borde
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 6
+                        spacing: 6
+                        Text {
+                            Layout.fillWidth: true
+                            text: filaSub.modelData.name + " · " + filaSub.modelData.count
+                                  + (filaSub.modelData.count === 1 ? " subtítulo" : " subtítulos")
+                            color: Theme.texto
+                            font.pixelSize: Theme.tamTexto
+                            elide: Text.ElideRight
+                        }
+                        BotonIcono {
+                            texto: "Dividir…"
+                            implicitHeight: 26
+                            enabled: filaSub.modelData.count > 0 && !filaSub.modelData.locked
+                            ayuda: "Volver a dividir con otros caracteres por línea, líneas…"
+                            onPulsado: panel.dividirSubtitulos(filaSub.modelData.index)
+                        }
+                        BotonIcono {
+                            icono: "exportar"
+                            implicitHeight: 26
+                            enabled: filaSub.modelData.count > 0
+                            ayuda: "Exportar como .srt"
+                            onPulsado: panel.exportarSrt(filaSub.modelData.index)
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Selecciona un subtítulo en la línea de tiempo para cambiar su texto y su "
+                      + "estilo en Propiedades (a él solo o a toda la pista), o aplicar un ajuste "
+                      + "guardado."
                 color: Theme.textoDesactivado
                 font.pixelSize: Theme.tamTextoPequeno
             }

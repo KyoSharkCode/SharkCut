@@ -162,14 +162,17 @@ CompositorOverlay CaptionImageCache::get(const std::string& text, const CaptionS
 }
 
 std::vector<CompositorOverlay> CaptionImageCache::overlaysAt(const Project& project,
-                                                             std::int64_t frame, QSize canvas) {
+                                                             std::int64_t frame, QSize canvas,
+                                                             const StyleOverride& override) {
     std::vector<CompositorOverlay> result;
     for (std::size_t t = 0; t < project.captionTracks.size(); ++t) {
         if (project.captionTracks[t].hidden) {
             continue;
         }
         if (const Caption* c = project.captionAt(t, frame)) {
-            CompositorOverlay o = get(c->text, project.styleOf(t, *c), canvas);
+            const CaptionStyle* provisional = override ? override(t, *c) : nullptr;
+            CompositorOverlay o =
+                get(c->text, provisional ? *provisional : project.styleOf(t, *c), canvas);
             if (o.image) {
                 result.push_back(std::move(o));
             }

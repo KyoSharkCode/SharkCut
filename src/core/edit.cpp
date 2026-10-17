@@ -1190,6 +1190,28 @@ std::pair<std::int64_t, std::int64_t> captionRoom(const CaptionTrack& track, std
 
 } // namespace
 
+std::int64_t mediaEnd(const Project& project) {
+    std::int64_t end = 0;
+    for (const Track& track : project.tracks) {
+        if (!track.clips.empty()) {
+            end = std::max(end, track.clips.back().end());
+        }
+    }
+    return end;
+}
+
+void limitCaptionsTo(std::vector<Caption>& captions, std::int64_t end) {
+    if (end > 0 && !captions.empty() && captions.back().end() > end &&
+        captions.back().start < end) {
+        Caption& last = captions.back();
+        last.length = end - last.start;
+        for (CaptionWord& w : last.words) {
+            w.end = std::min(w.end, last.length);
+            w.start = std::min(w.start, w.end - 1);
+        }
+    }
+}
+
 CaptionStyle clampCaptionStyle(CaptionStyle style) {
     auto finite = [](double value, double fallback) {
         return std::isfinite(value) ? value : fallback;
@@ -1405,7 +1427,9 @@ bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& 
     }
     const FrameRate rate = project.settings.frameRate;
     const std::vector<TimedWord> words = captionWords(project.captionTracks[track], rate);
-    return setCaptions(project, track, layoutCaptions(words, layout, rate));
+    std::vector<Caption> captions = layoutCaptions(words, layout, rate);
+    limitCaptionsTo(captions, mediaEnd(project));
+    return setCaptions(project, track, std::move(captions));
 }
 
 } // namespace sharkcut

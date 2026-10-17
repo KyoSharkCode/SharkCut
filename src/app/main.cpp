@@ -1,6 +1,7 @@
 #include "thumbnails.h"
 
 #include <QGuiApplication>
+#include <QNetworkProxyFactory>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -16,6 +17,8 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("SharkCut"));
     QGuiApplication::setApplicationVersion(QStringLiteral(SHARKCUT_VERSION));
     QGuiApplication::setOrganizationName(QStringLiteral("KyoSumiVT"));
+    // La descarga del modelo de subtítulos usa el proxy del sistema, si lo hay.
+    QNetworkProxyFactory::setUseSystemConfiguration(true);
 
     QQmlApplicationEngine engine;
     QObject::connect(

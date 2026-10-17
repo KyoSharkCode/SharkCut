@@ -11,6 +11,7 @@
 #include <QSize>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -29,9 +30,12 @@ CompositorOverlay renderCaption(const std::string& text, const CaptionStyle& sty
 // exportación) tiene la suya: no es segura entre hilos.
 class CaptionImageCache {
 public:
+    // Estilo provisional de un subtítulo (nullptr: el suyo).
+    using StyleOverride = std::function<const CaptionStyle*(std::size_t track, const Caption&)>;
+
     // Los subtítulos visibles en `frame`, de S1 hacia arriba.
     std::vector<CompositorOverlay> overlaysAt(const Project& project, std::int64_t frame,
-                                              QSize canvas);
+                                              QSize canvas, const StyleOverride& override = {});
     // Uno concreto (también para la vista previa de un estilo que aún no se aplicó).
     CompositorOverlay get(const std::string& text, const CaptionStyle& style, QSize canvas);
 

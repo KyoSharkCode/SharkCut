@@ -33,6 +33,9 @@ class TimelineClipsModel : public QAbstractListModel {
     // Escala de la vista (píxeles por fotograma), para agrupar los clips diminutos.
     Q_PROPERTY(
         double pixelsPerFrame READ pixelsPerFrame WRITE setPixelsPerFrame NOTIFY rangeChanged)
+    // Subtítulos en vez de clips: filas {id, track (pista de subtítulos), start, length,
+    // text} (o bloques {block: true, count, track, start, length}).
+    Q_PROPERTY(bool captions READ captions WRITE setCaptions NOTIFY editorChanged)
 
 public:
     explicit TimelineClipsModel(QObject* parent = nullptr);
@@ -44,6 +47,8 @@ public:
     double lastFrame() const { return m_last; }
     void setLastFrame(double frame);
     double pixelsPerFrame() const { return m_scale; }
+    bool captions() const { return m_captions; }
+    void setCaptions(bool captions);
     void setPixelsPerFrame(double scale);
 
     int rowCount(const QModelIndex& parent = {}) const override;
@@ -66,6 +71,8 @@ private:
         qint64 id = 0;
         QVariantMap clip;
     };
+    std::vector<Row> collectClips() const;
+    std::vector<Row> collectCaptions() const;
 
     QPointer<Editor> m_editor;
     double m_first = 0.0;
@@ -74,6 +81,7 @@ private:
     std::int64_t m_windowStart = 0;
     std::int64_t m_windowEnd = -1;
     std::vector<Row> m_rows;
+    bool m_captions = false;
     bool m_refreshPending = false;
     bool m_forcePending = false;
 };

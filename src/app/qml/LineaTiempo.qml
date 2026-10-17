@@ -24,6 +24,8 @@ Rectangle {
     property string herramienta: "seleccion" // "seleccion" o "cuchilla"
     property bool iman: true                 // ajustar a bordes y cabezal al arrastrar
     signal nuevaSecuencia()
+    signal exportarSrt(int pista)          // pide el archivo y exporta la pista S<n>
+    signal dividirSubtitulos(int pista)    // abre las opciones para volver a dividirla
 
     // Vista previa del arrastre en curso:
     // {tipo: "mover" | "inicio" | "final", grupo: [ids], delta, valor, pistas, video}
@@ -51,6 +53,31 @@ Rectangle {
     // vale también todo el espacio libre hasta el final de la vista).
     readonly property int bandaNueva: 30
     readonly property int alturaPestanas: 30
+    readonly property int alturaSubtitulo: 34
+
+    // Pistas de subtítulos, arriba del todo (la más alta primero): {pista, y}.
+    readonly property var filasSubtitulos: {
+        const lista = []
+        let y = 0
+        for (const p of editor.captionTracks.slice().reverse()) {
+            lista.push({ pista: p, y: y })
+            y += alturaSubtitulo + separacion
+        }
+        return lista
+    }
+    readonly property real altoSubtitulos: filasSubtitulos.length > 0
+        ? filasSubtitulos.length * (alturaSubtitulo + separacion) - separacion + separacionGrupos : 0
+    readonly property var yPorSubtitulo: {
+        const mapa = {}
+        for (const f of filasSubtitulos)
+            mapa[f.pista.index] = f.y
+        return mapa
+    }
+    function yDeSubtitulo(indice) {
+        return yPrimeraFila + (yPorSubtitulo[indice] !== undefined ? yPorSubtitulo[indice] : 0)
+    }
+    // Arrastre de subtítulos: {tipo: "mover" | "inicio" | "final", id, grupo, delta, valor}
+    property var arrastreSub: null
 
     // Filas en pantalla, de arriba abajo: {pista, y} (y relativa a la primera fila).
     readonly property var filas: {
@@ -58,7 +85,7 @@ Rectangle {
         const videos = pistas.filter((p) => p.video).reverse()
         const audios = pistas.filter((p) => !p.video)
         const lista = []
-        let y = bandaNueva
+        let y = altoSubtitulos + bandaNueva
         for (const p of videos) {
             lista.push({ pista: p, y: y })
             y += alturaPista + separacion
@@ -105,6 +132,8 @@ Rectangle {
         if (filas.length === 0)
             return ""
         const y = yContenido - yPrimeraFila
+        if (y < altoSubtitulos)
+            return ""
         if (y < filas[0].y - separacion)
             return "video"
         if (y > filas[filas.length - 1].y + alturaPista + separacion)
@@ -356,6 +385,15 @@ Rectangle {
                                 height: raiz.alturaPista
                             }
                         }
+                        Repeater {
+                            model: raiz.filasSubtitulos
+                            delegate: CabeceraSubtitulos {
+                                required property var modelData
+                                pista: modelData.pista
+                                y: raiz.yPrimeraFila + modelData.y
+                                height: raiz.alturaSubtitulo
+                            }
+                        }
                     }
 
                     // Añadir pistas (fijo arriba, a la altura de la regla)
@@ -369,16 +407,23 @@ Rectangle {
                             BotonIcono {
                                 texto: "+V"
                                 ayuda: "Añadir una pista de video encima"
-                                implicitWidth: 40
+                                implicitWidth: 27
                                 implicitHeight: 22
                                 onPulsado: raiz.editor.addTrack("video")
                             }
                             BotonIcono {
                                 texto: "+A"
                                 ayuda: "Añadir una pista de audio debajo"
-                                implicitWidth: 40
+                                implicitWidth: 27
                                 implicitHeight: 22
                                 onPulsado: raiz.editor.addTrack("audio")
+                            }
+                            BotonIcono {
+                                texto: "+S"
+                                ayuda: "Añadir una pista de subtítulos (arriba)"
+                                implicitWidth: 27
+                                implicitHeight: 22
+                                onPulsado: raiz.editor.addCaptionTrack()
                             }
                         }
                     }
@@ -443,6 +488,210 @@ Rectangle {
                             }
                         }
 
+                        // Fondo de las pistas de subtítulos: clic = cabezal ahí; doble clic =
+                        // subtítulo nuevo ahí.
+                        Repeater {
+                            model: raiz.filasSubtitulos
+                            delegate: Rectangle {
+                                required property var modelData
+                                y: raiz.yPrimeraFila + modelData.y
+                                width: contenido.width
+                                height: raiz.alturaSubtitulo
+                                color: Theme.pistaVideo
+                                MouseArea {
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    preventStealing: true
+                                    onPressed: (m) => {
+                                        raiz.editor.clearSelection()
+                                        if (m.button === Qt.RightButton)
+                                            menuSubtitulos.abrir(parent.modelData.pista)
+                                        else
+                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                    }
+                                    onPositionChanged: (m) => {
+                                        if (pressedButtons & Qt.LeftButton)
+                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                    }
+                                    onDoubleClicked: raiz.editor.addCaptionAtPlayhead(parent.modelData.pista.index)
+                                }
+                            }
+                        }
+
+                        // Subtítulos (solo los de la parte visible, como los clips).
+                        Repeater {
+                            model: TimelineClipsModel {
+                                editor: raiz.editor
+                                captions: true
+                                firstFrame: vista.contentX / raiz.escala
+                                lastFrame: (vista.contentX + vista.width) / raiz.escala
+                                pixelsPerFrame: raiz.escala
+                            }
+                            delegate: Rectangle {
+                                id: subtitulo
+                                required property var datosClip
+                                readonly property var dato: datosClip
+                                readonly property bool bloque: dato.block === true
+                                readonly property var pista: raiz.editor.captionTracks[dato.track]
+                                readonly property bool bloqueado: pista !== undefined && pista.locked
+                                readonly property bool seleccionado: !bloque
+                                    && raiz.editor.captionSelection.indexOf(dato.id) >= 0
+                                readonly property bool enArrastre: raiz.arrastreSub !== null
+                                    && raiz.arrastreSub.grupo.indexOf(dato.id) >= 0
+                                readonly property real inicioVista: !enArrastre ? dato.start
+                                    : raiz.arrastreSub.tipo === "mover" ? dato.start + raiz.arrastreSub.delta
+                                    : raiz.arrastreSub.tipo === "inicio" ? raiz.arrastreSub.valor
+                                    : dato.start
+                                readonly property real finVista: !enArrastre ? dato.start + dato.length
+                                    : raiz.arrastreSub.tipo === "mover" ? dato.start + dato.length + raiz.arrastreSub.delta
+                                    : raiz.arrastreSub.tipo === "final" ? raiz.arrastreSub.valor
+                                    : dato.start + dato.length
+
+                                x: inicioVista * raiz.escala
+                                y: raiz.yDeSubtitulo(dato.track) + 3
+                                z: enArrastre ? 2 : 1
+                                width: Math.max(2, (finVista - inicioVista) * raiz.escala)
+                                height: raiz.alturaSubtitulo - 6
+                                radius: 3
+                                color: seleccionado ? Qt.lighter(Theme.clipTexto, 1.3) : Theme.clipTexto
+                                opacity: pista !== undefined && pista.hidden ? 0.45 : 1
+                                border.color: seleccionado ? Theme.acento : Qt.lighter(color, 1.25)
+                                border.width: seleccionado ? 2 : 1
+                                clip: true
+
+                                Text {
+                                    visible: !subtitulo.bloque && subtitulo.width > 24
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: 5
+                                    width: parent.width - 10
+                                    text: subtitulo.dato.text.replace(/\n/g, " ")
+                                    color: Theme.texto
+                                    font.pixelSize: Theme.tamTextoPequeno
+                                    elide: Text.ElideRight
+                                }
+                                Loader {
+                                    active: subtitulo.bloque && subtitulo.width > 160
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: Math.max(6, vista.contentX - subtitulo.x + 6)
+                                    sourceComponent: Text {
+                                        text: subtitulo.dato.count + " subtítulos · acércate para editarlos"
+                                        color: Theme.texto
+                                        opacity: 0.7
+                                        font.pixelSize: Theme.tamTextoPequeno
+                                    }
+                                }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: subtitulo.bloqueado
+                                    color: Theme.fondo
+                                    opacity: 0.35
+                                }
+
+                                // Cuerpo: seleccionar y mover.
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: !subtitulo.bloqueado && !subtitulo.bloque
+                                    preventStealing: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    property real xInicial: 0
+                                    onPressed: (m) => {
+                                        const sumar = (m.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
+                                        if (sumar || !subtitulo.seleccionado)
+                                            raiz.editor.selectCaption(subtitulo.dato.id, sumar)
+                                        if (m.button === Qt.RightButton) {
+                                            menuSubtitulos.abrir(subtitulo.pista)
+                                            return
+                                        }
+                                        xInicial = mapToItem(contenido, m.x, 0).x
+                                        raiz.arrastreSub = null
+                                    }
+                                    onPositionChanged: (m) => {
+                                        if (!pressed || !(pressedButtons & Qt.LeftButton))
+                                            return
+                                        const dx = mapToItem(contenido, m.x, 0).x - xInicial
+                                        if (raiz.arrastreSub === null && Math.abs(dx) < 4)
+                                            return
+                                        const d = subtitulo.dato
+                                        const grupo = raiz.editor.captionSelection.indexOf(d.id) >= 0
+                                                      ? raiz.editor.captionSelection : [d.id]
+                                        let delta = Math.round(dx / raiz.escala)
+                                        // Imán: con el borde inicial o el final de este subtítulo.
+                                        const porInicio = raiz.ajustar(d.start + delta, []) - d.start
+                                        const porFin = raiz.ajustar(d.start + d.length + delta, []) - d.start - d.length
+                                        if (porInicio !== delta && (porFin === delta
+                                                || Math.abs(porInicio - delta) <= Math.abs(porFin - delta)))
+                                            delta = porInicio
+                                        else if (porFin !== delta)
+                                            delta = porFin
+                                        delta = raiz.editor.limitCaptionMove(d.id, delta)
+                                        raiz.arrastreSub = { tipo: "mover", id: d.id, grupo: grupo,
+                                                             delta: delta, valor: 0 }
+                                    }
+                                    onReleased: {
+                                        const a = raiz.arrastreSub
+                                        raiz.arrastreSub = null
+                                        if (a !== null && a.delta !== 0)
+                                            Qt.callLater(raiz.editor.moveCaptions, a.id, a.delta)
+                                    }
+                                    onCanceled: raiz.arrastreSub = null
+                                }
+
+                                // Bordes: cambiar cuándo empieza o acaba.
+                                Repeater {
+                                    model: subtitulo.bloque || subtitulo.width < 6 || subtitulo.bloqueado
+                                           ? [] : ["inicio", "final"]
+                                    delegate: MouseArea {
+                                        id: bordeSub
+                                        required property string modelData
+                                        readonly property string lado: modelData
+                                        width: Math.min(8, subtitulo.width / 3)
+                                        height: subtitulo.height
+                                        anchors.left: lado === "inicio" ? subtitulo.left : undefined
+                                        anchors.right: lado === "final" ? subtitulo.right : undefined
+                                        preventStealing: true
+                                        hoverEnabled: true
+                                        cursorShape: Qt.SizeHorCursor
+                                        property real xInicial: 0
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: Theme.acento
+                                            opacity: bordeSub.containsMouse || bordeSub.pressed ? 0.5 : 0
+                                        }
+                                        onPressed: (m) => {
+                                            raiz.editor.selectCaption(subtitulo.dato.id, false)
+                                            xInicial = mapToItem(contenido, m.x, 0).x
+                                        }
+                                        onPositionChanged: (m) => {
+                                            if (!pressed)
+                                                return
+                                            const d = subtitulo.dato
+                                            const dx = mapToItem(contenido, m.x, 0).x - xInicial
+                                            const hueco = raiz.editor.captionRoom(d.id)
+                                            const base = lado === "inicio" ? d.start : d.start + d.length
+                                            let f = raiz.ajustar(base + Math.round(dx / raiz.escala), [])
+                                            if (lado === "inicio")
+                                                f = Math.max(hueco.low, Math.min(f, d.start + d.length - 1))
+                                            else
+                                                f = Math.max(d.start + 1, hueco.high >= 0 ? Math.min(f, hueco.high) : f)
+                                            raiz.arrastreSub = { tipo: lado, id: d.id, grupo: [d.id], delta: 0, valor: f }
+                                        }
+                                        onReleased: {
+                                            const a = raiz.arrastreSub
+                                            raiz.arrastreSub = null
+                                            if (a === null)
+                                                return
+                                            const d = subtitulo.dato
+                                            if (lado === "inicio")
+                                                Qt.callLater(raiz.editor.trimCaption, d.id, a.valor, d.start + d.length)
+                                            else
+                                                Qt.callLater(raiz.editor.trimCaption, d.id, d.start, a.valor)
+                                        }
+                                        onCanceled: raiz.arrastreSub = null
+                                    }
+                                }
+                            }
+                        }
+
                         // Zonas vacías de arriba y de abajo: al arrastrar un medio encima se
                         // ve que ahí se crea una pista nueva.
                         Repeater {
@@ -452,7 +701,7 @@ Rectangle {
                                 visible: raiz.zonaNueva === modelData
                                 x: vista.contentX + 4
                                 y: modelData === "video"
-                                   ? raiz.yPrimeraFila + 2
+                                   ? raiz.yPrimeraFila + raiz.altoSubtitulos + 2
                                    : raiz.yPrimeraFila + raiz.altoPistas - raiz.bandaNueva + raiz.separacion
                                 width: vista.width - 8
                                 height: modelData === "video"
@@ -1365,6 +1614,45 @@ Rectangle {
     }
 
     MenuTema {
+        id: menuSubtitulos
+        property var pista: null
+        function abrir(p) {
+            pista = p
+            popup()
+        }
+        Action {
+            text: "Añadir subtítulo en el cabezal"
+            enabled: menuSubtitulos.pista !== null && !menuSubtitulos.pista.locked
+            onTriggered: raiz.editor.addCaptionAtPlayhead(menuSubtitulos.pista.index)
+        }
+        Action {
+            text: "Volver a dividir…"
+            enabled: menuSubtitulos.pista !== null && !menuSubtitulos.pista.locked
+                     && menuSubtitulos.pista.count > 0
+            onTriggered: raiz.dividirSubtitulos(menuSubtitulos.pista.index)
+        }
+        Action {
+            text: "Exportar como .srt…"
+            enabled: menuSubtitulos.pista !== null && menuSubtitulos.pista.count > 0
+            onTriggered: raiz.exportarSrt(menuSubtitulos.pista.index)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: "Añadir pista de subtítulos"
+            onTriggered: raiz.editor.addCaptionTrack()
+        }
+        Action {
+            text: menuSubtitulos.pista === null ? "Quitar pista"
+                  : "Quitar la pista " + menuSubtitulos.pista.name
+                    + (menuSubtitulos.pista.count > 0 ? " y sus subtítulos" : "")
+            enabled: menuSubtitulos.pista !== null && !menuSubtitulos.pista.locked
+            onTriggered: raiz.editor.removeCaptionTrack(menuSubtitulos.pista.index)
+        }
+    }
+
+    MenuTema {
         id: menuMarcador
         property var marcador: null
         function abrir(m) {
@@ -1597,6 +1885,57 @@ Rectangle {
                 ayuda: cabecera.pista.locked ? "Desbloquear la pista"
                                              : "Bloquear la pista (sus clips no se pueden editar)"
                 onPulsado: raiz.editor.setTrackLocked(cabecera.pista.index, !cabecera.pista.locked)
+            }
+        }
+    }
+
+    // Cabecera de una pista de subtítulos: ocultar y bloquear; clic derecho, su menú.
+    component CabeceraSubtitulos: Rectangle {
+        id: cabeceraSub
+        property var pista
+        width: raiz.anchoCabecera - 6
+        radius: 3
+        color: Theme.cabeceraVideo
+        border.color: Theme.borde
+        Rectangle {
+            x: 1
+            y: 4
+            width: 3
+            height: parent.height - 8
+            radius: 1.5
+            color: Theme.clipTexto
+        }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            x: 9
+            text: cabeceraSub.pista.name
+            color: cabeceraSub.pista.locked ? Theme.textoSecundario : Theme.texto
+            font.pixelSize: Theme.tamTexto
+            font.bold: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton
+            onPressed: menuSubtitulos.abrir(cabeceraSub.pista)
+        }
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: 5
+            spacing: 2
+            BotonPista {
+                icono: cabeceraSub.pista.hidden ? "ojoCerrado" : "ojo"
+                aviso: cabeceraSub.pista.hidden
+                ayuda: cabeceraSub.pista.hidden ? "Mostrar los subtítulos"
+                                                : "Ocultar los subtítulos (no se ven ni se exportan)"
+                onPulsado: raiz.editor.setCaptionTrackHidden(cabeceraSub.pista.index, !cabeceraSub.pista.hidden)
+            }
+            BotonPista {
+                icono: cabeceraSub.pista.locked ? "candado" : "candadoAbierto"
+                aviso: cabeceraSub.pista.locked
+                ayuda: cabeceraSub.pista.locked ? "Desbloquear la pista"
+                                                : "Bloquear la pista (sus subtítulos no se pueden editar)"
+                onPulsado: raiz.editor.setCaptionTrackLocked(cabeceraSub.pista.index, !cabeceraSub.pista.locked)
             }
         }
     }

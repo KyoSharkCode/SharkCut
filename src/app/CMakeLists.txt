@@ -28,6 +28,7 @@ qt_add_qml_module(SharkCut
         qml/PanelMedios.qml
         qml/DialogoNuevoProyecto.qml
         qml/DialogoNombre.qml
+        qml/DialogoSubtitulos.qml
         qml/MenuTema.qml
         qml/BarraDesplazamiento.qml
         qml/PanelBiblioteca.qml
@@ -44,6 +45,10 @@ qt_add_qml_module(SharkCut
         playbackclock.cpp
         editor.h
         editor.cpp
+        editor_captions.cpp
+        editor_transcription.cpp
+        modeldownload.h
+        modeldownload.cpp
         thumbnails.h
         thumbnails.cpp
         waveforms.h
@@ -62,7 +67,9 @@ target_link_libraries(SharkCut PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::GuiPrivate
+    Qt6::Network
     sharkcut_render
+    sharkcut_speech
     sharkcut_core
     sharkcut_media
     sharkcut_audio

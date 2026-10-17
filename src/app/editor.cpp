@@ -31,6 +31,7 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QThread>
 #include <QThreadPool>
 #include <QUuid>
 #include <QVariantMap>
@@ -301,6 +302,7 @@ Editor::~Editor() {
         }
     }
     m_recoveryPool.waitForDone();
+    shutdownTranscription();
     m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();
@@ -783,7 +785,17 @@ sharkcut::CompositorInput Editor::composition() const {
         }
     }
     const QSize canvas(project().settings.width, project().settings.height);
-    input.overlays = m_captionImages.overlaysAt(project(), m_currentFrame, canvas);
+    sharkcut::CaptionImageCache::StyleOverride preview;
+    if (m_captionPreview) {
+        preview = [this](std::size_t track, const sharkcut::Caption& c) {
+            const CaptionPreview& pv = *m_captionPreview;
+            const bool affected =
+                std::find(pv.tracks.begin(), pv.tracks.end(), track) != pv.tracks.end() ||
+                std::find(pv.captions.begin(), pv.captions.end(), c.id) != pv.captions.end();
+            return affected ? &pv.style : nullptr;
+        };
+    }
+    input.overlays = m_captionImages.overlaysAt(project(), m_currentFrame, canvas, preview);
     return input;
 }
 
@@ -2315,6 +2327,12 @@ void Editor::goToEdit(int direction) {
 }
 
 void Editor::removeSelection() {
+    if (!m_selectedCaptions.empty()) {
+        const std::vector<ObjectId> captions = m_selectedCaptions;
+        edit(QStringLiteral("Quitar subtítulos"),
+             [&captions](Project& p) { return sharkcut::removeCaptions(p, captions); });
+        return;
+    }
     if (m_selectedTransition != 0) {
         removeTransition(static_cast<qint64>(m_selectedTransition));
         return;
@@ -2625,6 +2643,7 @@ void Editor::select(qint64 clipId, bool add) {
         return;
     }
     m_selectedTransition = 0;
+    m_selectedCaptions.clear();
     if (!add) {
         m_selection = {id};
     } else if (isSelected(clipId)) {
@@ -2639,9 +2658,10 @@ void Editor::select(qint64 clipId, bool add) {
 }
 
 void Editor::clearSelection() {
-    if (!m_selection.empty() || m_selectedTransition != 0) {
+    if (!m_selection.empty() || m_selectedTransition != 0 || !m_selectedCaptions.empty()) {
         m_selection.clear();
         m_selectedTransition = 0;
+        m_selectedCaptions.clear();
         emit selectionChanged();
     }
 }
@@ -2819,6 +2839,7 @@ void Editor::selectTransition(qint64 id) {
         return;
     }
     m_selection.clear();
+    m_selectedCaptions.clear();
     m_selectedTransition = transition;
     emit selectionChanged();
 }
@@ -2919,6 +2940,7 @@ void Editor::onProjectChanged() {
     if (m_selectedTransition != 0 && !project().transition(m_selectedTransition)) {
         m_selectedTransition = 0;
     }
+    pruneCaptionSelection();
     emit selectionChanged();
 
     // Solo se recolocan los hilos de video o se reinicia el audio si cambia lo que

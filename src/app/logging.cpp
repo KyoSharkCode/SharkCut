@@ -123,7 +123,9 @@ void install() {
             QStringLiteral("sharkcut-%1.log")
                 .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"))));
 #ifdef Q_OS_WIN
-        toFile = _wfreopen(reinterpret_cast<const wchar_t*>(path.utf16()), L"a", stderr) != nullptr;
+        FILE* reopened = nullptr;
+        toFile = _wfreopen_s(&reopened, reinterpret_cast<const wchar_t*>(path.utf16()), L"a",
+                             stderr) == 0;
         dumpPath = dir.filePath(QStringLiteral("ultimo-cierre.dmp")).toStdWString();
         SetUnhandledExceptionFilter(onCrash);
 #else

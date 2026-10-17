@@ -910,6 +910,7 @@ Window {
         id: fantasma
         property var mediaId: undefined
         property int transicion: -1 // índice del catálogo si se arrastra una transición
+        property string efecto      // nombre del efecto si se arrastra uno ("croma")
         property string nombre
         visible: Drag.active
         z: 100
@@ -917,7 +918,7 @@ Window {
         height: 28
         radius: Theme.radio
         color: Theme.panelElevado
-        border.color: transicion >= 0 ? Theme.clipTransicion : Theme.acento
+        border.color: transicion >= 0 || efecto !== "" ? Theme.clipTransicion : Theme.acento
         border.width: 2
         opacity: 0.9
         Drag.keys: ["sharkcut/medio"]

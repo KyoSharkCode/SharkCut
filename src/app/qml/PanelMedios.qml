@@ -173,9 +173,77 @@ Rectangle {
             Layout.fillHeight: true
             Layout.margins: 12
             spacing: 8
+            // Croma: se arrastra a un clip de video o se aplica al seleccionado.
+            Rectangle {
+                id: efectoCroma
+                Layout.fillWidth: true
+                implicitHeight: 42
+                radius: Theme.radio
+                color: arrastreCroma.containsMouse ? Theme.panelElevado : "transparent"
+                border.color: arrastreCroma.containsMouse ? Theme.acento : Theme.borde
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 8
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Croma (pantalla verde)"
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                    }
+                    BotonIcono {
+                        texto: "Aplicar"
+                        implicitHeight: 26
+                        enabled: panel.editor.selectedClip.count === 1
+                                 && panel.editor.selectedClip.video !== 0
+                        ayuda: "Al clip de video seleccionado"
+                        onPulsado: panel.editor.applyEffect(panel.editor.selectedClip.video, "croma")
+                    }
+                }
+                MouseArea {
+                    id: arrastreCroma
+                    // Deja libre el botón Aplicar.
+                    anchors.fill: parent
+                    anchors.rightMargin: 80
+                    hoverEnabled: true
+                    drag.target: panel.fantasma
+                    drag.threshold: 6
+                    cursorShape: Qt.OpenHandCursor
+                    onPressed: (m) => {
+                        const f = panel.fantasma
+                        const p = mapToItem(f.parent, m.x, m.y)
+                        f.x = p.x - 10
+                        f.y = p.y - 14
+                        f.mediaId = undefined
+                        f.transicion = -1
+                        f.efecto = "croma"
+                        f.nombre = "Croma (pantalla verde)"
+                        f.Drag.keys = ["sharkcut/efecto"]
+                    }
+                    onPositionChanged: {
+                        if (drag.active && !panel.fantasma.Drag.active)
+                            panel.fantasma.Drag.active = true
+                    }
+                    onReleased: {
+                        if (panel.fantasma.Drag.active) {
+                            panel.fantasma.Drag.drop()
+                            panel.fantasma.Drag.active = false
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Arrástralo sobre un clip de video de la línea de tiempo: busca solo el color "
+                      + "del fondo. Después se ajusta (o se quita) en Propiedades."
+                color: Theme.textoDesactivado
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+
             Repeater {
                 model: ["Movimiento (keyframes y ajustes guardados)", "Blanco y negro · desenfoque",
-                        "Esquinas redondeadas · sombra", "Croma (pantalla verde)"]
+                        "Esquinas redondeadas · sombra"]
                 delegate: Rectangle {
                     required property string modelData
                     Layout.fillWidth: true

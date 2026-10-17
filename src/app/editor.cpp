@@ -243,6 +243,8 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
         {QStringLiteral("cropBottom"), t.cropBottom},
         {QStringLiteral("chromaKey"),
          QVariantMap{
+             // El clip tiene el efecto (aunque esté desactivado): se muestra en Propiedades.
+             {QStringLiteral("added"), t.chromaKey != sharkcut::ChromaKey{}},
              {QStringLiteral("enabled"), t.chromaKey.enabled},
              {QStringLiteral("color"),
               QStringLiteral("#%1").arg(t.chromaKey.color, 6, 16, QLatin1Char('0')).toUpper()},
@@ -2386,6 +2388,9 @@ sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVar
     take("cropRight", t.cropRight);
     take("cropBottom", t.cropBottom);
     sharkcut::ChromaKey& key = t.chromaKey;
+    if (values.value(QStringLiteral("keyRemove")).toBool()) {
+        key = {}; // quitar el efecto del clip
+    }
     if (const auto it = values.find(QStringLiteral("keyEnabled")); it != values.end()) {
         key.enabled = it->toBool();
     }
@@ -2480,7 +2485,29 @@ void Editor::resetTransform(qint64 clipId) {
          [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); });
 }
 
-void Editor::detectKeyColor(qint64 clipId) {
+void Editor::applyEffect(qint64 clipId, const QString& effect) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const auto ref = project().findClip(id);
+    if (!ref || project().tracks[ref->track].kind != sharkcut::TrackKind::Video) {
+        return;
+    }
+    select(clipId, false);
+    if (effect == QLatin1String("croma")) {
+        detectKeyColor(clipId, true);
+    }
+}
+
+qint64 Editor::videoClipAt(int track, qint64 frame) const {
+    const Project& p = project();
+    if (track < 0 || static_cast<std::size_t>(track) >= p.tracks.size() ||
+        p.tracks[static_cast<std::size_t>(track)].kind != sharkcut::TrackKind::Video) {
+        return 0;
+    }
+    const Clip* clip = p.clipAt(static_cast<std::size_t>(track), frame);
+    return clip ? static_cast<qint64>(clip->id) : 0;
+}
+
+void Editor::detectKeyColor(qint64 clipId, bool fallbackToGreen) {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);
     const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
@@ -2498,7 +2525,7 @@ void Editor::detectKeyColor(qint64 clipId) {
     emit detectingKeyChanged();
 
     QPointer<Editor> self(this);
-    QThreadPool::globalInstance()->start([self, path, us, id, projectUid] {
+    QThreadPool::globalInstance()->start([self, path, us, id, projectUid, fallbackToGreen] {
         std::optional<std::uint32_t> color;
         try {
             sharkcut::VideoDecoder decoder(path, sharkcut::HwAccel::None);
@@ -2511,15 +2538,16 @@ void Editor::detectKeyColor(qint64 clipId) {
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, color, id, projectUid] {
+            [self, color, id, projectUid, fallbackToGreen] {
                 if (!self) {
                     return;
                 }
                 self->m_detectingKey = false;
                 emit self->detectingKeyChanged();
                 // Si entretanto se cambió de proyecto, el clip ya no es el mismo.
-                const bool found = color && self->m_activeProject == projectUid &&
-                                   self->project().clip(id) != nullptr;
+                const bool same =
+                    self->m_activeProject == projectUid && self->project().clip(id) != nullptr;
+                const bool found = color && same;
                 if (found) {
                     self->setClipTransform(
                         static_cast<qint64>(id),
@@ -2527,6 +2555,10 @@ void Editor::detectKeyColor(qint64 clipId) {
                          {QStringLiteral("keyColor"),
                           QStringLiteral("#%1").arg(*color, 6, 16, QLatin1Char('0'))}},
                         QStringLiteral("Pantalla verde"));
+                } else if (same && fallbackToGreen) {
+                    self->setClipTransform(static_cast<qint64>(id),
+                                           {{QStringLiteral("keyEnabled"), true}},
+                                           QStringLiteral("Pantalla verde"));
                 }
                 emit self->keyColorDetected(found);
             },

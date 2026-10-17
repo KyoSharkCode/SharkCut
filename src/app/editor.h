@@ -362,10 +362,16 @@ public:
     Q_INVOKABLE void fitClip(qint64 clipId, bool fill);
     Q_INVOKABLE void resetTransform(qint64 clipId);
     // Pantalla verde: las claves keyEnabled, keyColor ("#RRGGBB"), keySimilarity,
-    // keySmoothness y keySpill de setClipTransform/previewTransform. detectKeyColor()
-    // busca el color de fondo del clip en el fotograma que se ve (en otro hilo) y, si lo
-    // encuentra, activa la pantalla verde con él; al terminar emite keyColorDetected.
-    Q_INVOKABLE void detectKeyColor(qint64 clipId);
+    // keySmoothness, keySpill y keyRemove (quita el efecto) de setClipTransform/previewTransform.
+    // detectKeyColor() busca el color de fondo del clip en el fotograma que se ve (en otro hilo) y,
+    // si lo encuentra, activa la pantalla verde con él; al terminar emite keyColorDetected.
+    // `fallbackToGreen`: si no se encuentra, la activa igualmente con el color que tenga.
+    Q_INVOKABLE void detectKeyColor(qint64 clipId, bool fallbackToGreen = false);
+    // Efecto del panel Efectos aplicado a un clip de video (arrastrándolo o con el clip
+    // seleccionado): "croma". Selecciona el clip para ajustarlo en Propiedades.
+    Q_INVOKABLE void applyEffect(qint64 clipId, const QString& effect);
+    // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
+    Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
     bool detectingKey() const { return m_detectingKey; }
     // Clip de video visible más alto bajo un punto del lienzo (píxeles), o 0.
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;

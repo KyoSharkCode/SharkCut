@@ -43,7 +43,21 @@ Rectangle {
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
         readonly property var croma: t.chromaKey || ({})
+        readonly property bool hayCroma: hayVideo && croma.added === true
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
+
+        // Al aplicar o detectar la pantalla verde, se lleva a la vista su sección.
+        Connections {
+            target: panel.editor
+            function onKeyColorDetected(found) { desplazarCroma.restart() }
+        }
+        // Espera a que la columna coloque la sección recién añadida.
+        Timer {
+            id: desplazarCroma
+            interval: 80
+            onTriggered: propiedades.contentY = Math.max(0, Math.min(
+                cabeceraCroma.y, propiedades.contentHeight - propiedades.height))
+        }
 
         function vista(valores) { panel.editor.previewTransform(sel.video, valores) }
         function aplicar(valores, etiqueta) { panel.editor.setClipTransform(sel.video, valores, etiqueta) }
@@ -359,10 +373,11 @@ Rectangle {
                 }
             }
 
-            // --- Pantalla verde (croma) ---
-            Separador { visible: propiedades.hayVideo }
+            // --- Pantalla verde (croma): solo si se le añadió el efecto (desde Efectos) ---
+            Separador { visible: propiedades.hayCroma }
             RowLayout {
-                visible: propiedades.hayVideo
+                id: cabeceraCroma
+                visible: propiedades.hayCroma
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
@@ -381,9 +396,16 @@ Rectangle {
                     onPulsado: propiedades.aplicar({ keyEnabled: !propiedades.croma.enabled },
                                                    "Pantalla verde")
                 }
+                BotonIcono {
+                    icono: "quitar"
+                    enabled: propiedades.videoEditable
+                    implicitHeight: 26
+                    ayuda: "Quitar el efecto de pantalla verde del clip"
+                    onPulsado: propiedades.aplicar({ keyRemove: true }, "Quitar pantalla verde")
+                }
             }
             ColumnLayout {
-                visible: propiedades.hayVideo
+                visible: propiedades.hayCroma
                 enabled: propiedades.videoEditable
                 Layout.fillWidth: true
                 spacing: 6

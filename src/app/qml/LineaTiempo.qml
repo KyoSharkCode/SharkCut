@@ -1000,12 +1000,20 @@ Rectangle {
                             y: raiz.yPrimeraFila - raiz.separacion
                             width: parent.width
                             height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
-                            keys: ["sharkcut/medio", "sharkcut/transicion", "text/uri-list"]
+                            keys: ["sharkcut/medio", "sharkcut/transicion", "sharkcut/efecto",
+                                   "text/uri-list"]
                             function esTransicion(d) {
                                 return d.keys.indexOf("sharkcut/transicion") >= 0
                             }
+                            function esEfecto(d) {
+                                return d.keys.indexOf("sharkcut/efecto") >= 0
+                            }
                             function actualizar(d) {
                                 const p = raiz.pistaEnY(d.y + y)
+                                if (esEfecto(d)) {
+                                    raiz.pistaSoltar = p && p.video ? p.index : -1
+                                    return
+                                }
                                 if (esTransicion(d)) {
                                     raiz.corteSoltar = p && p.video ? raiz.corteCercano(p.index, d.x) : null
                                     return
@@ -1032,7 +1040,13 @@ Rectangle {
                                 raiz.pistaSoltar = -1
                                 raiz.corteSoltar = null
                                 raiz.zonaNueva = ""
-                                if (esTransicion(d)) {
+                                if (esEfecto(d)) {
+                                    // Sobre un clip de video: se le aplica el efecto.
+                                    const clip = p && p.video ? raiz.editor.videoClipAt(p.index, raiz.frameEn(d.x)) : 0
+                                    if (clip !== 0 && d.source)
+                                        Qt.callLater(raiz.editor.applyEffect, clip, d.source.efecto)
+                                    d.accept()
+                                } else if (esTransicion(d)) {
                                     if (corte !== null && d.source)
                                         Qt.callLater(raiz.editor.addTransition, corte.track, corte.cut,
                                                      d.source.transicion)

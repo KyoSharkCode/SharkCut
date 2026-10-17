@@ -19,6 +19,7 @@ MouseArea {
         fantasma.y = p.y - 14
         fantasma.mediaId = medio.id
         fantasma.transicion = -1
+        fantasma.efecto = ""
         fantasma.nombre = medio.name
         fantasma.Drag.keys = ["sharkcut/medio"]
     }

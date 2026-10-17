@@ -49,7 +49,7 @@ una base sólida sobre la rapidez.
 | Decodificación | **FFmpeg 9 (libavformat/libavcodec)** enlazado como biblioteca (build precompilada de Gyan), con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
 | Codificación | **FFmpeg + NVENC** (`h264_nvenc` / `hevc_nvenc`) recibiendo texturas D3D11; fallback a `libx264` | Exportación sin pasar los píxeles por la CPU |
 | Audio | **miniaudio** (WASAPI) + mezclador propio | Biblioteca ligera, baja latencia; el audio marca el reloj de reproducción |
-| GPU de referencia | NVIDIA **RTX 3060 12 GB** | PC de trabajo de Kyo; NVENC/NVDEC por defecto |
+| GPU de referencia | NVIDIA **RTX 5070 12 GB** (antes RTX 3060 12 GB) | PC de trabajo de Kyo; NVENC/NVDEC por defecto |
 | Proyecto por defecto | **1080p a 60 fps**, audio estéreo 48 kHz | Formato habitual de grabación |
 | Edición | **No destructiva** | Los archivos originales nunca se modifican |
 | Archivo de proyecto | **`.sharkp`** (JSON con campo `version`) | Legible, versionable, migrable |
@@ -735,7 +735,9 @@ ctest --preset windows-debug
      - Blanco y negro, desenfoque (Blur), esquinas redondeadas (Edges, Chat Edges),
        recorte (Crop, ya existe; Crop Description Disk como preset), croma (GreenScreen)
        y sombra paralela / resplandor azul detrás de un clip.
-     - [x] Adelantado a petición de Kyo: pantalla verde (croma) por clip, en Propiedades:
+     - [x] Adelantado a petición de Kyo: pantalla verde (croma) por clip. Es un efecto de
+       la pestaña Efectos: se arrastra sobre un clip de video (o «Aplicar» al seleccionado),
+       busca solo el color del fondo y aparece en Propiedades, donde se ajusta o se quita:
        color (escrito, «Verde», «Azul» o «Detectar el color del fondo», que lo busca en
        los bordes del fotograma que se ve), similitud, suavidad y quitar reflejo. Compara
        el tono relativo al brillo, así quita también el fondo mal iluminado. Archivo
@@ -759,7 +761,8 @@ ctest --preset windows-debug
 - [x] Arquitectura: **nativa en C++20 + Qt 6** (revisión 2; antes Electron).
 - [x] Transiciones prioritarias: Fade to Black, Pan (Left), Rotate,
       Shake & Distort, Zoom In, Zoom Out, Zoom & Rotate Out.
-- [x] Tarjeta gráfica: NVIDIA RTX 3060 12 GB → NVDEC/NVENC por defecto.
+- [x] Tarjeta gráfica: NVIDIA RTX 5070 12 GB (desde octubre de 2026; antes RTX 3060) →
+      NVDEC/NVENC por defecto.
 - [x] Proyecto por defecto: 1080p60.
 - [x] Grabación de OBS: MP4 fragmentado, una sola pista de audio.
 - [x] Extensión del proyecto: `.sharkp`.

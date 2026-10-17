@@ -1,5 +1,7 @@
 #include "editor.h"
 
+#include "logging.h"
+
 #include "audio/audio_output.h"
 #include "audio/audio_worker.h"
 #include "core/edit.h"
@@ -2326,6 +2328,10 @@ void Editor::goToEdit(int direction) {
     }
 }
 
+void Editor::openLogFolder() {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(logging::folder()));
+}
+
 void Editor::removeSelection() {
     if (!m_selectedCaptions.empty()) {
         const std::vector<ObjectId> captions = m_selectedCaptions;
@@ -3430,6 +3436,9 @@ void Editor::setBusy(bool busy) {
 }
 
 void Editor::setError(const QString& message) {
+    if (!message.isEmpty()) {
+        qWarning("%s", qPrintable(message));
+    }
     if (m_errorString != message) {
         m_errorString = message;
         emit errorStringChanged();

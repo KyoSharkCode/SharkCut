@@ -89,6 +89,9 @@ void Editor::createCaptions(const QVariantMap& options) {
                      : sharkcut::kSpeechModelAccurate;
     job->modelPath = QDir(modelsFolder()).filePath(QString::fromLatin1(job->model.file));
     m_transcription = job;
+    qInfo("Subtítulos: transcribir %lld fotogramas (idioma %s, modelo %s, audio %d)",
+          static_cast<long long>(job->snapshot.length()), job->language.c_str(), job->model.file,
+          chosen);
     setTranscribeState(0.0, QStringLiteral("Comprobando el modelo de transcripción…"));
 
     // ¿Está ya el modelo? (en otro hilo: nada de disco en el de la interfaz)
@@ -114,6 +117,7 @@ void Editor::createCaptions(const QVariantMap& options) {
 void Editor::startDownload(const std::shared_ptr<Transcription>& job) {
     const QUrl url(QString::fromLatin1(sharkcut::kSpeechModelBaseUrl) +
                    QString::fromLatin1(job->model.file));
+    qInfo("Subtítulos: descargando el modelo a %s", qPrintable(job->modelPath));
     auto* thread = new QThread;
     auto* download =
         new ModelDownload(url, job->modelPath, job->model.size, QByteArray(job->model.sha256));
@@ -152,6 +156,7 @@ void Editor::startDownload(const std::shared_ptr<Transcription>& job) {
 }
 
 void Editor::startTranscription(const std::shared_ptr<Transcription>& job) {
+    qInfo("Subtítulos: transcribiendo con %s", qPrintable(job->modelPath));
     setTranscribeState(0.0, QStringLiteral("Transcribiendo el audio…"));
     QPointer<Editor> self(this);
     QThreadPool::globalInstance()->start([self, job] {
@@ -203,6 +208,8 @@ void Editor::finishTranscription(const std::shared_ptr<Transcription>& job,
     }
     m_transcription.reset();
     setTranscribeState(0.0, {});
+    qInfo("Subtítulos: transcripción terminada (%zu palabras%s%s)", words.size(),
+          *job->cancelled ? ", cancelada" : "", error.isEmpty() ? "" : ", con error");
     if (*job->cancelled) {
         return;
     }

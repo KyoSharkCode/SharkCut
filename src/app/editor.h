@@ -441,6 +441,8 @@ public:
     // mezcla), preset (nombre del ajuste de estilo), quality (0 alta, 1 rápida)}. Si el
     // modelo no está, se descarga antes (una sola vez).
     Q_INVOKABLE void createCaptions(const QVariantMap& options);
+    // Abre la carpeta de los registros de las sesiones (para enviar un fallo).
+    Q_INVOKABLE void openLogFolder();
     Q_INVOKABLE void cancelTranscription();
     // Clip de video visible más alto bajo un punto del lienzo (píxeles), o 0.
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;

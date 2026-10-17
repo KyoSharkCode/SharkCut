@@ -1,3 +1,4 @@
+#include "logging.h"
 #include "thumbnails.h"
 
 #include <QGuiApplication>
@@ -17,6 +18,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("SharkCut"));
     QGuiApplication::setApplicationVersion(QStringLiteral(SHARKCUT_VERSION));
     QGuiApplication::setOrganizationName(QStringLiteral("KyoSumiVT"));
+    logging::install();
     // La descarga del modelo de subtítulos usa el proxy del sistema, si lo hay.
     QNetworkProxyFactory::setUseSystemConfiguration(true);
 
@@ -28,5 +30,7 @@ int main(int argc, char* argv[]) {
     engine.addImageProvider(QStringLiteral("fotogramas"), new FrameThumbnailProvider);
     engine.loadFromModule("SharkCut", "Main");
 
-    return QGuiApplication::exec();
+    const int result = QGuiApplication::exec();
+    logging::closing();
+    return result;
 }

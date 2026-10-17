@@ -49,6 +49,8 @@ qt_add_qml_module(SharkCut
         editor_transcription.cpp
         modeldownload.h
         modeldownload.cpp
+        logging.h
+        logging.cpp
         thumbnails.h
         thumbnails.cpp
         waveforms.h
@@ -75,6 +77,9 @@ target_link_libraries(SharkCut PRIVATE
     sharkcut_audio
     sharkcut_warnings
 )
+if(WIN32)
+    target_link_libraries(SharkCut PRIVATE dbghelp) # volcado al cerrarse por un fallo
+endif()
 sharkcut_copy_runtime_dlls(SharkCut)
 
 # Efectos de sonido de las transiciones: junto al ejecutable (presets/sfx/), donde los

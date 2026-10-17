@@ -110,6 +110,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   de interfaces, con un camino por software que compila en Linux.
 - Toda modificación del proyecto pasa por un comando (deshacer/rehacer).
 - Nada de decodificar ni acceder a disco en el hilo de interfaz.
+- Registro de cada sesión (src/app/logging.h): stderr y los mensajes de Qt van a
+  <datos de la app>/registros/sharkcut-<fecha>.log (se guardan las últimas 8); en Windows,
+  un cierre por fallo apunta el código y deja ultimo-cierre.dmp. Botón «Abrir la carpeta
+  de registros» en Proyectos. SHARKCUT_LOG=consola: todo por la consola, sin archivo.
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.

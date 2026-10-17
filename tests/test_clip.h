@@ -28,9 +28,12 @@ struct ClipOptions {
     Audio audio = Audio::None;
     std::string container = "mp4";
     int audioDelayFrames = 0; // el audio empieza este número de fotogramas más tarde
+    // Codificador de video concreto (p. ej. "libsvtav1"); vacío = H.264 o MPEG-4.
+    std::string videoEncoder{};
 };
 
-// Escribe el clip en `path`. Devuelve el nombre del códec usado ("h264" o "mpeg4").
+// Escribe el clip en `path`. Devuelve el nombre del codificador usado ("libx264",
+// "mpeg4"…), o una cadena vacía si `videoEncoder` no está disponible (sin escribir nada).
 std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& options);
 
 // Valor (float, ambos canales) de las muestras de audio PCM durante el fotograma `index`.

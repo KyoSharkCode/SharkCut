@@ -44,6 +44,23 @@ struct MediaItem {
 
 enum class TrackKind { Video, Audio };
 
+// Pantalla verde (croma): vuelve transparente el color de fondo del clip para ver lo
+// que hay debajo. Se compara el tono relativo al brillo (Cb/Cr de BT.709 entre la
+// luminancia), así las zonas más iluminadas o en sombra del fondo también se quitan. Las
+// distancias son relativas a la saturación del color quitado: 1 = tan lejos como un gris,
+// que nunca se quita.
+struct ChromaKey {
+    bool enabled = false;
+    std::uint32_t color = 0x00FF00; // color que se quita, 0xRRGGBB
+    double similarity = 0.40;       // hasta esta distancia del color: transparente
+    double smoothness = 0.10;       // franja de paso a opaco a partir de ahí
+    double spill = 0.40;            // franja en la que se quita el reflejo del color
+
+    friend bool operator==(const ChromaKey&, const ChromaKey&) = default;
+};
+
+inline constexpr double kMaxChromaDistance = 1.0;
+
 // Colocación de un clip de video en el lienzo. Sin transformar (los valores por
 // defecto), el video se ajusta al lienzo sin deformarse y centrado.
 struct ClipTransform {
@@ -56,6 +73,7 @@ struct ClipTransform {
     double cropTop = 0.0;
     double cropRight = 0.0;
     double cropBottom = 0.0;
+    ChromaKey chromaKey; // efecto del clip; Restablecer transformación no lo toca
 
     friend bool operator==(const ClipTransform&, const ClipTransform&) = default;
 };

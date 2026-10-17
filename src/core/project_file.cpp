@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <set>
@@ -209,14 +210,51 @@ Transition transitionFromJson(const json& value) {
     return t;
 }
 
+std::string colorToHex(std::uint32_t color) {
+    char text[8];
+    std::snprintf(text, sizeof text, "#%06X", static_cast<unsigned>(color & 0xFFFFFFu));
+    return text;
+}
+
+std::uint32_t colorFromHex(const std::string& text, std::uint32_t fallback) {
+    if (text.size() != 7 || text[0] != '#') {
+        return fallback;
+    }
+    std::uint32_t color = 0;
+    for (std::size_t i = 1; i < text.size(); ++i) {
+        const char c = text[i];
+        int digit = 0;
+        if (c >= '0' && c <= '9') {
+            digit = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            digit = c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            digit = c - 'A' + 10;
+        } else {
+            return fallback;
+        }
+        color = color * 16 + static_cast<std::uint32_t>(digit);
+    }
+    return color;
+}
+
 json transformToJson(const ClipTransform& t) {
-    return {
+    json result = {
         {"x", t.x},
         {"y", t.y},
         {"scale", t.scale},
         {"opacity", t.opacity},
         {"crop", json::array({t.cropLeft, t.cropTop, t.cropRight, t.cropBottom})},
     };
+    if (t.chromaKey != ChromaKey{}) {
+        const ChromaKey& k = t.chromaKey;
+        result["chromaKey"] = {
+            {"enabled", k.enabled},       {"color", colorToHex(k.color)},
+            {"similarity", k.similarity}, {"smoothness", k.smoothness},
+            {"spill", k.spill},
+        };
+    }
+    return result;
 }
 
 ClipTransform transformFromJson(const json& value) {
@@ -230,6 +268,15 @@ ClipTransform transformFromJson(const json& value) {
         t.cropTop = crop->at(1).get<double>();
         t.cropRight = crop->at(2).get<double>();
         t.cropBottom = crop->at(3).get<double>();
+    }
+    if (const auto key = value.find("chromaKey"); key != value.end()) {
+        const ChromaKey defaults;
+        ChromaKey& k = t.chromaKey;
+        k.enabled = key->value("enabled", false);
+        k.color = colorFromHex(key->value("color", std::string()), defaults.color);
+        k.similarity = key->value("similarity", defaults.similarity);
+        k.smoothness = key->value("smoothness", defaults.smoothness);
+        k.spill = key->value("spill", defaults.spill);
     }
     return t;
 }

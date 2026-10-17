@@ -103,6 +103,7 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
+    Q_PROPERTY(bool detectingKey READ detectingKey NOTIFY detectingKeyChanged)
     // Lienzo del proyecto: "16:9", "9:16", "1:1"… y si lo fija el primer clip
     Q_PROPERTY(QString canvasLabel READ canvasLabel NOTIFY projectChanged)
     Q_PROPERTY(QSize canvas READ canvasSize NOTIFY projectChanged)
@@ -360,6 +361,12 @@ public:
     // bandas, recortando lo que sobre), centrado y respetando su recorte.
     Q_INVOKABLE void fitClip(qint64 clipId, bool fill);
     Q_INVOKABLE void resetTransform(qint64 clipId);
+    // Pantalla verde: las claves keyEnabled, keyColor ("#RRGGBB"), keySimilarity,
+    // keySmoothness y keySpill de setClipTransform/previewTransform. detectKeyColor()
+    // busca el color de fondo del clip en el fotograma que se ve (en otro hilo) y, si lo
+    // encuentra, activa la pantalla verde con él; al terminar emite keyColorDetected.
+    Q_INVOKABLE void detectKeyColor(qint64 clipId);
+    bool detectingKey() const { return m_detectingKey; }
     // Clip de video visible más alto bajo un punto del lienzo (píxeles), o 0.
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;
     // Volumen de un clip de audio, en dB.
@@ -425,6 +432,8 @@ signals:
     void fileChanged();
     void modifiedChanged();
     void fileBusyChanged();
+    void detectingKeyChanged();
+    void keyColorDetected(bool found);
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
@@ -624,6 +633,7 @@ private:
     QVariantList m_recentProjects;
     QVariantList m_recoverable;
     QTimer m_autosaveTimer;
+    bool m_detectingKey = false;
     QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;

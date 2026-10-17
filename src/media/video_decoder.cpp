@@ -134,7 +134,9 @@ struct VideoDecoder::Impl {
         }
     }
 
-    void open(const std::string& path, HwAccel hwAccel) {
+    // Abre el archivo y elige su flujo de video. Devuelve el decodificador que propone
+    // FFmpeg para él.
+    const AVCodec* openStream(const std::string& path) {
         format = ff::openInput(path);
 
         const AVCodec* decoder = nullptr;
@@ -153,7 +155,10 @@ struct VideoDecoder::Impl {
                 format->streams[i]->discard = AVDISCARD_ALL;
             }
         }
+        return decoder;
+    }
 
+    void openCodec(const AVCodec* decoder, bool hardware) {
         codec.reset(avcodec_alloc_context3(decoder));
         if (!codec) {
             throw MediaError("No se pudo crear el decodificador");
@@ -165,11 +170,93 @@ struct VideoDecoder::Impl {
         codec->get_format = &Impl::chooseFormat;
         codec->thread_count = 0; // automático
 
-        if (hwAccel == HwAccel::Auto) {
+        if (hardware) {
             setupHardware(decoder);
         }
         ff::check(avcodec_open2(codec.get(), decoder, nullptr),
                   "No se pudo abrir el decodificador");
+    }
+
+    // Vuelve al estado de recién creado (tras un intento fallido de abrir).
+    void resetDecoder() {
+        codec.reset();
+        hwDevice.reset();
+        hwPixelFormat = AV_PIX_FMT_NONE;
+        hwName.clear();
+        format.reset();
+        stream = nullptr;
+        av_packet_unref(packet.get());
+        av_frame_unref(frame.get());
+        demuxFinished = false;
+        havePending = false;
+    }
+
+    // AV1 por la GPU: el decodificador propio de FFmpeg solo funciona con aceleración
+    // por hardware (NVDEC en las NVIDIA RTX 30 y posteriores). Que la tarjeta lo admita
+    // solo se sabe al decodificar, así que se prueba con el primer fotograma (que queda
+    // pendiente para nextFrame()). Devuelve false si no se puede.
+    bool openAv1Hardware() {
+        const AVCodec* native = avcodec_find_decoder_by_name("av1");
+        if (!native) {
+            return false;
+        }
+        try {
+            openCodec(native, true);
+        } catch (const MediaError&) {
+            return false;
+        }
+        if (!hwDevice) {
+            return false;
+        }
+        // Como en receiveRaw(), pero un error corta la prueba (sin seguir leyendo) y
+        // con un límite de paquetes.
+        for (int packets = 0; packets < 120;) {
+            const int received = avcodec_receive_frame(codec.get(), frame.get());
+            if (received == 0) {
+                havePending = true;
+                return true;
+            }
+            if (received != AVERROR(EAGAIN) || av_read_frame(format.get(), packet.get()) < 0) {
+                return false;
+            }
+            if (packet->stream_index == stream->index) {
+                ++packets;
+                const int sent = avcodec_send_packet(codec.get(), packet.get());
+                if (sent < 0) {
+                    av_packet_unref(packet.get());
+                    return false;
+                }
+            }
+            av_packet_unref(packet.get());
+        }
+        return false;
+    }
+
+    // AV1 por software: dav1d (rápido) o, si no está, libaom.
+    static const AVCodec* av1SoftwareDecoder() {
+        for (const char* name : {"libdav1d", "libaom-av1"}) {
+            if (const AVCodec* decoder = avcodec_find_decoder_by_name(name)) {
+                return decoder;
+            }
+        }
+        throw MediaError("Esta compilación de FFmpeg no puede decodificar AV1 por software "
+                         "(falta dav1d)");
+    }
+
+    void open(const std::string& path, HwAccel hwAccel) {
+        const AVCodec* decoder = openStream(path);
+        if (stream->codecpar->codec_id == AV_CODEC_ID_AV1) {
+            if (hwAccel == HwAccel::Auto) {
+                if (openAv1Hardware()) {
+                    return;
+                }
+                resetDecoder();
+                openStream(path); // de vuelta al principio del archivo
+            }
+            openCodec(av1SoftwareDecoder(), false);
+            return;
+        }
+        openCodec(decoder, hwAccel == HwAccel::Auto);
     }
 
     // Deja en `frame` el siguiente fotograma decodificado (en orden de presentación).

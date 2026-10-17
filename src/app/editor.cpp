@@ -6,11 +6,14 @@
 #include "core/export_settings.h"
 #include "core/project_file.h"
 #include "core/sfx.h"
+#include "media/chroma_key.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
 #include "media/timeline_audio.h"
+#include "media/video_decoder.h"
 #include "render/sequence_exporter.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -238,6 +241,15 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
         {QStringLiteral("cropTop"), t.cropTop},
         {QStringLiteral("cropRight"), t.cropRight},
         {QStringLiteral("cropBottom"), t.cropBottom},
+        {QStringLiteral("chromaKey"),
+         QVariantMap{
+             {QStringLiteral("enabled"), t.chromaKey.enabled},
+             {QStringLiteral("color"),
+              QStringLiteral("#%1").arg(t.chromaKey.color, 6, 16, QLatin1Char('0')).toUpper()},
+             {QStringLiteral("similarity"), t.chromaKey.similarity},
+             {QStringLiteral("smoothness"), t.chromaKey.smoothness},
+             {QStringLiteral("spill"), t.chromaKey.spill},
+         }},
     };
 }
 
@@ -340,7 +352,9 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
     entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
     entry[QStringLiteral("volumeDb")] = clip.volumeDb;
-    entry[QStringLiteral("transformed")] = clip.transform != sharkcut::ClipTransform{};
+    sharkcut::ClipTransform placement = clip.transform;
+    placement.chromaKey = {}; // el icono indica solo cambios de colocación
+    entry[QStringLiteral("transformed")] = placement != sharkcut::ClipTransform{};
     entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
     // Para las miniaturas de la línea de tiempo: el proxy si lo hay (mucho más rápido),
     // y los fps del medio (el tramo del clip va en fotogramas de la secuencia).
@@ -2371,6 +2385,19 @@ sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVar
     take("cropTop", t.cropTop);
     take("cropRight", t.cropRight);
     take("cropBottom", t.cropBottom);
+    sharkcut::ChromaKey& key = t.chromaKey;
+    if (const auto it = values.find(QStringLiteral("keyEnabled")); it != values.end()) {
+        key.enabled = it->toBool();
+    }
+    if (const auto it = values.find(QStringLiteral("keyColor")); it != values.end()) {
+        const QColor color(it->toString());
+        if (color.isValid()) {
+            key.color = static_cast<std::uint32_t>(color.rgb()) & 0xFFFFFFu;
+        }
+    }
+    take("keySimilarity", key.similarity);
+    take("keySmoothness", key.smoothness);
+    take("keySpill", key.spill);
     return sharkcut::clampTransform(t);
 }
 
@@ -2441,9 +2468,70 @@ void Editor::fitClip(qint64 clipId, bool fill) {
 
 void Editor::resetTransform(qint64 clipId) {
     const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    if (!clip) {
+        return;
+    }
+    // La pantalla verde es un efecto, no parte de la colocación: se conserva.
+    sharkcut::ClipTransform t;
+    t.chromaKey = clip->transform.chromaKey;
     m_previewClip = 0;
     edit(QStringLiteral("Restablecer transformación"),
-         [id](Project& p) { return sharkcut::setClipTransform(p, id, {}); });
+         [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); });
+}
+
+void Editor::detectKeyColor(qint64 clipId) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
+    if (!item || !item->hasVideo || m_detectingKey) {
+        return;
+    }
+    // El fotograma que se ve, o el primero del clip si el cabezal está fuera de él.
+    const std::int64_t frame =
+        std::clamp<std::int64_t>(m_currentFrame, clip->start, clip->end() - 1);
+    const std::int64_t us = sharkcut::frameToMicroseconds(clip->in + (frame - clip->start),
+                                                          project().settings.frameRate);
+    const std::string path = item->path;
+    const quint64 projectUid = m_activeProject;
+    m_detectingKey = true;
+    emit detectingKeyChanged();
+
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, path, us, id, projectUid] {
+        std::optional<std::uint32_t> color;
+        try {
+            sharkcut::VideoDecoder decoder(path, sharkcut::HwAccel::None);
+            decoder.seekToFrame(sharkcut::microsecondsToFrame(us, decoder.info().frameRate));
+            if (const auto decoded = decoder.nextFrame()) {
+                color = sharkcut::detectKeyColor(*decoded);
+            }
+        } catch (const std::exception&) {
+            // archivo que falta o dañado: no se encuentra color
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, color, id, projectUid] {
+                if (!self) {
+                    return;
+                }
+                self->m_detectingKey = false;
+                emit self->detectingKeyChanged();
+                // Si entretanto se cambió de proyecto, el clip ya no es el mismo.
+                const bool found = color && self->m_activeProject == projectUid &&
+                                   self->project().clip(id) != nullptr;
+                if (found) {
+                    self->setClipTransform(
+                        static_cast<qint64>(id),
+                        {{QStringLiteral("keyEnabled"), true},
+                         {QStringLiteral("keyColor"),
+                          QStringLiteral("#%1").arg(*color, 6, 16, QLatin1Char('0'))}},
+                        QStringLiteral("Pantalla verde"));
+                }
+                emit self->keyColorDetected(found);
+            },
+            Qt::QueuedConnection);
+    });
 }
 
 qint64 Editor::clipAtCanvas(double x, double y) const {

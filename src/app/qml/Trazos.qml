@@ -53,6 +53,7 @@ QtObject {
         "secuencia": "M3 6h9M15 6h6M3 12h5M11 12h10M3 18h12M18 18h3",
         "secuenciaNueva": "M3 6h9M3 12h9M3 18h7M18 13v8M14 17h8",
         "atras": "M15 6l-6 6 6 6M9 12h11",
-        "proxy": "M3 6h12v9H3zM9 9h12v9H9z"
+        "proxy": "M3 6h12v9H3zM9 9h12v9H9z",
+        "gotero": "M16 3.5a2.1 2.1 0 0 1 3 3L17 8.5l-3-3zM13 6.5l4 4M14.5 8L6 16.5V19h2.5L17 10.5"
     })
 }

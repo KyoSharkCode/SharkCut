@@ -16,8 +16,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 4, que abre la 1, la 2
-  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 5, que abre la 1, la 2
+  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4 y
+  la pantalla verde del clip, `transform.chromaKey`, llegó con la 5).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -51,6 +52,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Compositor).
   src/core también: export_settings.h (tramo y fps de la exportación, resoluciones y
   tasas recomendadas) y parseTimecode en time.h.
+  AV1 (grabaciones de OBS): por la GPU con el decodificador "av1" de FFmpeg (NVDEC en las
+  RTX 30+), comprobado con el primer fotograma; si no, dav1d por software.
+  Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
+  src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
   src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
   proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),

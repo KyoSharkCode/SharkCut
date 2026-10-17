@@ -7,6 +7,8 @@
 #include <rhi/qrhi.h>
 
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 namespace sharkcut {
 
@@ -46,8 +48,20 @@ struct LayerUniforms {
     float posRect[4];
     float uvRect[4];
     float params[4];
+    float key[4];
+    float keyParams[4];
 };
-static_assert(sizeof(LayerUniforms) == 176);
+static_assert(sizeof(LayerUniforms) == 208);
+
+// Tono de un color 0xRRGGBB relativo a su brillo (Cb, Cr de BT.709 entre luma + 0,1),
+// como lo calcula layer.frag.
+std::pair<double, double> hueOf(std::uint32_t color) {
+    const double r = ((color >> 16) & 0xFF) / 255.0;
+    const double g = ((color >> 8) & 0xFF) / 255.0;
+    const double b = (color & 0xFF) / 255.0;
+    const double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return {(b - luma) / 1.8556 / (luma + 0.1), (r - luma) / 1.5748 / (luma + 0.1)};
+}
 
 // Escala para que un contenido de `content` quepa en `frame` sin deformarse.
 QSizeF fitScale(QSize content, QSize frame) {
@@ -385,6 +399,18 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
     u.uvRect[2] = f(1.0 - t.cropRight);
     u.uvRect[3] = f(1.0 - t.cropBottom);
     u.params[0] = f(std::clamp(opacity, 0.0, 1.0));
+    const ChromaKey& key = t.chromaKey;
+    if (key.enabled) {
+        const auto [cb, cr] = hueOf(key.color);
+        if (std::hypot(cb, cr) >= 0.05) { // un gris no tiene tono que quitar
+            u.key[0] = f(cb);
+            u.key[1] = f(cr);
+            u.key[2] = 1.0f;
+            u.keyParams[0] = f(key.similarity);
+            u.keyParams[1] = f(key.smoothness);
+            u.keyParams[2] = f(key.spill);
+        }
+    }
     updates->updateDynamicBuffer(s.uniforms.get(), 0, sizeof(u), &u);
 }
 

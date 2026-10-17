@@ -42,6 +42,7 @@ Rectangle {
         readonly property bool hayVideo: uno && sel.video !== 0
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
+        readonly property var croma: t.chromaKey || ({})
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
 
         function vista(valores) { panel.editor.previewTransform(sel.video, valores) }
@@ -353,6 +354,156 @@ Rectangle {
                     text: "Arrastra el número para cambiarlo (Mayús: más rápido, Ctrl: más fino) "
                           + "o haz clic para escribirlo. En el visor: arrastra el clip para "
                           + "moverlo y sus esquinas para escalarlo."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+
+            // --- Pantalla verde (croma) ---
+            Separador { visible: propiedades.hayVideo }
+            RowLayout {
+                visible: propiedades.hayVideo
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: "Pantalla verde"
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTexto
+                    font.bold: true
+                }
+                BotonIcono {
+                    texto: propiedades.croma.enabled ? "Activada" : "Desactivada"
+                    activo: propiedades.croma.enabled === true
+                    enabled: propiedades.videoEditable
+                    implicitHeight: 26
+                    ayuda: "Vuelve transparente el color de fondo del clip"
+                    onPulsado: propiedades.aplicar({ keyEnabled: !propiedades.croma.enabled },
+                                                   "Pantalla verde")
+                }
+            }
+            ColumnLayout {
+                visible: propiedades.hayVideo
+                enabled: propiedades.videoEditable
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    // Muestra del color que se quita (es un color del video, no del tema).
+                    Rectangle {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: Theme.radio
+                        color: propiedades.croma.color || "transparent"
+                        border.color: Theme.borde
+                    }
+                    TextField {
+                        id: campoColor
+                        Layout.preferredWidth: 84
+                        implicitHeight: 26
+                        text: propiedades.croma.color || ""
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTextoPequeno
+                        font.family: "monospace"
+                        selectByMouse: true
+                        maximumLength: 7
+                        validator: RegularExpressionValidator { regularExpression: /#?[0-9a-fA-F]{0,6}/ }
+                        background: Rectangle {
+                            radius: Theme.radio
+                            color: Theme.fondo
+                            border.color: campoColor.activeFocus ? Theme.acento : Theme.borde
+                        }
+                        onEditingFinished: {
+                            const hex = text.startsWith("#") ? text : "#" + text
+                            if (/^#[0-9a-fA-F]{6}$/.test(hex))
+                                propiedades.aplicar({ keyEnabled: true, keyColor: hex }, "Pantalla verde")
+                            // Al escribir se pierde el enlace: que siga al clip seleccionado.
+                            text = Qt.binding(() => propiedades.croma.color || "")
+                        }
+                    }
+                    BotonIcono {
+                        texto: "Verde"
+                        implicitHeight: 26
+                        ayuda: "Verde puro (#00FF00), el de la mayoría de los efectos con fondo verde"
+                        onPulsado: propiedades.aplicar({ keyEnabled: true, keyColor: "#00FF00" },
+                                                       "Pantalla verde")
+                    }
+                    BotonIcono {
+                        texto: "Azul"
+                        implicitHeight: 26
+                        ayuda: "Pantalla azul (#0047BB)"
+                        onPulsado: propiedades.aplicar({ keyEnabled: true, keyColor: "#0047BB" },
+                                                       "Pantalla verde")
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "gotero"
+                    texto: panel.editor.detectingKey ? "Buscando el color…" : "Detectar el color del fondo"
+                    enabled: !panel.editor.detectingKey
+                    ayuda: "Busca el color de fondo en los bordes del fotograma que se ve y activa "
+                           + "la pantalla verde con él"
+                    onPulsado: {
+                        avisoCroma.visible = false
+                        panel.editor.detectKeyColor(propiedades.sel.video)
+                    }
+                }
+                Text {
+                    id: avisoCroma
+                    Layout.fillWidth: true
+                    visible: false
+                    wrapMode: Text.WordWrap
+                    text: "No se encontró un color de fondo en los bordes de este fotograma. "
+                          + "Mueve el cabezal a un momento en que se vea el fondo o escribe el color."
+                    color: Theme.aviso
+                    font.pixelSize: Theme.tamTextoPequeno
+                    Connections {
+                        target: panel.editor
+                        function onKeyColorDetected(found) { avisoCroma.visible = !found }
+                    }
+                }
+                CampoNumero {
+                    etiqueta: "Similitud"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.similarity || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySimilarity: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySimilarity: v / 100 }, "Pantalla verde")
+                }
+                CampoNumero {
+                    etiqueta: "Suavidad"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.smoothness || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySmoothness: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySmoothness: v / 100 }, "Pantalla verde")
+                }
+                CampoNumero {
+                    etiqueta: "Quitar reflejo"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.spill || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySpill: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySpill: v / 100 }, "Pantalla verde")
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Similitud: cuánto se parece un color al del fondo para quitarlo (súbela "
+                          + "si quedan restos del fondo). Suavidad: borde gradual. Quitar reflejo: "
+                          + "elimina el tono del fondo que se cuela en los bordes."
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                 }

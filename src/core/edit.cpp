@@ -599,6 +599,11 @@ ClipTransform clampTransform(ClipTransform t) {
     t.cropTop = std::clamp(finite(t.cropTop, 0.0), 0.0, kMaxCrop);
     t.cropRight = std::clamp(finite(t.cropRight, 0.0), 0.0, kMaxCrop - t.cropLeft);
     t.cropBottom = std::clamp(finite(t.cropBottom, 0.0), 0.0, kMaxCrop - t.cropTop);
+    ChromaKey& key = t.chromaKey;
+    key.color &= 0xFFFFFFu;
+    key.similarity = std::clamp(finite(key.similarity, 0.40), 0.0, kMaxChromaDistance);
+    key.smoothness = std::clamp(finite(key.smoothness, 0.10), 0.0, kMaxChromaDistance);
+    key.spill = std::clamp(finite(key.spill, 0.40), 0.0, kMaxChromaDistance);
     return t;
 }
 

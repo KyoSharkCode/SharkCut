@@ -125,18 +125,27 @@ struct AudioTrack {
 
 std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& o) {
     const std::string file = path.string();
-    AVFormatContext* out = nullptr;
-    check(avformat_alloc_output_context2(&out, nullptr, o.container.c_str(), file.c_str()),
-          "alloc_output");
 
     // H.264 si está disponible (como las grabaciones reales); si no, MPEG-4.
-    const AVCodec* codec = avcodec_find_encoder_by_name("libx264");
-    if (!codec) {
-        codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+    const AVCodec* codec = nullptr;
+    if (!o.videoEncoder.empty()) {
+        codec = avcodec_find_encoder_by_name(o.videoEncoder.c_str());
+        if (!codec) {
+            return {};
+        }
+    } else {
+        codec = avcodec_find_encoder_by_name("libx264");
+        if (!codec) {
+            codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+        }
     }
     if (!codec) {
         throw std::runtime_error("no hay codificador de video disponible");
     }
+
+    AVFormatContext* out = nullptr;
+    check(avformat_alloc_output_context2(&out, nullptr, o.container.c_str(), file.c_str()),
+          "alloc_output");
 
     AVStream* stream = avformat_new_stream(out, nullptr);
     AVCodecContext* enc = avcodec_alloc_context3(codec);
@@ -156,6 +165,12 @@ std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& 
         av_opt_set(enc->priv_data, "preset", "ultrafast", 0);
         av_opt_set(enc->priv_data, "qp", "4", 0);
         av_opt_set(enc->priv_data, "x264-params", "scenecut=0", 0);
+    } else if (std::strcmp(codec->name, "libsvtav1") == 0) {
+        av_opt_set(enc->priv_data, "preset", "12", 0);
+        av_opt_set(enc->priv_data, "crf", "8", 0);
+    } else if (std::strcmp(codec->name, "libaom-av1") == 0) {
+        av_opt_set(enc->priv_data, "cpu-used", "8", 0);
+        av_opt_set(enc->priv_data, "crf", "8", 0);
     } else {
         enc->flags |= AV_CODEC_FLAG_QSCALE;
         enc->global_quality = FF_QP2LAMBDA * 2;
@@ -249,7 +264,7 @@ std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& 
     }
     avio_closep(&out->pb);
     avformat_free_context(out);
-    return used == "libx264" ? "h264" : "mpeg4";
+    return used == "libx264" ? "h264" : used;
 }
 
 } // namespace sharkcut::test

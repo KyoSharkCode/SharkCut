@@ -735,6 +735,12 @@ ctest --preset windows-debug
      - Blanco y negro, desenfoque (Blur), esquinas redondeadas (Edges, Chat Edges),
        recorte (Crop, ya existe; Crop Description Disk como preset), croma (GreenScreen)
        y sombra paralela / resplandor azul detrás de un clip.
+     - [x] Adelantado a petición de Kyo: pantalla verde (croma) por clip, en Propiedades:
+       color (escrito, «Verde», «Azul» o «Detectar el color del fondo», que lo busca en
+       los bordes del fotograma que se ve), similitud, suavidad y quitar reflejo. Compara
+       el tono relativo al brillo, así quita también el fondo mal iluminado. Archivo
+       .sharkp versión 5. Y lectura de videos AV1 (OBS): NVDEC si la tarjeta lo admite,
+       si no dav1d por software.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

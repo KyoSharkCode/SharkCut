@@ -4,6 +4,11 @@
 
 #include <whisper.h>
 
+#if defined(_MSC_VER)
+#include <immintrin.h>
+#include <intrin.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -112,8 +117,34 @@ struct Progress {
 
 } // namespace
 
+bool speechCpuSupported() {
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+    int info[4] = {};
+    __cpuid(info, 1);
+    const bool fma = (info[2] & (1 << 12)) != 0;
+    const bool osxsave = (info[2] & (1 << 27)) != 0;
+    const bool avx = (info[2] & (1 << 28)) != 0;
+    const bool f16c = (info[2] & (1 << 29)) != 0;
+    // El sistema guarda los registros AVX (XMM e YMM) al cambiar de hilo.
+    if (!osxsave || !avx || !fma || !f16c || (_xgetbv(0) & 0x6) != 0x6) {
+        return false;
+    }
+    __cpuidex(info, 7, 0);
+    return (info[1] & (1 << 5)) != 0; // AVX2
+#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") &&
+           __builtin_cpu_supports("f16c");
+#else
+    return true; // otras arquitecturas: ggml se compila para ellas sin estas extensiones
+#endif
+}
+
 std::vector<TimedWord> transcribe(const std::string& modelPath, AudioSource& source,
                                   std::int64_t samples, const TranscribeOptions& options) {
+    if (!speechCpuSupported()) {
+        throw SpeechError("Este procesador no tiene AVX2, que hace falta para transcribir");
+    }
     const ContextPtr context = loadModel(modelPath);
     const auto isCancelled = [&options] { return options.cancelled && options.cancelled(); };
 

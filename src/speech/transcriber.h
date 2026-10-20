@@ -41,6 +41,10 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// El procesador tiene lo que necesita la transcripción (AVX2, FMA y F16C, con soporte del
+// sistema operativo). Sin ello, whisper se cerraría con «instrucción no válida».
+bool speechCpuSupported();
+
 // Transcribe `samples` muestras (por canal) de `source` (float estéreo a 48 kHz, desde
 // su posición actual). Los tiempos son microsegundos desde esa posición. Si se cancela,
 // devuelve lo transcrito hasta entonces. Lanza SpeechError si no se puede.

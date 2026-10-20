@@ -415,8 +415,8 @@ echar de menos Premiere.
 - Instalador, icono de los archivos .sharkp y asociación con SharkCut.
 - Carpeta de licencias (FFmpeg, Qt, whisper.cpp/ggml —MIT—) y código disponible, para
   compartir SharkCut gratis. Los modelos de whisper se descargan aparte (no van en el
-  instalador). Para repartirlo, compilar ggml sin GGML_NATIVE (que no dependa del
-  procesador del PC donde se compila).
+  instalador). ggml ya se compila sin GGML_NATIVE (base AVX2): lo compilado sirve en
+  otros PC.
 - Mejora de los efectos de sonido (generador o sonidos CC0 registrados).
 - 0.1.0 Early Access para Kyo y sus amigos (.zip o instalador, y si se quiere una web
   sencilla de descarga).
@@ -758,20 +758,14 @@ ctest --preset windows-debug
        ancho) de uno, de varios o de toda la pista; ajustes de estilo de fábrica y
        guardados con nombre; importar y exportar .srt. Sirven también como texto suelto
        («Añadir un subtítulo o texto en el cabezal»). Archivo .sharkp versión 6.
-     - [ ] Fallo pendiente (17 oct 2026, volcado ultimo-cierre.dmp del PC de Kyo): la app
-       se cierra al transcribir con la excepción 0xC000001D (instrucción no válida) dentro
-       de SharkCut.exe, en una instrucción AVX-512 (vmovups con zmm) de ggml. El procesador
-       de Kyo es un AMD Zen 3 (familia 25, modelo 0x21, 16 hilos), sin AVX-512. Causa: con
-       MSVC y GGML_NATIVE=ON, ggml detecta el procesador con FindSIMD.cmake
-       (check_c_source_runs) y da AVX-512 por bueno aunque no lo haya, así que compila
-       ggml-cpu con /arch:AVX512. Solución propuesta (sin aplicar): en cmake/whisper.cmake,
-       antes de FetchContent_MakeAvailable, fijar con CACHE … FORCE GGML_NATIVE=OFF,
-       GGML_AVX=ON, GGML_AVX2=ON, GGML_FMA=ON, GGML_F16C=ON y GGML_AVX512=OFF (base AVX2,
-       que tienen todos los PC de los últimos ~10 años; sirve también para repartirlo en la
-       fase 5). Después hay que borrar build/windows-debug (o al menos su CMakeCache.txt y
-       _deps/whisper-build) para que no se quede el /arch:AVX512 de antes. Alternativa más
-       rápida en cada PC, pero más compleja: GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS
-       (elige la variante del procesador al arrancar; requiere ggml como DLL).
+     - [x] Fallo arreglado (17–20 oct 2026, volcado ultimo-cierre.dmp del PC de Kyo): la
+       app se cerraba al transcribir con 0xC000001D (instrucción no válida), en una
+       instrucción AVX-512 de ggml; el procesador de Kyo (AMD Zen 3) no tiene AVX-512. Con
+       MSVC y GGML_NATIVE=ON, la detección de ggml (FindSIMD.cmake) daba AVX-512 por bueno.
+       Ahora cmake/whisper.cmake fija una base AVX2 (SSE4.2, AVX, AVX2, BMI2, FMA, F16C;
+       sin AVX-512 ni GGML_NATIVE), que además sirve para repartirlo en la fase 5, y
+       transcribe() comprueba AVX2 antes de empezar (mensaje claro en un PC sin él).
+       Alternativa futura, más rápida en cada PC: GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

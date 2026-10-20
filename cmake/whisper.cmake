@@ -12,6 +12,23 @@ set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(WHISPER_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+# Instrucciones del procesador: una base fija (AVX2, la de casi todos los PC de los
+# últimos ~10 años) en vez de detectarlas al compilar. Con MSVC, la detección de ggml
+# (GGML_NATIVE) da AVX-512 por bueno aunque el procesador no lo tenga, y la app se
+# cerraba con «instrucción no válida» al transcribir (p. ej. en un Ryzen Zen 3). Así,
+# además, lo compilado sirve en otros PC. transcriber.cpp comprueba AVX2 antes de usarlo.
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_SSE42 ON CACHE BOOL "" FORCE)
+set(GGML_AVX ON CACHE BOOL "" FORCE)
+set(GGML_AVX2 ON CACHE BOOL "" FORCE)
+set(GGML_BMI2 ON CACHE BOOL "" FORCE)
+set(GGML_FMA ON CACHE BOOL "" FORCE)
+set(GGML_F16C ON CACHE BOOL "" FORCE)
+set(GGML_AVX512 OFF CACHE BOOL "" FORCE)
+set(GGML_AVX512_VBMI OFF CACHE BOOL "" FORCE)
+set(GGML_AVX512_VNNI OFF CACHE BOOL "" FORCE)
+set(GGML_AVX512_BF16 OFF CACHE BOOL "" FORCE)
+set(GGML_AVX_VNNI OFF CACHE BOOL "" FORCE)
 set(GGML_CUDA ${SHARKCUT_WHISPER_CUDA} CACHE BOOL "" FORCE)
 set(GGML_VULKAN ${SHARKCUT_WHISPER_VULKAN} CACHE BOOL "" FORCE)
 

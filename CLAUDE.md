@@ -62,8 +62,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   duración mínima…) y lee/escribe .srt; las operaciones están en edit.h (las de rizo
   también los mueven). src/render/caption_renderer.h los dibuja (QPainter) y el
   compositor los pone encima como superposiciones (overlay.frag). src/speech (sin Qt):
-  transcripción local con whisper.cpp (cmake/whisper.cmake, siempre optimizado; GPU con
-  -DSHARKCUT_WHISPER_CUDA=ON o _VULKAN=ON); el modelo se descarga una vez a
+  transcripción local con whisper.cpp (cmake/whisper.cmake, siempre optimizado y con base
+  AVX2 fija: nada de GGML_NATIVE ni AVX-512, que con MSVC rompía en procesadores sin él;
+  GPU con -DSHARKCUT_WHISPER_CUDA=ON o _VULKAN=ON); el modelo se descarga una vez a
   <datos de la app>/modelos (ModelDownload, con su SHA-256). En el editor:
   editor_captions.cpp (pistas, selección, estilo, ajustes guardados en QSettings, .srt) y
   editor_transcription.cpp; interfaz: pestaña Subtítulos de PanelMedios, pistas S1… en

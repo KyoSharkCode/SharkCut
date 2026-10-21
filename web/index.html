@@ -200,7 +200,15 @@
         $("detalle").textContent = "Windows 10 y 11 (64 bits) · " + megas(instalador.size) + " · " +
           new Date(release.published_at).toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" });
       }
+      if (!instalador) {
+        // La versión acaba de salir y GitHub aún está preparando el instalador (unos minutos).
+        $("textoBoton").textContent = "Preparando…";
+        $("boton").setAttribute("aria-disabled", "true");
+        $("boton").removeAttribute("href");
+        $("detalle").textContent = "El instalador estará listo en unos minutos: vuelve a cargar la página.";
+      }
       if (zip) $("zip").href = zip.browser_download_url;
+      else $("secundario").style.display = "none";
       if (release.body) $("novedades").innerHTML = "<h3>Novedades</h3>" + markdown(release.body);
     })
     .catch(() => {

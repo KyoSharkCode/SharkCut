@@ -96,6 +96,96 @@ Rectangle {
             width: propiedades.width - 28
             spacing: 10
 
+            // --- Transición-clip seleccionada (afecta a todo lo de debajo) ---
+            ColumnLayout {
+                id: propiedadesEfecto
+                readonly property var ef: propiedades.sel.effect || ({})
+                readonly property var idClip: propiedades.sel.effectClip || 0
+                visible: propiedades.sel.count === 1 && idClip !== 0
+                enabled: visible && !ef.locked
+                Layout.fillWidth: true
+                spacing: 10
+                function cambiar(valores) { panel.editor.setEffectClip(idClip, valores) }
+
+                Text {
+                    text: "TRANSICIÓN"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Rectangle {
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        radius: 4
+                        color: Theme.clipTransicion
+                        Icono { anchors.centerIn: parent; nombre: "transicion"; tam: 14; color: Theme.texto }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: (propiedades.sel.name || "") + " · " + (propiedadesEfecto.ef.track || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Chip {
+                        visible: propiedadesEfecto.ef.locked === true
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                Selector {
+                    etiqueta: "Tipo"
+                    model: panel.editor.transitionNames
+                    indice: propiedadesEfecto.ef.typeIndex !== undefined ? propiedadesEfecto.ef.typeIndex : 0
+                    onElegido: (i) => propiedadesEfecto.cambiar({ typeIndex: i })
+                }
+                CampoNumero {
+                    etiqueta: "Duración"
+                    unidad: "fot."
+                    paso: 0.25
+                    desde: 2
+                    hasta: 36000
+                    valor: propiedadesEfecto.ef.length || 0
+                    onCambiado: (v) => propiedadesEfecto.cambiar({ length: Math.round(v) })
+                }
+                Deslizador {
+                    etiqueta: "Intensidad"
+                    from: 0
+                    to: 1
+                    stepSize: 0.01
+                    valor: propiedadesEfecto.ef.intensity !== undefined ? propiedadesEfecto.ef.intensity : 0.6
+                    textoValor: Math.round(valorActual * 100) + " %"
+                    onSoltado: (v) => propiedadesEfecto.cambiar({ intensity: v })
+                }
+                Deslizador {
+                    etiqueta: "Desenfoque de movimiento"
+                    from: 0
+                    to: 1
+                    stepSize: 0.01
+                    valor: propiedadesEfecto.ef.blur !== undefined ? propiedadesEfecto.ef.blur : 0.6
+                    textoValor: Math.round(valorActual * 100) + " %"
+                    onSoltado: (v) => propiedadesEfecto.cambiar({ blur: v })
+                }
+                Selector {
+                    etiqueta: "Curva de movimiento"
+                    model: panel.editor.easingNames
+                    indice: propiedadesEfecto.ef.easingIndex !== undefined ? propiedadesEfecto.ef.easingIndex : 0
+                    onElegido: (i) => propiedadesEfecto.cambiar({ easingIndex: i })
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Se aplica a todo lo que hay debajo en su tramo. Muévela, córtala (C) o "
+                          + "recorta sus bordes en la línea de tiempo como un clip; al cambiar la "
+                          + "duración vuelve a verse entera. Su sonido es un clip de audio aparte."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+
             // --- Transición seleccionada ---
             ColumnLayout {
                 id: propiedadesTransicion

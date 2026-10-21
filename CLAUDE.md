@@ -20,7 +20,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
   subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
-  `animation`, con la 7 y los efectos de imagen, `transform.effects`, con la 8).
+  `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
+  transiciones como clips, `effect` del clip, con la 9).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -72,6 +73,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Se aplican desde la pestaña Efectos (Editor::applyEffect; a todos los clips de video
   seleccionados si el clip es uno de ellos) y se ajustan en Propiedades. Selección por
   cuadro en LineaTiempo (marcoSeleccion → Editor::selectArea).
+  Transiciones como clips (como Premiere Composer): Clip::effect (TransitionParams, sin
+  medio, media = 0) en una pista de video; afecta a todo lo de debajo en su tramo. El
+  compositor (CompositorLayer::adjust) copia el lienzo dibujado hasta ahí y le aplica la
+  transición con A = B = esa copia. Su efecto avanza con `in` (dura durationFrames, como
+  un medio): al cortarla o recortarla cada trozo sigue donde iba. placeEffect/setClipEffect
+  (edit.h); Editor::addEffectClip (se centra en el corte más cercano, va a una pista libre y
+  lleva su sonido con placeSoundHit) y setEffectClip. Archivo .sharkp versión 9
+  (clip.effect). Las transiciones antiguas en los cortes (Track::transitions) se siguen
+  abriendo y dibujando.
   Copiar y pegar clips: copyClips/pasteClips (edit.h, Clipboard con sus medios) y
   Editor::copySelection/cutSelection/pasteAtPlayhead (Ctrl+C/X/V).
   Un clic fuera de un campo de texto le quita el teclado (FocusRelease en main.cpp): si

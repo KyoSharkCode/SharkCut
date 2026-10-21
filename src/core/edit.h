@@ -90,6 +90,19 @@ Clipboard copyClips(const Project& project, const std::vector<ObjectId>& clips);
 // se añaden. No se pega nada en pistas bloqueadas. Devuelve los clips nuevos.
 std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, std::int64_t at);
 
+// --- Transiciones como clips ---
+
+// Pone una transición-clip (ver Clip::effect) de params.durationFrames fotogramas a partir
+// de `start`, en la pista de video `track` o, si ahí hay clips en ese tramo, en la
+// primera de encima que esté libre (o en una nueva). Nunca tapa clips. Devuelve su id.
+ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
+                     TransitionParams params);
+
+// Cambia la transición del clip (tipo, intensidad, desenfoque, curva, duración). Con
+// otra duración, el clip vuelve a mostrar el efecto entero desde su inicio (hasta donde
+// quepa antes del clip siguiente).
+bool setClipEffect(Project& project, ObjectId clip, TransitionParams params);
+
 // Parte en dos los clips que contienen el fotograma `frame` (sin contar su primer
 // fotograma). Con `clips` vacío parte todas las pistas; si no, solo esos clips (y
 // sus enlazados).
@@ -243,6 +256,12 @@ bool setTransitionParams(Project& project, ObjectId transition, const Transition
 // menos 2).
 bool setTransitionLength(Project& project, ObjectId transition, std::int64_t before,
                          std::int64_t after);
+
+// Coloca un efecto de sonido (medio de audio) con su golpe (`hitFrames` desde su inicio)
+// en el fotograma `hit`, en la primera pista de audio libre en ese tramo (o en una nueva
+// debajo), con `volumeDb`. Devuelve el clip de audio, o 0.
+ObjectId placeSoundHit(Project& project, ObjectId soundMedia, std::int64_t hit,
+                       std::int64_t hitFrames, double volumeDb);
 
 // Coloca el sonido `soundMedia` con su golpe (`hitFrames` desde su inicio) en el corte
 // de la transición, en la primera pista de audio libre en ese tramo (o en una nueva), y

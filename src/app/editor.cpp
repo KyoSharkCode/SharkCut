@@ -386,6 +386,11 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     placement.effects = {};
     entry[QStringLiteral("transformed")] = placement != sharkcut::ClipTransform{};
     entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    // Transición-clip: se dibuja como una transición, con su nombre.
+    entry[QStringLiteral("effect")] = clip.isEffect();
+    if (clip.isEffect()) {
+        entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(clip.effect->type).name);
+    }
     // Keyframes (de cualquier propiedad) que caen dentro del clip, en la línea de tiempo.
     QVariantList keyframes;
     if (!clip.animation.empty()) {
@@ -564,6 +569,26 @@ QVariantMap Editor::selectedClip() const {
     }
     QVariantMap result;
     result[QStringLiteral("count")] = 1;
+    if (first->isEffect()) {
+        // Transición-clip: sus valores (sin transformación ni audio).
+        const sharkcut::TransitionParams& e = *first->effect;
+        const auto ref = p.findClip(first->id);
+        result[QStringLiteral("video")] = qint64{0};
+        result[QStringLiteral("audio")] = qint64{0};
+        result[QStringLiteral("start")] = static_cast<qint64>(first->start);
+        result[QStringLiteral("end")] = static_cast<qint64>(first->end());
+        result[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(e.type).name);
+        result[QStringLiteral("effectClip")] = static_cast<qint64>(first->id);
+        result[QStringLiteral("effect")] =
+            QVariantMap{{QStringLiteral("typeIndex"), static_cast<int>(e.type)},
+                        {QStringLiteral("intensity"), e.intensity},
+                        {QStringLiteral("blur"), e.blur},
+                        {QStringLiteral("easingIndex"), static_cast<int>(e.easing)},
+                        {QStringLiteral("length"), static_cast<qint64>(e.durationFrames)},
+                        {QStringLiteral("track"), QString::fromStdString(p.trackName(ref->track))},
+                        {QStringLiteral("locked"), p.tracks[ref->track].locked}};
+        return result;
+    }
     result[QStringLiteral("linked")] = group.size() == 2;
     result[QStringLiteral("start")] = static_cast<qint64>(first->start);
     result[QStringLiteral("end")] = static_cast<qint64>(first->end());
@@ -786,9 +811,13 @@ QString Editor::selectionDescription() const {
     }
     const MediaItem* item = p.findMedia(first->media);
     const auto tc = [this](std::int64_t frame) { return timecodeFor(frame); };
+    const QString name =
+        first->isEffect() ? QStringLiteral("Transición %1")
+                                .arg(fromView(sharkcut::transitionInfo(first->effect->type).name))
+        : item ? QString::fromStdString(item->name)
+               : QStringLiteral("?");
     return QStringLiteral("%1\n%2 → %3 · %4")
-        .arg(item ? QString::fromStdString(item->name) : QStringLiteral("?"), tc(first->start),
-             tc(first->end()), tc(first->length));
+        .arg(name, tc(first->start), tc(first->end()), tc(first->length));
 }
 
 QString Editor::timecode() const {
@@ -821,6 +850,14 @@ QSize Editor::canvasSize() const {
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
+        if (layer.clip->isEffect()) {
+            // Transición-clip: transforma todo lo de debajo.
+            sharkcut::CompositorLayer& out = input.layers.emplace_back();
+            out.adjust = true;
+            out.transition = layer.clip->effect;
+            out.state = sharkcut::evaluateTransition(*layer.clip->effect, layer.effectFrame);
+            continue;
+        }
         if (layer.track >= m_video.size()) {
             continue;
         }
@@ -2647,7 +2684,8 @@ void Editor::resetTransform(qint64 clipId) {
 void Editor::applyEffect(qint64 clipId, const QString& effect) {
     const auto id = static_cast<ObjectId>(clipId);
     const auto ref = project().findClip(id);
-    if (!ref || project().tracks[ref->track].kind != sharkcut::TrackKind::Video) {
+    if (!ref || project().tracks[ref->track].kind != sharkcut::TrackKind::Video ||
+        project().tracks[ref->track].clips[ref->index].isEffect()) {
         return;
     }
     const std::vector<ObjectId> targets = effectTargets(id);
@@ -2711,7 +2749,7 @@ std::vector<ObjectId> Editor::effectTargets(ObjectId clip) const {
     for (ObjectId id : group) {
         const auto ref = p.findClip(id);
         if (ref && p.tracks[ref->track].kind == sharkcut::TrackKind::Video &&
-            !p.tracks[ref->track].locked) {
+            !p.tracks[ref->track].locked && !p.tracks[ref->track].clips[ref->index].isEffect()) {
             targets.push_back(id);
         }
     }
@@ -2812,6 +2850,9 @@ void Editor::detectKeyColor(qint64 clipId, bool fallbackToGreen) {
 qint64 Editor::clipAtCanvas(double x, double y) const {
     const auto layers = project().videoLayersAt(m_currentFrame);
     for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+        if (it->clip->isEffect()) {
+            continue; // las transiciones-clip no se seleccionan en el visor
+        }
         const sharkcut::ClipTransform t = transformOf(it->clip->id);
         const CanvasBox box = canvasBox(*it->clip, t);
         // El punto, deshaciendo el giro del clip (alrededor del centro del video).
@@ -3114,6 +3155,105 @@ void Editor::addTransition(int track, qint64 cut, int typeIndex) {
     }
 }
 
+void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        sharkcut::TransitionParams params = info.defaults;
+        // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+        const sharkcut::FrameRate rate = p.settings.frameRate;
+        params.durationFrames = std::max<std::int64_t>(
+            2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+        std::size_t target = 0;
+        if (track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
+            p.tracks[static_cast<std::size_t>(track)].kind == sharkcut::TrackKind::Video) {
+            target = static_cast<std::size_t>(track);
+        } else {
+            target = p.trackIndex(sharkcut::TrackKind::Video, 0).value_or(0);
+        }
+        // Centrada en el corte (o borde de clip) más cercano de las pistas de video, si
+        // está a menos de medio segundo; si no, empieza donde se soltó.
+        const std::int64_t reach =
+            std::max<std::int64_t>(1, sharkcut::mulDiv(1, rate.num, 2 * rate.den));
+        std::int64_t best = -1;
+        for (const sharkcut::Track& t : p.tracks) {
+            if (t.kind != sharkcut::TrackKind::Video) {
+                continue;
+            }
+            for (const Clip& c : t.clips) {
+                if (c.isEffect()) {
+                    continue;
+                }
+                for (const std::int64_t edge : {c.start, c.end()}) {
+                    if (std::abs(edge - frame) <= reach &&
+                        (best < 0 || std::abs(edge - frame) < std::abs(best - frame))) {
+                        best = edge;
+                    }
+                }
+            }
+        }
+        const std::int64_t start = best >= 0
+                                       ? std::max<std::int64_t>(0, best - params.durationFrames / 2)
+                                       : std::max<std::int64_t>(0, frame);
+        created = sharkcut::placeEffect(p, target, start, params);
+        if (created == 0) {
+            return false;
+        }
+        // Su efecto de sonido, con el golpe en la mitad de la transición.
+        if (const sharkcut::SoundEffect* sound =
+                sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type))) {
+            const std::int64_t hit =
+                sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds, rate.frameDuration());
+            sharkcut::placeSoundHit(p, soundMedia(p, *sound), start + params.durationFrames / 2,
+                                    hit, kSoundVolumeDb);
+        }
+        return true;
+    });
+    if (created != 0) {
+        select(static_cast<qint64>(created), false);
+    }
+}
+
+void Editor::setEffectClip(qint64 clipId, const QVariantMap& values) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    if (!clip || !clip->isEffect()) {
+        return;
+    }
+    sharkcut::TransitionParams params = *clip->effect;
+    if (values.contains(QStringLiteral("typeIndex"))) {
+        const int type = values.value(QStringLiteral("typeIndex")).toInt();
+        if (type >= 0 && type < static_cast<int>(sharkcut::kTransitions.size()) &&
+            type != static_cast<int>(params.type)) {
+            // Otro tipo: con sus valores, la misma duración.
+            const std::int64_t duration = params.durationFrames;
+            params = sharkcut::kTransitions[static_cast<std::size_t>(type)].defaults;
+            params.durationFrames = duration;
+        }
+    }
+    if (values.contains(QStringLiteral("intensity"))) {
+        params.intensity = values.value(QStringLiteral("intensity")).toDouble();
+    }
+    if (values.contains(QStringLiteral("blur"))) {
+        params.blur = values.value(QStringLiteral("blur")).toDouble();
+    }
+    if (values.contains(QStringLiteral("easingIndex"))) {
+        const int easing = values.value(QStringLiteral("easingIndex")).toInt();
+        if (easing >= 0 && easing < static_cast<int>(sharkcut::kTransitionEasings)) {
+            params.easing = sharkcut::kEasings[static_cast<std::size_t>(easing)].easing;
+        }
+    }
+    if (values.contains(QStringLiteral("length"))) {
+        params.durationFrames = values.value(QStringLiteral("length")).toLongLong();
+    }
+    edit(QStringLiteral("Cambiar la transición"),
+         [id, params](Project& p) { return sharkcut::setClipEffect(p, id, params); });
+}
+
 void Editor::removeTransition(qint64 id) {
     const auto transition = static_cast<ObjectId>(id);
     if (edit(QStringLiteral("Quitar transición"),
@@ -3336,7 +3476,7 @@ std::vector<Editor::Need> Editor::needsAt(std::size_t track, std::int64_t frame)
             return {{a, p.mediaFrameIndex(*a, frame)}, {b, p.mediaFrameIndex(*b, frame)}};
         }
     }
-    if (const Clip* clip = p.clipAt(track, frame)) {
+    if (const Clip* clip = p.clipAt(track, frame); clip && !clip->isEffect()) {
         return {{clip, p.mediaFrameIndex(*clip, frame)}};
     }
     return {};
@@ -3346,6 +3486,9 @@ std::optional<Editor::Need> Editor::upcoming(std::size_t track, std::int64_t fra
     const Project& p = project();
     const std::vector<Need> now = needsAt(track, frame);
     for (const Clip& clip : p.tracks[track].clips) {
+        if (clip.isEffect()) {
+            continue; // sin video que decodificar
+        }
         if (clip.start <= frame || std::any_of(now.begin(), now.end(), [&clip](const Need& n) {
                 return n.clip->id == clip.id;
             })) {

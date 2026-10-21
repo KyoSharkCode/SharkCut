@@ -195,11 +195,17 @@ struct Clip {
     ClipTransform transform;   // solo clips de video
     ClipAnimation animation{}; // solo clips de video
     double volumeDb = 0.0;     // solo clips de audio
+    // Transición como clip (pistas de video, sin medio: media = 0): en su tramo se aplica
+    // a todo lo que hay debajo (como una capa de ajuste de Premiere). Su efecto dura
+    // effect->durationFrames y avanza con `in`, como un medio: al cortarla o recortarla,
+    // cada trozo sigue donde iba.
+    std::optional<TransitionParams> effect{};
 
     std::int64_t end() const { return start + length; } // primer fotograma excluido
     std::int64_t out() const { return in + length; }    // fin del tramo en el medio
     // Posición en el medio de un fotograma de la línea de tiempo (la de los keyframes).
     std::int64_t mediaFrameAt(std::int64_t frame) const { return in + (frame - start); }
+    bool isEffect() const { return effect.has_value(); }
 
     friend bool operator==(const Clip&, const Clip&) = default;
 };
@@ -348,6 +354,9 @@ struct Project {
         const MediaItem* mediaB = nullptr;
         std::int64_t mediaFrameB = 0;
         std::int64_t transitionFrame = 0; // 0 … length() − 1
+        // Transición-clip (clip->isEffect(), sin medio): se aplica a las capas de debajo,
+        // en este fotograma de su efecto.
+        std::int64_t effectFrame = 0;
     };
 
     struct TransitionRef {

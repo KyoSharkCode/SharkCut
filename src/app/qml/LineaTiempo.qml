@@ -851,7 +851,8 @@ Rectangle {
                                 height: raiz.alturaPista
                                 radius: 3
                                 color: {
-                                    const base = esVideo ? Theme.clipVideo : Theme.clipAudio
+                                    const base = elemento.modelData.effect ? Theme.clipTransicion
+                                               : esVideo ? Theme.clipVideo : Theme.clipAudio
                                     return seleccionado ? Qt.lighter(base, 1.3) : base
                                 }
                                 opacity: enArrastre && raiz.arrastre.tipo === "mover" ? 0.85
@@ -1385,7 +1386,10 @@ Rectangle {
                                     return
                                 }
                                 if (esTransicion(d)) {
-                                    raiz.corteSoltar = p && p.video ? raiz.corteCercano(p.index, d.x) : null
+                                    // Transición como clip: dónde se suelta (se centra en el
+                                    // corte más cercano al soltarla).
+                                    raiz.marcaSoltar = raiz.frameEn(d.x)
+                                    raiz.pistaSoltar = p && p.video ? p.index : -1
                                     return
                                 }
                                 raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
@@ -1417,9 +1421,10 @@ Rectangle {
                                         Qt.callLater(raiz.editor.applyEffect, clip, d.source.efecto)
                                     d.accept()
                                 } else if (esTransicion(d)) {
-                                    if (corte !== null && d.source)
-                                        Qt.callLater(raiz.editor.addTransition, corte.track, corte.cut,
-                                                     d.source.transicion)
+                                    // Una transición-clip: afecta a todo lo que hay debajo.
+                                    if (d.source)
+                                        Qt.callLater(raiz.editor.addEffectClip, p && p.video ? p.index : -1,
+                                                     raiz.frameEn(d.x), d.source.transicion)
                                     d.accept()
                                 } else if (d.hasUrls && d.urls.length > 0) {
                                     raiz.editor.importFiles(d.urls, f, pista)

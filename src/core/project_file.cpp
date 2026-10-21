@@ -87,7 +87,7 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
             claim(ids, clip.id);
-            if (!project.findMedia(clip.media)) {
+            if (!clip.isEffect() && !project.findMedia(clip.media)) {
                 throw ProjectError("Un clip hace referencia a un medio que no existe");
             }
             if (clip.length <= 0 || clip.start < 0 || clip.in < 0) {
@@ -233,6 +233,37 @@ Transition transitionFromJson(const json& value) {
     t.params.durationFrames = t.before + t.after;
     t.sound = value.value("sound", ObjectId{0});
     return t;
+}
+
+// Transición-clip: {type, duration, intensity, blur, easing}.
+json effectToJson(const TransitionParams& p) {
+    return {
+        {"type", toString(transitionInfo(p.type).id)},
+        {"duration", p.durationFrames},
+        {"intensity", p.intensity},
+        {"blur", p.blur},
+        {"easing", toString(kEasings[static_cast<std::size_t>(p.easing)].id)},
+    };
+}
+
+TransitionParams effectFromJson(const json& value) {
+    const std::string type = value.at("type").get<std::string>();
+    const auto info = std::find_if(kTransitions.begin(), kTransitions.end(),
+                                   [&type](const TransitionInfo& i) { return i.id == type; });
+    if (info == kTransitions.end()) {
+        throw ProjectError("Transición desconocida en el proyecto: " + type);
+    }
+    TransitionParams p = info->defaults;
+    p.durationFrames = std::max<std::int64_t>(2, value.value("duration", p.durationFrames));
+    p.intensity = std::clamp(value.value("intensity", p.intensity), 0.0, 1.0);
+    p.blur = std::clamp(value.value("blur", p.blur), 0.0, 1.0);
+    const std::string easing = value.value("easing", std::string());
+    for (const EasingInfo& e : kEasings) {
+        if (e.id == easing) {
+            p.easing = e.easing;
+        }
+    }
+    return p;
 }
 
 std::string colorToHex(std::uint32_t color) {
@@ -544,6 +575,9 @@ json tracksToJson(const std::vector<Track>& tracks) {
             if (!video && clip.volumeDb != 0.0) {
                 entry["volumeDb"] = clip.volumeDb;
             }
+            if (video && clip.effect) {
+                entry["effect"] = effectToJson(*clip.effect);
+            }
             clips.push_back(std::move(entry));
         }
         json entry = {{"kind", kindName(track.kind)}, {"clips", std::move(clips)}};
@@ -598,6 +632,10 @@ std::vector<Track> tracksFromJson(const json& value) {
                 clip.animation = animationFromJson(*a);
             }
             clip.volumeDb = c.value("volumeDb", 0.0);
+            if (const auto e = c.find("effect"); e != c.end() && track.kind == TrackKind::Video) {
+                clip.effect = effectFromJson(*e);
+                clip.media = 0;
+            }
             track.clips.push_back(clip);
         }
         if (const auto list = entry.find("transitions"); list != entry.end()) {

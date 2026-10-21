@@ -419,12 +419,12 @@ std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, s
         }
         const std::size_t track = project.trackIndex(c.kind, c.trackNumber).value();
         const auto media = mediaIds.find(c.clip.media);
-        if (project.tracks[track].locked || media == mediaIds.end()) {
+        if (project.tracks[track].locked || (media == mediaIds.end() && !c.clip.isEffect())) {
             continue;
         }
         Clip clip = c.clip;
         clip.id = newId(project);
-        clip.media = media->second;
+        clip.media = c.clip.isEffect() ? 0 : media->second;
         clip.start += at;
         ids[c.clip.id] = clip.id;
         pasting.push_back({track, clip, c.clip.link});
@@ -445,6 +445,67 @@ std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, s
     }
     fixLinks(project, splits);
     return pasted;
+}
+
+ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
+                     TransitionParams params) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||
+        start < 0) {
+        return 0;
+    }
+    params.durationFrames = std::max<std::int64_t>(params.durationFrames, 2);
+    const std::int64_t end = start + params.durationFrames;
+    // La primera pista de video, desde `track` hacia arriba, libre en ese tramo (para no
+    // tapar clips); si no hay, una nueva encima.
+    auto free = [&](std::size_t t) {
+        const Track& candidate = project.tracks[t];
+        return candidate.kind == TrackKind::Video && !candidate.locked &&
+               std::none_of(candidate.clips.begin(), candidate.clips.end(),
+                            [&](const Clip& c) { return c.start < end && c.end() > start; });
+    };
+    std::optional<std::size_t> target;
+    for (std::size_t t = track; t < project.tracks.size(); ++t) {
+        if (free(t)) {
+            target = t;
+            break;
+        }
+    }
+    if (!target) {
+        target = addTrack(project, TrackKind::Video);
+    }
+    Clip clip;
+    clip.id = newId(project);
+    clip.start = start;
+    clip.length = params.durationFrames;
+    clip.effect = params;
+    insertSorted(project.tracks[*target], clip);
+    return clip.id;
+}
+
+bool setClipEffect(Project& project, ObjectId id, TransitionParams params) {
+    Clip* clip = findMutable(project, id);
+    if (!clip || !clip->isEffect() || inLockedTrack(project, id)) {
+        return false;
+    }
+    params.durationFrames = std::clamp<std::int64_t>(params.durationFrames, 2, 60 * 60 * 120);
+    params.intensity = std::clamp(params.intensity, 0.0, 1.0);
+    params.blur = std::clamp(params.blur, 0.0, 1.0);
+    if (params.durationFrames != clip->effect->durationFrames) {
+        // Otra duración: el efecto entero, desde su inicio, hasta donde quepa.
+        const auto ref = project.findClip(id);
+        const Track& track = project.tracks[ref->track];
+        std::int64_t room = params.durationFrames;
+        if (ref->index + 1 < track.clips.size()) {
+            room = std::min(room, track.clips[ref->index + 1].start - clip->start);
+        }
+        clip->in = 0;
+        clip->length = std::max<std::int64_t>(1, room);
+    }
+    if (clip->effect == params) {
+        return false;
+    }
+    clip->effect = params;
+    return true;
 }
 
 bool splitAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& clips) {
@@ -545,7 +606,9 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
         const Clip& c = track.clips[ref->index];
         current = c.end();
         lo = std::max(lo, c.start + 1); // al menos un fotograma
-        if (const MediaItem* item = project.findMedia(c.media)) {
+        if (c.isEffect()) {
+            hi = std::min(hi, c.start + c.effect->durationFrames - c.in); // fin del efecto
+        } else if (const MediaItem* item = project.findMedia(c.media)) {
             hi = std::min(hi, c.start + project.mediaFrames(*item) - c.in); // fin del medio
         }
         if (ref->index + 1 < track.clips.size()) {
@@ -1023,27 +1086,21 @@ bool setTransitionLength(Project& project, ObjectId transition, std::int64_t bef
     return true;
 }
 
-ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
-                              std::int64_t hitFrames, double volumeDb) {
-    const Transition* t = project.transition(transition);
+ObjectId placeSoundHit(Project& project, ObjectId soundMedia, std::int64_t hit,
+                       std::int64_t hitFrames, double volumeDb) {
     const MediaItem* item = project.findMedia(soundMedia);
-    if (!t || !item || !item->hasAudio || transitionLocked(project, transition)) {
+    if (!item || !item->hasAudio || hit < 0) {
         return 0;
     }
-    const std::int64_t cut = project.cutOf(*t);
     const std::int64_t length = project.mediaFrames(*item);
-    if (cut < 0 || length <= 0) {
+    if (length <= 0) {
         return 0;
     }
-    // El golpe del sonido cae en el corte (si empezaría antes del 0, se recorta).
-    const std::int64_t start = std::max<std::int64_t>(0, cut - hitFrames);
-    const std::int64_t in = start - (cut - hitFrames);
+    // El golpe del sonido cae en `hit` (si empezaría antes del 0, se recorta).
+    const std::int64_t start = std::max<std::int64_t>(0, hit - hitFrames);
+    const std::int64_t in = start - (hit - hitFrames);
     if (in >= length) {
         return 0;
-    }
-    const ObjectId previous = t->sound;
-    if (previous != 0) {
-        removeClips(project, {previous});
     }
     // Primera pista de audio sin nada en ese tramo; si no hay, una nueva debajo.
     const std::int64_t end = start + (length - in);
@@ -1064,10 +1121,30 @@ ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId so
     }
     const ObjectId clip =
         placeClip(project, soundMedia, start, in, length - in, {.video = 0, .audio = number});
+    if (clip != 0) {
+        setClipVolume(project, clip, volumeDb);
+    }
+    return clip;
+}
+
+ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
+                              std::int64_t hitFrames, double volumeDb) {
+    const Transition* t = project.transition(transition);
+    if (!t || transitionLocked(project, transition)) {
+        return 0;
+    }
+    const std::int64_t cut = project.cutOf(*t);
+    if (cut < 0) {
+        return 0;
+    }
+    const ObjectId previous = t->sound;
+    if (previous != 0) {
+        removeClips(project, {previous});
+    }
+    const ObjectId clip = placeSoundHit(project, soundMedia, cut, hitFrames, volumeDb);
     if (clip == 0) {
         return 0;
     }
-    setClipVolume(project, clip, volumeDb);
     if (Transition* mutableT = findTransitionMutable(project, transition)) {
         mutableT->sound = clip;
     }

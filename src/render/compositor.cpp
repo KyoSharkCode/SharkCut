@@ -205,8 +205,11 @@ QRhiTexture* Compositor::canvas() const {
 
 void Compositor::createCanvas() {
     m_canvasTarget.reset();
+    // Se copia (UsedAsTransferSource) para las transiciones-clip, que transforman lo que
+    // ya está dibujado.
     m_canvas.reset(
-        m_rhi->newTexture(QRhiTexture::RGBA8, m_canvasSize, 1, QRhiTexture::RenderTarget));
+        m_rhi->newTexture(QRhiTexture::RGBA8, m_canvasSize, 1,
+                          QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     m_canvas->create();
     m_canvasTarget.reset(m_rhi->newTextureRenderTarget({m_canvas.get()}));
     if (!m_canvasPass) {
@@ -586,12 +589,38 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
     struct Draw {
         Source* source = nullptr;
         TransitionTargets* transition = nullptr;
+        bool adjust = false; // la transición se aplica a lo ya dibujado en el lienzo
     };
     std::vector<Draw> draws;
     std::size_t sourceCount = 0;
     std::size_t transitionCount = 0;
 
+    // Uniformes de una transición sobre el lienzo (para las dos clases de transición).
+    const auto transitionUniforms = [&](const CompositorLayer& layer, TransitionTargets& targets) {
+        QuadUniforms u{};
+        const QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
+        std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
+        u.p0[0] = static_cast<float>(static_cast<int>(layer.transition->type) + 1);
+        u.p0[1] = static_cast<float>(layer.state.eased);
+        u.p0[2] = static_cast<float>(layer.state.velocity);
+        u.p0[3] = static_cast<float>(layer.transition->intensity);
+        u.p1[0] = static_cast<float>(layer.transition->blur);
+        u.p1[1] =
+            static_cast<float>(m_canvasSize.width()) / static_cast<float>(m_canvasSize.height());
+        u.p1[2] = m_rhi->isYUpInFramebuffer() ? 1.0f : 0.0f;
+        u.p1[3] = static_cast<float>(layer.state.progress);
+        canvasUpdates->updateDynamicBuffer(targets.uniforms.get(), 0, sizeof(u), &u);
+    };
+
     for (const CompositorLayer& layer : input.layers) {
+        if (layer.adjust && layer.transition) {
+            // Transición-clip: lo dibujado hasta aquí se copia en las dos texturas de la
+            // transición (A y B son lo mismo) y la transición lo vuelve a poner en el lienzo.
+            TransitionTargets& targets = transitionTargets(transitionCount++);
+            transitionUniforms(layer, targets);
+            draws.push_back({nullptr, &targets, true});
+            continue;
+        }
         if (layer.transition && layer.a && layer.b) {
             // Los dos clips, cada uno en su textura (sobre negro), antes de la pasada
             // del lienzo; la transición los mezcla ahí.
@@ -611,19 +640,7 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
                 cb->endPass();
             }
 
-            QuadUniforms u{};
-            const QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
-            std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
-            u.p0[0] = static_cast<float>(static_cast<int>(layer.transition->type) + 1);
-            u.p0[1] = static_cast<float>(layer.state.eased);
-            u.p0[2] = static_cast<float>(layer.state.velocity);
-            u.p0[3] = static_cast<float>(layer.transition->intensity);
-            u.p1[0] = static_cast<float>(layer.transition->blur);
-            u.p1[1] = static_cast<float>(m_canvasSize.width()) /
-                      static_cast<float>(m_canvasSize.height());
-            u.p1[2] = m_rhi->isYUpInFramebuffer() ? 1.0f : 0.0f;
-            u.p1[3] = static_cast<float>(layer.state.progress);
-            canvasUpdates->updateDynamicBuffer(targets.uniforms.get(), 0, sizeof(u), &u);
+            transitionUniforms(layer, targets);
             draws.push_back({nullptr, &targets});
             continue;
         }
@@ -650,6 +667,14 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
         if (draw.source) {
             drawSource(cb, *draw.source, m_blendPipeline.get());
             continue;
+        }
+        if (draw.adjust) {
+            // Se cierra la pasada, se copia el lienzo y se empieza otra sobre negro.
+            cb->endPass();
+            QRhiResourceUpdateBatch* copy = m_rhi->nextResourceUpdateBatch();
+            copy->copyTexture(draw.transition->rgb[0].get(), m_canvas.get());
+            copy->copyTexture(draw.transition->rgb[1].get(), m_canvas.get());
+            cb->beginPass(m_canvasTarget.get(), Qt::black, {1.0f, 0}, copy);
         }
         cb->setGraphicsPipeline(m_compositePipeline.get());
         cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),

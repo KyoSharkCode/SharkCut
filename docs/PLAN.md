@@ -812,6 +812,12 @@ ctest --preset windows-debug
        proyectos): en el cabezal, en las mismas pistas, sobrescribiendo.
        Después, a petición de Kyo (seguía el lag al hacer zoom): cada clip de video muestra
        solo su primer fotograma, al inicio, en vez de una tira de miniaturas.
+     - [x] Transiciones como clips (petición de Kyo, como en Premiere Composer): se
+       arrastran a la línea de tiempo y quedan como un clip en una pista libre, centradas en
+       el corte más cercano, con su efecto de sonido en una pista de audio. Afectan a todo
+       lo que hay debajo (también varias pistas: gameplay, facecam y textos), y se pueden
+       poner al principio o al final de un clip, mover, cortar y recortar. En Propiedades:
+       tipo, duración, intensidad, desenfoque y curva. Archivo .sharkp versión 9.
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
        diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían

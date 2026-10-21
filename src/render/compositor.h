@@ -36,6 +36,9 @@ struct CompositorLayer {
     TransitionState state;
     ClipTransform transform;  // de `a`
     ClipTransform transformB; // de `b`
+    // Transición-clip (capa de ajuste): sin fotogramas propios; `transition` y `state` se
+    // aplican a todo lo dibujado debajo hasta aquí.
+    bool adjust = false;
 };
 
 // Imagen ya dibujada (un subtítulo) que va encima de las capas, en `rect` (píxeles del

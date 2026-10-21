@@ -151,6 +151,13 @@ public:
         CompositorInput input;
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
             CompositorLayer& out = input.layers.emplace_back();
+            if (layer.clip->isEffect()) {
+                // Transición-clip: transforma todo lo de debajo.
+                out.adjust = true;
+                out.transition = layer.clip->effect;
+                out.state = evaluateTransition(*layer.clip->effect, layer.effectFrame);
+                continue;
+            }
             out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
             out.transform = scaled(transformAt(*layer.clip, frame));
             if (layer.transition) {

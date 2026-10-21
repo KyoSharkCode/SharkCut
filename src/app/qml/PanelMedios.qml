@@ -90,9 +90,10 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Arrastra una transición al corte entre dos clips seguidos de una pista "
-                      + "de video. Lleva su efecto de sonido, que puedes cambiar o quitar en "
-                      + "Propiedades."
+                text: "Arrastra una transición a la línea de tiempo: se pone como un clip, "
+                      + "centrada en el corte más cercano, y afecta a todo lo que hay debajo. "
+                      + "Se mueve, se corta y se recorta como cualquier clip, también al principio "
+                      + "o al final de un clip. Lleva su efecto de sonido en una pista de audio."
                 color: Theme.textoSecundario
                 font.pixelSize: Theme.tamTextoPequeno
             }

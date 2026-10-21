@@ -220,6 +220,14 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
             }
         }
         const Clip* c = clipAt(t, frame);
+        if (c && c->isEffect()) {
+            Layer layer;
+            layer.track = t;
+            layer.clip = c;
+            layer.effectFrame = c->mediaFrameAt(frame);
+            layers.push_back(layer);
+            continue;
+        }
         const MediaItem* item = c ? findMedia(c->media) : nullptr;
         if (item) {
             Layer layer;

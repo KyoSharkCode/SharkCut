@@ -343,7 +343,9 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Arrastra un efecto sobre un clip de video de la línea de tiempo (o "
-                          + "selecciona el clip y pulsa Aplicar). Después se ajusta o se quita en "
+                          + "selecciona el clip y pulsa Aplicar). Con varios clips seleccionados "
+                          + "(arrastra en una zona vacía de la línea de tiempo para marcarlos), "
+                          + "va a todos. Después se ajusta o se quita en "
                           + "Propiedades. Croma busca solo el color del fondo; la sombra y el "
                           + "resplandor siguen la forma del clip (también su transparencia)."
                     color: Theme.textoDesactivado
@@ -475,12 +477,15 @@ Rectangle {
                     spacing: 4
                 }
                 BotonIcono {
+                    // El clip de video seleccionado; con varios, va a todos los de video.
+                    readonly property var sel: panel.editor.selectedClip
+                    readonly property var objetivo: sel.count === 1 ? sel.video : (sel.firstVideo || 0)
                     texto: "Aplicar"
                     implicitHeight: 26
-                    enabled: panel.editor.selectedClip.count === 1
-                             && panel.editor.selectedClip.video !== 0
-                    ayuda: "Al clip de video seleccionado"
-                    onPulsado: panel.editor.applyEffect(panel.editor.selectedClip.video, fila.clave)
+                    enabled: objetivo !== undefined && objetivo !== 0
+                    ayuda: sel.count > 1 ? "A los " + sel.videoCount + " clips de video seleccionados"
+                                         : "Al clip de video seleccionado"
+                    onPulsado: panel.editor.applyEffect(objetivo, fila.clave)
                 }
             }
         }

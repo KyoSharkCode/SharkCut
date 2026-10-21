@@ -136,10 +136,16 @@ void Editor::applyClipPreset(qint64 clipId, const QString& name) {
         return;
     }
     const ClipPreset preset = *it;
-    const auto id = static_cast<ObjectId>(clipId);
-    const bool changed =
-        edit(QStringLiteral("Aplicar el ajuste «%1»").arg(name),
-             [id, &preset](sharkcut::Project& p) { return sharkcut::applyPreset(p, id, preset); });
+    // A todos los seleccionados si el clip es uno de ellos.
+    const std::vector<ObjectId> targets = effectTargets(static_cast<ObjectId>(clipId));
+    const bool changed = edit(QStringLiteral("Aplicar el ajuste «%1»").arg(name),
+                              [&targets, &preset](sharkcut::Project& p) {
+                                  bool any = false;
+                                  for (ObjectId id : targets) {
+                                      any = sharkcut::applyPreset(p, id, preset) || any;
+                                  }
+                                  return any;
+                              });
     if (changed) {
         emit effectApplied(QStringLiteral("ajuste:") + name);
     }

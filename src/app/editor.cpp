@@ -540,7 +540,24 @@ QVariantMap Editor::selectedClip() const {
     const Clip* first = p.clip(group.front());
     const bool single = group.size() == 1 || (group.size() == 2 && first->link == group[1]);
     if (!single) {
-        return {{QStringLiteral("count"), static_cast<int>(group.size())}};
+        // Varios: cuántos de video, el primero (para aplicarles efectos) y si hay enlaces.
+        int videos = 0;
+        qint64 firstVideo = 0;
+        bool linked = false;
+        for (ObjectId id : group) {
+            const auto ref = p.findClip(id);
+            if (!ref) {
+                continue;
+            }
+            linked = linked || p.tracks[ref->track].clips[ref->index].link != 0;
+            if (p.tracks[ref->track].kind == sharkcut::TrackKind::Video && videos++ == 0) {
+                firstVideo = static_cast<qint64>(id);
+            }
+        }
+        return {{QStringLiteral("count"), static_cast<int>(group.size())},
+                {QStringLiteral("videoCount"), videos},
+                {QStringLiteral("firstVideo"), firstVideo},
+                {QStringLiteral("linked"), linked}};
     }
     QVariantMap result;
     result[QStringLiteral("count")] = 1;
@@ -2593,12 +2610,17 @@ void Editor::applyEffect(qint64 clipId, const QString& effect) {
     if (!ref || project().tracks[ref->track].kind != sharkcut::TrackKind::Video) {
         return;
     }
-    select(clipId, false);
+    const std::vector<ObjectId> targets = effectTargets(id);
+    if (targets.size() <= 1) {
+        select(clipId, false);
+    }
     if (effect.startsWith(QLatin1String("ajuste:"))) {
         applyClipPreset(clipId, effect.mid(7));
         return;
     }
     if (effect == QLatin1String("croma")) {
+        // El color se busca en este clip y va a todos (la misma pantalla verde).
+        m_keyTargets = targets.size() > 1 ? targets : std::vector<ObjectId>{};
         detectKeyColor(clipId, true);
         return;
     }
@@ -2631,8 +2653,49 @@ void Editor::applyEffect(qint64 clipId, const QString& effect) {
     } else {
         return;
     }
-    setClipTransform(clipId, values, label);
+    if (targets.size() > 1) {
+        setClipsTransform(targets, values, label);
+    } else {
+        setClipTransform(clipId, values, label);
+    }
     emit effectApplied(effect);
+}
+
+std::vector<ObjectId> Editor::effectTargets(ObjectId clip) const {
+    const Project& p = project();
+    const std::vector<ObjectId> group = sharkcut::withLinked(p, m_selection);
+    if (std::find(group.begin(), group.end(), clip) == group.end()) {
+        return {clip};
+    }
+    std::vector<ObjectId> targets;
+    for (ObjectId id : group) {
+        const auto ref = p.findClip(id);
+        if (ref && p.tracks[ref->track].kind == sharkcut::TrackKind::Video &&
+            !p.tracks[ref->track].locked) {
+            targets.push_back(id);
+        }
+    }
+    return targets.empty() ? std::vector<ObjectId>{clip} : targets;
+}
+
+void Editor::setClipsTransform(const std::vector<ObjectId>& clips, const QVariantMap& values,
+                               const QString& label) {
+    m_previewClip = 0;
+    const std::int64_t frame = m_currentFrame;
+    edit(label, [&clips, &values, frame](Project& p) {
+        bool changed = false;
+        for (ObjectId id : clips) {
+            const Clip* clip = p.clip(id);
+            if (!clip) {
+                continue;
+            }
+            // Cada uno con sus valores en el cabezal (o en su primer fotograma).
+            const std::int64_t at = std::clamp<std::int64_t>(frame, clip->start, clip->end() - 1);
+            const sharkcut::ClipTransform t = withValues(sharkcut::transformAt(*clip, at), values);
+            changed = sharkcut::setClipTransformAt(p, id, t, at) || changed;
+        }
+        return changed;
+    });
 }
 
 qint64 Editor::videoClipAt(int track, qint64 frame) const {
@@ -2686,17 +2749,19 @@ void Editor::detectKeyColor(qint64 clipId, bool fallbackToGreen) {
                 const bool same =
                     self->m_activeProject == projectUid && self->project().clip(id) != nullptr;
                 const bool found = color && same;
+                const std::vector<ObjectId> targets = std::exchange(self->m_keyTargets, {});
+                QVariantMap values{{QStringLiteral("keyEnabled"), true}};
                 if (found) {
-                    self->setClipTransform(
-                        static_cast<qint64>(id),
-                        {{QStringLiteral("keyEnabled"), true},
-                         {QStringLiteral("keyColor"),
-                          QStringLiteral("#%1").arg(*color, 6, 16, QLatin1Char('0'))}},
-                        QStringLiteral("Pantalla verde"));
-                } else if (same && fallbackToGreen) {
-                    self->setClipTransform(static_cast<qint64>(id),
-                                           {{QStringLiteral("keyEnabled"), true}},
-                                           QStringLiteral("Pantalla verde"));
+                    values.insert(QStringLiteral("keyColor"),
+                                  QStringLiteral("#%1").arg(*color, 6, 16, QLatin1Char('0')));
+                }
+                if (same && (found || fallbackToGreen)) {
+                    if (targets.size() > 1) {
+                        self->setClipsTransform(targets, values, QStringLiteral("Pantalla verde"));
+                    } else {
+                        self->setClipTransform(static_cast<qint64>(id), values,
+                                               QStringLiteral("Pantalla verde"));
+                    }
                 }
                 emit self->keyColorDetected(found);
             },
@@ -2788,6 +2853,61 @@ void Editor::clearSelection() {
         m_selectedCaptions.clear();
         emit selectionChanged();
     }
+}
+
+void Editor::selectArea(const QVariantList& tracks, const QVariantList& captionTracks, qint64 from,
+                        qint64 to, bool add) {
+    const Project& p = project();
+    if (to < from) {
+        std::swap(from, to);
+    }
+    std::vector<ObjectId> clips;
+    for (const QVariant& v : tracks) {
+        const int t = v.toInt();
+        if (t < 0 || static_cast<std::size_t>(t) >= p.tracks.size()) {
+            continue;
+        }
+        for (const Clip& clip : p.tracks[static_cast<std::size_t>(t)].clips) {
+            if (clip.start < to && clip.end() > from) {
+                clips.push_back(clip.id);
+            }
+        }
+    }
+    std::vector<ObjectId> captions;
+    if (clips.empty()) {
+        for (const QVariant& v : captionTracks) {
+            const int t = v.toInt();
+            if (t < 0 || static_cast<std::size_t>(t) >= p.captionTracks.size()) {
+                continue;
+            }
+            for (const sharkcut::Caption& c :
+                 p.captionTracks[static_cast<std::size_t>(t)].captions) {
+                if (c.start < to && c.end() > from) {
+                    captions.push_back(c.id);
+                }
+            }
+        }
+    }
+    m_selectedTransition = 0;
+    if (!clips.empty() || !add) {
+        m_selectedCaptions.clear();
+    }
+    if (!captions.empty() || !add) {
+        m_selection.clear();
+    }
+    for (ObjectId id : clips) {
+        if (std::find(m_selection.begin(), m_selection.end(), id) == m_selection.end()) {
+            m_selection.push_back(id);
+        }
+    }
+    for (ObjectId id : captions) {
+        if (std::find(m_selectedCaptions.begin(), m_selectedCaptions.end(), id) ==
+            m_selectedCaptions.end()) {
+            m_selectedCaptions.push_back(id);
+        }
+    }
+    m_captionPreview.reset();
+    emit selectionChanged();
 }
 
 // --- Transiciones -------------------------------------------------------------------

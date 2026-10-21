@@ -117,6 +117,46 @@ Rectangle {
                                                     + separacionGrupos) + 20,
                              herramientas.implicitHeight) + 2 * Theme.margen
 
+    // Cuadro de selección (arrastrar desde una zona vacía de las pistas), en coordenadas
+    // del contenido: {x0, y0, x1, y1}; null si no se está dibujando.
+    property var marcoSeleccion: null
+    property point inicioMarco
+    function empezarMarco(p) {
+        inicioMarco = p
+        marcoSeleccion = null
+    }
+    // Devuelve si ya es un cuadro (se movió lo bastante) para no mover el cabezal.
+    function moverMarco(p) {
+        if (marcoSeleccion === null && Math.hypot(p.x - inicioMarco.x, p.y - inicioMarco.y) < 5)
+            return false
+        marcoSeleccion = { x0: Math.min(inicioMarco.x, p.x), y0: Math.min(inicioMarco.y, p.y),
+                           x1: Math.max(inicioMarco.x, p.x), y1: Math.max(inicioMarco.y, p.y) }
+        return true
+    }
+    // Selecciona lo que toca el cuadro (sumándolo con Mayús o Ctrl).
+    function soltarMarco(modificadores) {
+        const m = marcoSeleccion
+        marcoSeleccion = null
+        if (m === null)
+            return false
+        const pistas = []
+        for (const f of filas) {
+            const y = yPrimeraFila + f.y
+            if (y < m.y1 && y + alturaPista > m.y0)
+                pistas.push(f.pista.index)
+        }
+        const subtitulos = []
+        for (const f of filasSubtitulos) {
+            const y = yPrimeraFila + f.y
+            if (y < m.y1 && y + alturaSubtitulo > m.y0)
+                subtitulos.push(f.pista.index)
+        }
+        const sumar = (modificadores & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
+        editor.selectArea(pistas, subtitulos, Math.floor(m.x0 / escala), Math.ceil(m.x1 / escala),
+                          sumar)
+        return true
+    }
+
     // --- Utilidades --------------------------------------------------------------
 
     function frameEn(xContenido) {
@@ -455,7 +495,7 @@ Rectangle {
                         height: vista.contentHeight
 
                         // Fondo de cada pista: clic en vacío = quitar la selección y llevar
-                        // el cabezal ahí (arrastrando, se recorre el video).
+                        // el cabezal ahí; arrastrar = cuadro de selección.
                         Repeater {
                             model: raiz.filas
                             delegate: Rectangle {
@@ -469,27 +509,37 @@ Rectangle {
                                        ? Qt.tint(base, Qt.rgba(Theme.acento.r, Theme.acento.g,
                                                                Theme.acento.b, 0.14))
                                        : base
+                                // Clic: quitar la selección y el cabezal ahí. Arrastrar:
+                                // cuadro de selección (con Mayús o Ctrl, se suma).
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     preventStealing: true
                                     onPressed: (m) => {
-                                        raiz.editor.clearSelection()
-                                        if (m.button === Qt.RightButton)
+                                        if (m.button === Qt.RightButton) {
+                                            raiz.editor.clearSelection()
                                             menuPista.abrir(parent.modelData.pista, raiz.frameEn(m.x))
-                                        else
-                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                            return
+                                        }
+                                        raiz.empezarMarco(mapToItem(contenido, m.x, m.y))
                                     }
                                     onPositionChanged: (m) => {
                                         if (pressedButtons & Qt.LeftButton)
-                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                            raiz.moverMarco(mapToItem(contenido, m.x, m.y))
                                     }
+                                    onReleased: (m) => {
+                                        if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
+                                            return
+                                        raiz.editor.clearSelection()
+                                        raiz.editor.seek(raiz.cabezalEn(m.x))
+                                    }
+                                    onCanceled: raiz.marcoSeleccion = null
                                 }
                             }
                         }
 
-                        // Fondo de las pistas de subtítulos: clic = cabezal ahí; doble clic =
-                        // subtítulo nuevo ahí.
+                        // Fondo de las pistas de subtítulos: clic = cabezal ahí; arrastrar =
+                        // cuadro de selección; doble clic = subtítulo nuevo ahí.
                         Repeater {
                             model: raiz.filasSubtitulos
                             delegate: Rectangle {
@@ -503,16 +553,24 @@ Rectangle {
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     preventStealing: true
                                     onPressed: (m) => {
-                                        raiz.editor.clearSelection()
-                                        if (m.button === Qt.RightButton)
+                                        if (m.button === Qt.RightButton) {
+                                            raiz.editor.clearSelection()
                                             menuSubtitulos.abrir(parent.modelData.pista)
-                                        else
-                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                            return
+                                        }
+                                        raiz.empezarMarco(mapToItem(contenido, m.x, m.y))
                                     }
                                     onPositionChanged: (m) => {
                                         if (pressedButtons & Qt.LeftButton)
-                                            raiz.editor.seek(raiz.cabezalEn(m.x))
+                                            raiz.moverMarco(mapToItem(contenido, m.x, m.y))
                                     }
+                                    onReleased: (m) => {
+                                        if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
+                                            return
+                                        raiz.editor.clearSelection()
+                                        raiz.editor.seek(raiz.cabezalEn(m.x))
+                                    }
+                                    onCanceled: raiz.marcoSeleccion = null
                                     onDoubleClicked: raiz.editor.addCaptionAtPlayhead(parent.modelData.pista.index)
                                 }
                             }
@@ -1303,6 +1361,23 @@ Rectangle {
                             border.color: Theme.acento
                             border.width: 2
                             z: 4
+                        }
+
+                        // Cuadro de selección.
+                        Rectangle {
+                            visible: raiz.marcoSeleccion !== null
+                            z: 5
+                            x: visible ? raiz.marcoSeleccion.x0 : 0
+                            y: visible ? raiz.marcoSeleccion.y0 : 0
+                            width: visible ? raiz.marcoSeleccion.x1 - raiz.marcoSeleccion.x0 : 0
+                            height: visible ? raiz.marcoSeleccion.y1 - raiz.marcoSeleccion.y0 : 0
+                            color: "transparent"
+                            border.color: Theme.acento
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Theme.acento
+                                opacity: 0.12
+                            }
                         }
 
                         DropArea {

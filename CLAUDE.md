@@ -69,7 +69,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   escala). Todo en layer.frag: desenfoque con 32 muestras (disco de Vogel), esquinas con
   una distancia a un rectángulo redondeado, y la sombra es la misma capa dibujada antes en
   "modo sombra" (geometría ampliada, forma del clip con su alfa y su croma, difuminada).
-  Se aplican desde la pestaña Efectos (Editor::applyEffect) y se ajustan en Propiedades.
+  Se aplican desde la pestaña Efectos (Editor::applyEffect; a todos los clips de video
+  seleccionados si el clip es uno de ellos) y se ajustan en Propiedades. Selección por
+  cuadro en LineaTiempo (marcoSeleccion → Editor::selectArea).
   Ajustes guardados (presets de clips): src/core/clip_preset.h (presetFromClip,
   applyPreset; partes que lleva y animación en µs desde el inicio o el final del clip;
   JSON en project_file.cpp). Se guardan en QSettings "efectos/ajustes" (todos los

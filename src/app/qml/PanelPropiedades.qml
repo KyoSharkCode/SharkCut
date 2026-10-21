@@ -539,10 +539,24 @@ Rectangle {
                 visible: !propiedades.uno && !propiedades.hayTransicion && !propiedades.haySubtitulo
                 wrapMode: Text.WordWrap
                 text: propiedades.sel.count > 1
-                      ? "Selecciona un solo clip para ver y cambiar sus propiedades."
-                      : "Selecciona un clip en la línea de tiempo (o haz clic sobre él en el visor)."
+                      ? (propiedades.sel.videoCount > 0
+                         ? "Efectos y ajustes guardados (pestaña Efectos) se aplican a los "
+                           + propiedades.sel.videoCount + " clips de video seleccionados a la vez: "
+                           + "arrástralos sobre uno de ellos o pulsa Aplicar. Para ver y cambiar "
+                           + "sus valores, selecciona un solo clip."
+                         : "Selecciona un solo clip para ver y cambiar sus propiedades.")
+                      : "Selecciona un clip en la línea de tiempo (o haz clic sobre él en el visor). "
+                        + "Para marcar varios, arrastra en una zona vacía de la línea de tiempo."
                 color: Theme.textoDesactivado
                 font.pixelSize: Theme.tamTextoPequeno
+            }
+            BotonIcono {
+                visible: propiedades.sel.count > 1 && propiedades.sel.linked === true
+                Layout.fillWidth: true
+                icono: "desvincular"
+                texto: "Desvincular audio y video de todos"
+                ayuda: "Cada clip seleccionado queda separado de su audio (o de su video)"
+                onPulsado: panel.editor.unlinkSelection()
             }
 
             // --- Video: posición, escala, opacidad y recorte ---

@@ -411,6 +411,8 @@ public:
     // Los efectos de imagen son las claves grayscaleOn/grayscale, blurOn/blur,
     // cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
     // shadowY/shadowSpread de setClipTransform. Selecciona el clip para ajustarlo en Propiedades.
+    // Si el clip está en la selección, se aplica a todos sus clips de video a la vez (un
+    // solo paso de deshacer).
     Q_INVOKABLE void applyEffect(qint64 clipId, const QString& effect);
     // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
     Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
@@ -549,6 +551,11 @@ public:
 
     Q_INVOKABLE void select(qint64 clipId, bool add);
     Q_INVOKABLE void clearSelection();
+    // Cuadro de selección de la línea de tiempo: los clips de las pistas `tracks` (índices
+    // de tracks) que tocan [from, to); si no hay ninguna de esas, los subtítulos de las
+    // pistas `captionTracks`. `add`: se suman a lo seleccionado (Mayús o Ctrl).
+    Q_INVOKABLE void selectArea(const QVariantList& tracks, const QVariantList& captionTracks,
+                                qint64 from, qint64 to, bool add);
     Q_INVOKABLE bool isSelected(qint64 clipId) const;
 
     // Código de tiempo de un fotograma de la línea de tiempo (para la regla).
@@ -785,6 +792,14 @@ private:
     QVariantList m_recoverable;
     QTimer m_autosaveTimer;
     bool m_detectingKey = false;
+    // Clips a los que va la pantalla verde que se está detectando (vacío: solo ese clip).
+    std::vector<sharkcut::ObjectId> m_keyTargets;
+    // Clips de video a los que va un efecto soltado sobre `clip`: los seleccionados si él
+    // lo está (sin pistas bloqueadas), si no solo él.
+    std::vector<sharkcut::ObjectId> effectTargets(sharkcut::ObjectId clip) const;
+    // Los mismos valores (claves de setClipTransform) a varios clips, en un paso.
+    void setClipsTransform(const std::vector<sharkcut::ObjectId>& clips, const QVariantMap& values,
+                           const QString& label);
     mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
     std::vector<sharkcut::ObjectId> m_selectedCaptions;
     // Para Propiedades: por propiedad, {animated, key (hay keyframe en el cabezal), prev,

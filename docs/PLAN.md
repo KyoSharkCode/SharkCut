@@ -796,6 +796,12 @@ ctest --preset windows-debug
        clip (con deshacer); lo demás no cambia. Se guardan en la configuración de la app
        (QSettings «efectos/ajustes», JSON): sirven en todos los proyectos. Núcleo sin Qt:
        src/core/clip_preset.h.
+     - [x] Petición de Kyo: cuadro de selección en la línea de tiempo (arrastrar desde una
+       zona vacía; Mayús o Ctrl suman a lo seleccionado; un clic suelto sigue quitando la
+       selección y llevando el cabezal ahí). Los efectos y los ajustes guardados que se
+       sueltan sobre uno de los clips seleccionados (o con «Aplicar») van a todos sus clips
+       de video en un paso de deshacer (la pantalla verde busca el color en ese clip y lo
+       pone en todos), y «Desvincular audio y video de todos» separa los de la selección.
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
        diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían

@@ -871,7 +871,8 @@ Rectangle {
                 titulo: "Blanco y negro"
                 onQuitar: propiedades.aplicar({ grayscaleOn: false }, "Quitar blanco y negro")
             }
-            CampoNumero {
+            CampoAnimable {
+                clave: "grayscale"
                 visible: seccionByn.visible
                 enabled: propiedades.videoEditable
                 etiqueta: "Intensidad"
@@ -890,7 +891,8 @@ Rectangle {
                 titulo: "Desenfoque"
                 onQuitar: propiedades.aplicar({ blurOn: false }, "Quitar desenfoque")
             }
-            CampoNumero {
+            CampoAnimable {
+                clave: "blur"
                 visible: seccionDesenfoque.visible
                 enabled: propiedades.videoEditable
                 etiqueta: "Cantidad"
@@ -910,7 +912,8 @@ Rectangle {
                 titulo: "Esquinas redondeadas"
                 onQuitar: propiedades.aplicar({ cornersOn: false }, "Quitar esquinas redondeadas")
             }
-            CampoNumero {
+            CampoAnimable {
+                clave: "corners"
                 visible: seccionEsquinas.visible
                 enabled: propiedades.videoEditable
                 etiqueta: "Radio"
@@ -947,8 +950,9 @@ Rectangle {
                         { clave: "shadowX", nombre: "Distancia X", unidad: "px", factor: 1, desde: -2000, hasta: 2000 },
                         { clave: "shadowY", nombre: "Distancia Y", unidad: "px", factor: 1, desde: -2000, hasta: 2000 }
                     ]
-                    delegate: CampoNumero {
+                    delegate: CampoAnimable {
                         required property var modelData
+                        clave: modelData.clave
                         etiqueta: modelData.nombre
                         unidad: modelData.unidad
                         paso: 0.5

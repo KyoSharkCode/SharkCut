@@ -783,7 +783,12 @@ ctest --preset windows-debug
        resplandor azul detrás del modelo VTuber). Se arrastran desde Efectos a un clip (o
        «Aplicar» al seleccionado), aparecen en Propiedades y se quitan con 🗑️. En el mismo
        shader de la capa: vista previa y exportación iguales. Archivo .sharkp versión 8.
-       Pendiente: animar con keyframes los valores de los efectos.
+       Los valores de los efectos también se animan con keyframes (⏱ en cada uno), como
+       la posición o la escala.
+     - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
+       los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
+       diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3); un barrido
+       necesitaría una máscara de desenfoque con dirección, que hoy no existe.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

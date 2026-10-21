@@ -301,6 +301,22 @@ double& transformField(ClipTransform& t, AnimProperty p) {
         return t.cropBottom;
     case AnimProperty::Rotation:
         return t.rotation;
+    case AnimProperty::Grayscale:
+        return t.effects.grayscale;
+    case AnimProperty::Blur:
+        return t.effects.blur;
+    case AnimProperty::Corners:
+        return t.effects.corners;
+    case AnimProperty::ShadowOpacity:
+        return t.effects.shadowOpacity;
+    case AnimProperty::ShadowSoftness:
+        return t.effects.shadowSoftness;
+    case AnimProperty::ShadowSpread:
+        return t.effects.shadowSpread;
+    case AnimProperty::ShadowX:
+        return t.effects.shadowX;
+    case AnimProperty::ShadowY:
+        return t.effects.shadowY;
     }
     return t.x;
 }

@@ -57,7 +57,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   AV1 (grabaciones de OBS): por la GPU con el decodificador "av1" de FFmpeg (NVDEC en las
   RTX 30+), comprobado con el primer fotograma; si no, dav1d por software.
   Keyframes: ClipAnimation en Clip (project.h), por propiedad de ClipTransform
-  (AnimProperty), con su curva (easing.h, kKeyframeEasings). Cada keyframe va en la
+  (AnimProperty: colocación, rotación, opacidad, recorte y los valores de los efectos),
+  con su curva (easing.h, kKeyframeEasings). Cada keyframe va en la
   posición del medio (Clip::mediaFrameAt), así sigue al contenido al recortar o dividir.
   transformAt(clip, frame) da la transformación animada (la usan el visor, Propiedades y
   la exportación); setClipTransformAt (edit.h) convierte un cambio en un keyframe si la

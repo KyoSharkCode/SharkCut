@@ -125,12 +125,24 @@ enum class AnimProperty {
     CropTop,
     CropRight,
     CropBottom,
-    Rotation
+    Rotation,
+    // Valores de los efectos (ClipEffects)
+    Grayscale,
+    Blur,
+    Corners,
+    ShadowOpacity,
+    ShadowSoftness,
+    ShadowSpread,
+    ShadowX,
+    ShadowY,
 };
-inline constexpr std::size_t kAnimPropertyCount = 9;
+inline constexpr std::size_t kAnimPropertyCount = 17;
 // Identificadores estables (archivo de proyecto, interfaz), en el orden del enum.
 inline constexpr std::array<std::string_view, kAnimPropertyCount> kAnimPropertyIds{
-    "x", "y", "scale", "opacity", "cropLeft", "cropTop", "cropRight", "cropBottom", "rotation"};
+    "x",       "y",         "scale",         "opacity",        "cropLeft",
+    "cropTop", "cropRight", "cropBottom",    "rotation",       "grayscale",
+    "blur",    "corners",   "shadowOpacity", "shadowSoftness", "shadowSpread",
+    "shadowX", "shadowY"};
 std::optional<AnimProperty> animPropertyFromId(std::string_view id);
 // El campo de la transformación que anima la propiedad.
 double& transformField(ClipTransform& transform, AnimProperty property);

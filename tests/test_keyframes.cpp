@@ -140,3 +140,26 @@ TEST_CASE("Rotation is animated, saved and kept in range", "[keyframes]") {
     const Project loaded = projectFromJson(projectToJson(t.p, {}), {});
     CHECK(loaded.clip(t.clip)->transform.rotation == Approx(180.0));
 }
+
+TEST_CASE("Effect values can be animated", "[keyframes][efectos]") {
+    OneClip t;
+    ClipTransform blurred = t.c().transform;
+    blurred.effects.blurOn = true;
+    REQUIRE(setClipTransform(t.p, t.clip, blurred));
+    // El desenfoque entra de 0 a 40 px en un segundo.
+    REQUIRE(setKeyframe(t.p, t.clip, AnimProperty::Blur, 0, 0.0));
+    REQUIRE(setKeyframe(t.p, t.clip, AnimProperty::Blur, 60, 40.0));
+    CHECK(transformAt(t.c(), 30).effects.blur == Approx(20.0));
+    CHECK(transformAt(t.c(), 30).effects.blurOn);
+    // Un cambio en otro momento crea otro keyframe (como con la posición).
+    ClipTransform later = transformAt(t.c(), 120);
+    later.effects.blur = 10.0;
+    REQUIRE(setClipTransformAt(t.p, t.clip, later, 120));
+    CHECK(t.c().animation.of(AnimProperty::Blur).size() == 3);
+    // Fuera de rango se limita al calcularlo.
+    REQUIRE(setKeyframe(t.p, t.clip, AnimProperty::ShadowOpacity, 0, 5.0));
+    CHECK(transformAt(t.c(), 0).effects.shadowOpacity == 1.0);
+    CHECK(animPropertyFromId("shadowSoftness") == AnimProperty::ShadowSoftness);
+    const Project loaded = projectFromJson(projectToJson(t.p, {}), {});
+    CHECK(loaded.clip(t.clip)->animation == t.c().animation);
+}

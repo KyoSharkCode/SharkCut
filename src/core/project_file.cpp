@@ -270,6 +270,24 @@ json transformToJson(const ClipTransform& t) {
         {"opacity", t.opacity},
         {"crop", json::array({t.cropLeft, t.cropTop, t.cropRight, t.cropBottom})},
     };
+    if (t.effects != ClipEffects{}) {
+        const ClipEffects& e = t.effects;
+        result["effects"] = {
+            {"grayscaleOn", e.grayscaleOn},
+            {"grayscale", e.grayscale},
+            {"blurOn", e.blurOn},
+            {"blur", e.blur},
+            {"cornersOn", e.cornersOn},
+            {"corners", e.corners},
+            {"shadowOn", e.shadowOn},
+            {"shadowColor", colorToHex(e.shadowColor)},
+            {"shadowOpacity", e.shadowOpacity},
+            {"shadowSoftness", e.shadowSoftness},
+            {"shadowX", e.shadowX},
+            {"shadowY", e.shadowY},
+            {"shadowSpread", e.shadowSpread},
+        };
+    }
     if (t.chromaKey != ChromaKey{}) {
         const ChromaKey& k = t.chromaKey;
         result["chromaKey"] = {
@@ -293,6 +311,23 @@ ClipTransform transformFromJson(const json& value) {
         t.cropTop = crop->at(1).get<double>();
         t.cropRight = crop->at(2).get<double>();
         t.cropBottom = crop->at(3).get<double>();
+    }
+    if (const auto fx = value.find("effects"); fx != value.end()) {
+        const ClipEffects d;
+        ClipEffects& e = t.effects;
+        e.grayscaleOn = fx->value("grayscaleOn", false);
+        e.grayscale = fx->value("grayscale", d.grayscale);
+        e.blurOn = fx->value("blurOn", false);
+        e.blur = fx->value("blur", d.blur);
+        e.cornersOn = fx->value("cornersOn", false);
+        e.corners = fx->value("corners", d.corners);
+        e.shadowOn = fx->value("shadowOn", false);
+        e.shadowColor = colorFromHex(fx->value("shadowColor", std::string()), d.shadowColor);
+        e.shadowOpacity = fx->value("shadowOpacity", d.shadowOpacity);
+        e.shadowSoftness = fx->value("shadowSoftness", d.shadowSoftness);
+        e.shadowX = fx->value("shadowX", d.shadowX);
+        e.shadowY = fx->value("shadowY", d.shadowY);
+        e.shadowSpread = fx->value("shadowSpread", d.shadowSpread);
     }
     if (const auto key = value.find("chromaKey"); key != value.end()) {
         const ChromaKey defaults;

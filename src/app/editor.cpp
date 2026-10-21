@@ -246,6 +246,23 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
         {QStringLiteral("cropTop"), t.cropTop},
         {QStringLiteral("cropRight"), t.cropRight},
         {QStringLiteral("cropBottom"), t.cropBottom},
+        {QStringLiteral("effects"),
+         QVariantMap{
+             {QStringLiteral("grayscaleOn"), t.effects.grayscaleOn},
+             {QStringLiteral("grayscale"), t.effects.grayscale},
+             {QStringLiteral("blurOn"), t.effects.blurOn},
+             {QStringLiteral("blur"), t.effects.blur},
+             {QStringLiteral("cornersOn"), t.effects.cornersOn},
+             {QStringLiteral("corners"), t.effects.corners},
+             {QStringLiteral("shadowOn"), t.effects.shadowOn},
+             {QStringLiteral("shadowColor"),
+              QStringLiteral("#%1").arg(t.effects.shadowColor, 6, 16, QLatin1Char('0')).toUpper()},
+             {QStringLiteral("shadowOpacity"), t.effects.shadowOpacity},
+             {QStringLiteral("shadowSoftness"), t.effects.shadowSoftness},
+             {QStringLiteral("shadowX"), t.effects.shadowX},
+             {QStringLiteral("shadowY"), t.effects.shadowY},
+             {QStringLiteral("shadowSpread"), t.effects.shadowSpread},
+         }},
         {QStringLiteral("chromaKey"),
          QVariantMap{
              // El clip tiene el efecto (aunque esté desactivado): se muestra en Propiedades.
@@ -362,6 +379,7 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("volumeDb")] = clip.volumeDb;
     sharkcut::ClipTransform placement = clip.transform;
     placement.chromaKey = {}; // el icono indica solo cambios de colocación
+    placement.effects = {};
     entry[QStringLiteral("transformed")] = placement != sharkcut::ClipTransform{};
     entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
     // Keyframes (de cualquier propiedad) que caen dentro del clip, en la línea de tiempo.
@@ -2456,6 +2474,32 @@ sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVar
     take("keySimilarity", key.similarity);
     take("keySmoothness", key.smoothness);
     take("keySpill", key.spill);
+    // Efectos de imagen
+    sharkcut::ClipEffects& fx = t.effects;
+    const auto flag = [&values](const char* name, bool& member) {
+        const auto it = values.find(QLatin1String(name));
+        if (it != values.end()) {
+            member = it->toBool();
+        }
+    };
+    flag("grayscaleOn", fx.grayscaleOn);
+    take("grayscale", fx.grayscale);
+    flag("blurOn", fx.blurOn);
+    take("blur", fx.blur);
+    flag("cornersOn", fx.cornersOn);
+    take("corners", fx.corners);
+    flag("shadowOn", fx.shadowOn);
+    if (const auto it = values.find(QStringLiteral("shadowColor")); it != values.end()) {
+        const QColor color(it->toString());
+        if (color.isValid()) {
+            fx.shadowColor = static_cast<std::uint32_t>(color.rgb()) & 0xFFFFFFu;
+        }
+    }
+    take("shadowOpacity", fx.shadowOpacity);
+    take("shadowSoftness", fx.shadowSoftness);
+    take("shadowX", fx.shadowX);
+    take("shadowY", fx.shadowY);
+    take("shadowSpread", fx.shadowSpread);
     return sharkcut::clampTransform(t);
 }
 
@@ -2551,7 +2595,39 @@ void Editor::applyEffect(qint64 clipId, const QString& effect) {
     select(clipId, false);
     if (effect == QLatin1String("croma")) {
         detectKeyColor(clipId, true);
+        return;
     }
+    // Los demás se activan con sus valores (la sombra y el resplandor, con los suyos).
+    QVariantMap values;
+    QString label;
+    if (effect == QLatin1String("byn")) {
+        values = {{QStringLiteral("grayscaleOn"), true}, {QStringLiteral("grayscale"), 1.0}};
+        label = QStringLiteral("Blanco y negro");
+    } else if (effect == QLatin1String("desenfoque")) {
+        values = {{QStringLiteral("blurOn"), true}};
+        label = QStringLiteral("Desenfoque");
+    } else if (effect == QLatin1String("esquinas")) {
+        values = {{QStringLiteral("cornersOn"), true}};
+        label = QStringLiteral("Esquinas redondeadas");
+    } else if (effect == QLatin1String("sombra")) {
+        values = {
+            {QStringLiteral("shadowOn"), true},     {QStringLiteral("shadowColor"), "#000000"},
+            {QStringLiteral("shadowOpacity"), 0.6}, {QStringLiteral("shadowSoftness"), 30.0},
+            {QStringLiteral("shadowX"), 0.0},       {QStringLiteral("shadowY"), 12.0},
+            {QStringLiteral("shadowSpread"), 0.0}};
+        label = QStringLiteral("Sombra");
+    } else if (effect == QLatin1String("resplandor")) {
+        values = {
+            {QStringLiteral("shadowOn"), true},     {QStringLiteral("shadowColor"), "#3AA8FF"},
+            {QStringLiteral("shadowOpacity"), 0.9}, {QStringLiteral("shadowSoftness"), 40.0},
+            {QStringLiteral("shadowX"), 0.0},       {QStringLiteral("shadowY"), 0.0},
+            {QStringLiteral("shadowSpread"), 10.0}};
+        label = QStringLiteral("Resplandor");
+    } else {
+        return;
+    }
+    setClipTransform(clipId, values, label);
+    emit effectApplied(effect);
 }
 
 qint64 Editor::videoClipAt(int track, qint64 frame) const {

@@ -19,8 +19,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 6, que abre la 1, la 2
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
-  subtítulos, `captionTracks` de cada secuencia, con la 6 y los keyframes de cada clip,
-  `animation`, con la 7).
+  subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
+  `animation`, con la 7 y los efectos de imagen, `transform.effects`, con la 8).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -63,6 +63,12 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   la exportación); setClipTransformAt (edit.h) convierte un cambio en un keyframe si la
   propiedad está animada. Editor: editor_keyframes.cpp; interfaz: ⏱ ◀ ◆ ▶ junto a cada
   valor en PanelPropiedades y ◆ sobre los clips en LineaTiempo.
+  Efectos de imagen: ClipEffects dentro de ClipTransform (blanco y negro, desenfoque,
+  esquinas redondeadas, sombra/resplandor; medidas en px del lienzo, que la exportación
+  escala). Todo en layer.frag: desenfoque con 32 muestras (disco de Vogel), esquinas con
+  una distancia a un rectángulo redondeado, y la sombra es la misma capa dibujada antes en
+  "modo sombra" (geometría ampliada, forma del clip con su alfa y su croma, difuminada).
+  Se aplican desde la pestaña Efectos (Editor::applyEffect) y se ajustan en Propiedades.
   Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
   src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
   Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de

@@ -50,8 +50,13 @@ struct LayerUniforms {
     float params[4];
     float key[4];
     float keyParams[4];
+    float box[4];
+    float cropUv[4];
+    float shadowColor[4];
+    float shadow[4];
+    float extra[4];
 };
-static_assert(sizeof(LayerUniforms) == 208);
+static_assert(sizeof(LayerUniforms) == 288);
 
 // Tono de un color 0xRRGGBB relativo a su brillo (Cb, Cr de BT.709 entre luma + 0,1),
 // como lo calcula layer.frag.
@@ -107,6 +112,10 @@ struct Compositor::Source {
     std::shared_ptr<const VideoFrame> uploaded;
     std::unique_ptr<QRhiBuffer> uniforms;
     std::unique_ptr<QRhiShaderResourceBindings> bindings;
+    // Sombra o resplandor: las mismas texturas con otros uniformes (se dibuja antes).
+    bool shadow = false;
+    std::unique_ptr<QRhiBuffer> shadowUniforms;
+    std::unique_ptr<QRhiShaderResourceBindings> shadowBindings;
 };
 
 // Las dos texturas (clip saliente y entrante) de una capa con transición.
@@ -258,6 +267,10 @@ Compositor::Source& Compositor::source(std::size_t index) {
         created->uniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
                                                  sizeof(LayerUniforms)));
         created->uniforms->create();
+        created->shadowUniforms.reset(m_rhi->newBuffer(
+            QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(LayerUniforms)));
+        created->shadowUniforms->create();
+        created->shadowBindings.reset(m_rhi->newShaderResourceBindings());
         // Texturas NV12 (y de alfa) provisionales hasta el primer fotograma.
         created->y.reset(m_rhi->newTexture(QRhiTexture::R8, QSize(16, 16)));
         created->y->create();
@@ -398,6 +411,13 @@ void Compositor::bindSource(Source& s) {
         QRhiShaderResourceBinding::sampledTexture(3, fragment, s.a.get(), m_sampler.get()),
     });
     s.bindings->create();
+    s.shadowBindings->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, stage, s.shadowUniforms.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, fragment, s.y.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(2, fragment, s.uv.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(3, fragment, s.a.get(), m_sampler.get()),
+    });
+    s.shadowBindings->create();
 }
 
 void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTransform& t,
@@ -489,15 +509,63 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
             u.keyParams[2] = f(key.spill);
         }
     }
+    // Efectos. Medidas del video entero y de su parte visible, en píxeles del lienzo.
+    const ClipEffects& fx = t.effects;
+    const double fullW = std::max(1e-6, fit.width() * t.scale * m_canvasSize.width());
+    const double fullH = std::max(1e-6, fit.height() * t.scale * m_canvasSize.height());
+    u.box[0] = f(fullW * (1.0 - t.cropLeft - t.cropRight));
+    u.box[1] = f(fullH * (1.0 - t.cropTop - t.cropBottom));
+    if (fx.blurOn && fx.blur > 0.0) {
+        u.box[2] = f(fx.blur / fullW); // en coordenadas de textura (el video entero es 0…1)
+        u.box[3] = f(fx.blur / fullH);
+    }
+    std::copy(u.uvRect, u.uvRect + 4, u.cropUv);
+    u.params[1] = fx.grayscaleOn ? f(fx.grayscale) : 0.0f;
+    u.params[2] = fx.cornersOn ? f(fx.corners) : 0.0f;
     updates->updateDynamicBuffer(s.uniforms.get(), 0, sizeof(u), &u);
+
+    s.shadow = fx.shadowOn && fx.shadowOpacity > 0.0;
+    if (s.shadow) {
+        // La misma capa, ampliada lo que ocupen el difuminado, el crecimiento y el
+        // desplazamiento (la sombra puede salirse del clip).
+        LayerUniforms sh = u;
+        const double margin = fx.shadowSoftness + fx.shadowSpread +
+                              std::max(std::abs(fx.shadowX), std::abs(fx.shadowY)) + 2.0;
+        const double mx = margin / fullW; // en fracción del video entero
+        const double my = margin / fullH;
+        sh.posRect[0] -= f(2.0 * mx);
+        sh.posRect[1] -= f(2.0 * my);
+        sh.posRect[2] += f(2.0 * mx);
+        sh.posRect[3] += f(2.0 * my);
+        sh.uvRect[0] -= f(mx);
+        sh.uvRect[1] -= f(my);
+        sh.uvRect[2] += f(mx);
+        sh.uvRect[3] += f(my);
+        sh.params[3] = 1.0f; // modo sombra
+        sh.shadowColor[0] = f(((fx.shadowColor >> 16) & 0xFF) / 255.0);
+        sh.shadowColor[1] = f(((fx.shadowColor >> 8) & 0xFF) / 255.0);
+        sh.shadowColor[2] = f((fx.shadowColor & 0xFF) / 255.0);
+        sh.shadowColor[3] = f(fx.shadowOpacity);
+        sh.shadow[0] = f(fx.shadowSoftness / fullW);
+        sh.shadow[1] = f(fx.shadowSoftness / fullH);
+        sh.shadow[2] = f(fx.shadowX / fullW);
+        sh.shadow[3] = f(fx.shadowY / fullH);
+        sh.extra[0] = f(fx.shadowSpread);
+        updates->updateDynamicBuffer(s.shadowUniforms.get(), 0, sizeof(sh), &sh);
+    }
 }
 
 void Compositor::drawSource(QRhiCommandBuffer* cb, Source& s, QRhiGraphicsPipeline* pipeline) {
     cb->setGraphicsPipeline(pipeline);
     cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
                      static_cast<float>(m_canvasSize.height())});
-    cb->setShaderResources(s.bindings.get());
     const QRhiCommandBuffer::VertexInput input(m_quad.get(), 0);
+    if (s.shadow) { // detrás del clip
+        cb->setShaderResources(s.shadowBindings.get());
+        cb->setVertexInput(0, 1, &input);
+        cb->draw(4);
+    }
+    cb->setShaderResources(s.bindings.get());
     cb->setVertexInput(0, 1, &input);
     cb->draw(4);
 }
@@ -538,7 +606,8 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
                 prepareSource(s, *frames[i], *transforms[i], transforms[i]->opacity, updates);
                 s.uploaded = frames[i];
                 cb->beginPass(targets.target[i].get(), Qt::transparent, {1.0f, 0}, updates);
-                drawSource(cb, s, m_layerPipeline.get());
+                // Con mezcla (sobre transparente): la sombra queda debajo del clip.
+                drawSource(cb, s, m_blendPipeline.get());
                 cb->endPass();
             }
 

@@ -82,7 +82,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 7") != std::string::npos);
+    CHECK(json.find("\"version\": 8") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 7"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 8"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -369,4 +369,30 @@ TEST_CASE("Chroma key survives a round trip and bad values are clamped", "[proje
     CHECK(fixed.chromaKey.similarity == kMaxChromaDistance);
     CHECK(fixed.chromaKey.spill == 0.0);
     CHECK(fixed.chromaKey.color == 0x123456u);
+}
+
+TEST_CASE("Clip effects survive a round trip and are clamped", "[project][efectos]") {
+    Project p = sampleProject("/medios/fx.mp4");
+    const ObjectId clip = p.tracks[kVideoTrack].clips.front().id;
+    ClipTransform t;
+    t.effects.grayscaleOn = true;
+    t.effects.grayscale = 0.5;
+    t.effects.blurOn = true;
+    t.effects.blur = 8;
+    t.effects.cornersOn = true;
+    t.effects.corners = 32;
+    t.effects.shadowOn = true;
+    t.effects.shadowColor = 0x3AA8FF;
+    t.effects.shadowSpread = 10;
+    REQUIRE(setClipTransform(p, clip, t));
+    CHECK(projectFromJson(projectToJson(p, {}), {}).clip(clip)->transform == t);
+
+    ClipTransform bad = t;
+    bad.effects.blur = 1e6;
+    bad.effects.shadowOpacity = -3;
+    bad.effects.grayscale = 7;
+    const ClipTransform fixed = clampTransform(bad);
+    CHECK(fixed.effects.blur == kMaxBlur);
+    CHECK(fixed.effects.shadowOpacity == 0.0);
+    CHECK(fixed.effects.grayscale == 1.0);
 }

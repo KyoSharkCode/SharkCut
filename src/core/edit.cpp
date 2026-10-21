@@ -601,6 +601,16 @@ ClipTransform clampTransform(ClipTransform t) {
     t.cropTop = std::clamp(finite(t.cropTop, 0.0), 0.0, kMaxCrop);
     t.cropRight = std::clamp(finite(t.cropRight, 0.0), 0.0, kMaxCrop - t.cropLeft);
     t.cropBottom = std::clamp(finite(t.cropBottom, 0.0), 0.0, kMaxCrop - t.cropTop);
+    ClipEffects& fx = t.effects;
+    fx.grayscale = std::clamp(finite(fx.grayscale, 1.0), 0.0, 1.0);
+    fx.blur = std::clamp(finite(fx.blur, 12.0), 0.0, kMaxBlur);
+    fx.corners = std::clamp(finite(fx.corners, 40.0), 0.0, kMaxEffectPixels);
+    fx.shadowColor &= 0xFFFFFFu;
+    fx.shadowOpacity = std::clamp(finite(fx.shadowOpacity, 0.6), 0.0, 1.0);
+    fx.shadowSoftness = std::clamp(finite(fx.shadowSoftness, 30.0), 0.0, kMaxBlur);
+    fx.shadowX = std::clamp(finite(fx.shadowX, 0.0), -kMaxEffectPixels, kMaxEffectPixels);
+    fx.shadowY = std::clamp(finite(fx.shadowY, 12.0), -kMaxEffectPixels, kMaxEffectPixels);
+    fx.shadowSpread = std::clamp(finite(fx.shadowSpread, 0.0), 0.0, kMaxBlur);
     ChromaKey& key = t.chromaKey;
     key.color &= 0xFFFFFFu;
     key.similarity = std::clamp(finite(key.similarity, 0.40), 0.0, kMaxChromaDistance);

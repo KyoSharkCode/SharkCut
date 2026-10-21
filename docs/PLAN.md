@@ -777,6 +777,13 @@ ctest --preset windows-debug
        y mantener). Los keyframes se ven (◆) sobre el clip en la línea de tiempo: clic para
        ir, arrastrar para moverlos. Siguen al contenido al recortar o dividir el clip.
        Archivo .sharkp versión 7.
+     - [x] 5.2 Efectos: blanco y negro (intensidad), desenfoque (cantidad), esquinas
+       redondeadas (radio) y sombra o resplandor (color, opacidad, difuminado, tamaño y
+       distancia), que sigue la forma del clip: su transparencia y su pantalla verde (el
+       resplandor azul detrás del modelo VTuber). Se arrastran desde Efectos a un clip (o
+       «Aplicar» al seleccionado), aparecen en Propiedades y se quitan con 🗑️. En el mismo
+       shader de la capa: vista previa y exportación iguales. Archivo .sharkp versión 8.
+       Pendiente: animar con keyframes los valores de los efectos.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

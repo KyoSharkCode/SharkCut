@@ -64,6 +64,31 @@ struct ChromaKey {
 
 inline constexpr double kMaxChromaDistance = 1.0;
 
+// Efectos de imagen de un clip (pestaña Efectos). Cada uno se añade y se quita (`…On`) y
+// conserva sus valores. Las medidas en píxeles son del lienzo de la secuencia (al exportar
+// a otro tamaño se escalan).
+struct ClipEffects {
+    bool grayscaleOn = false;
+    double grayscale = 1.0; // 0 = color, 1 = blanco y negro
+    bool blurOn = false;
+    double blur = 12.0; // radio del desenfoque
+    bool cornersOn = false;
+    double corners = 40.0; // radio de las esquinas
+    // Sombra o resplandor detrás del clip; sigue su forma (también su transparencia).
+    bool shadowOn = false;
+    std::uint32_t shadowColor = 0x000000;
+    double shadowOpacity = 0.6;
+    double shadowSoftness = 30.0; // difuminado
+    double shadowX = 0.0;         // desplazamiento
+    double shadowY = 12.0;
+    double shadowSpread = 0.0; // cuánto crece la forma antes de difuminarse
+
+    friend bool operator==(const ClipEffects&, const ClipEffects&) = default;
+};
+
+inline constexpr double kMaxBlur = 200.0;
+inline constexpr double kMaxEffectPixels = 2000.0;
+
 // Colocación de un clip de video en el lienzo. Sin transformar (los valores por
 // defecto), el video se ajusta al lienzo sin deformarse y centrado.
 struct ClipTransform {
@@ -77,7 +102,8 @@ struct ClipTransform {
     double cropTop = 0.0;
     double cropRight = 0.0;
     double cropBottom = 0.0;
-    ChromaKey chromaKey; // efecto del clip; Restablecer transformación no lo toca
+    ChromaKey chromaKey;   // efecto del clip; Restablecer transformación no lo toca
+    ClipEffects effects{}; // ídem
 
     friend bool operator==(const ClipTransform&, const ClipTransform&) = default;
 };

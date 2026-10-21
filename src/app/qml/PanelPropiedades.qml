@@ -43,6 +43,7 @@ Rectangle {
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
         readonly property var croma: t.chromaKey || ({})
+        readonly property var fx: t.effects || ({})
         readonly property var anim: hayVideo && sel.animation ? sel.animation : ({})
         readonly property var sub: panel.editor.selectedCaption
         readonly property bool haySubtitulo: sub.count > 0
@@ -57,16 +58,30 @@ Rectangle {
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
 
         // Al aplicar o detectar la pantalla verde, se lleva a la vista su sección.
+        // Lo mismo con los demás efectos al aplicarlos desde la pestaña Efectos.
+        property Item seccionPendiente: null
         Connections {
             target: panel.editor
-            function onKeyColorDetected(found) { desplazarCroma.restart() }
+            function onKeyColorDetected(found) {
+                propiedades.seccionPendiente = cabeceraCroma
+                desplazarCroma.restart()
+            }
+            function onEffectApplied(efecto) {
+                propiedades.seccionPendiente = efecto === "byn" ? seccionByn
+                    : efecto === "desenfoque" ? seccionDesenfoque
+                    : efecto === "esquinas" ? seccionEsquinas : seccionSombra
+                desplazarCroma.restart()
+            }
         }
         // Espera a que la columna coloque la sección recién añadida.
         Timer {
             id: desplazarCroma
             interval: 80
-            onTriggered: propiedades.contentY = Math.max(0, Math.min(
-                cabeceraCroma.y, propiedades.contentHeight - propiedades.height))
+            onTriggered: {
+                if (propiedades.seccionPendiente)
+                    propiedades.contentY = Math.max(0, Math.min(propiedades.seccionPendiente.y,
+                        propiedades.contentHeight - propiedades.height))
+            }
         }
 
         function vista(valores) { panel.editor.previewTransform(sel.video, valores) }
@@ -849,6 +864,119 @@ Rectangle {
                 }
             }
 
+            // --- Efectos de imagen (solo los que tiene el clip) ---
+            CabeceraEfecto {
+                id: seccionByn
+                visible: propiedades.hayVideo && propiedades.fx.grayscaleOn === true
+                titulo: "Blanco y negro"
+                onQuitar: propiedades.aplicar({ grayscaleOn: false }, "Quitar blanco y negro")
+            }
+            CampoNumero {
+                visible: seccionByn.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Intensidad"
+                unidad: "%"
+                paso: 0.5
+                desde: 0
+                hasta: 100
+                valor: (propiedades.fx.grayscale !== undefined ? propiedades.fx.grayscale : 1) * 100
+                onCambiando: (v) => propiedades.vista({ grayscale: v / 100 })
+                onCambiado: (v) => propiedades.aplicar({ grayscale: v / 100 }, "Blanco y negro")
+            }
+
+            CabeceraEfecto {
+                id: seccionDesenfoque
+                visible: propiedades.hayVideo && propiedades.fx.blurOn === true
+                titulo: "Desenfoque"
+                onQuitar: propiedades.aplicar({ blurOn: false }, "Quitar desenfoque")
+            }
+            CampoNumero {
+                visible: seccionDesenfoque.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Cantidad"
+                unidad: "px"
+                decimales: 1
+                paso: 0.2
+                desde: 0
+                hasta: 200
+                valor: propiedades.fx.blur || 0
+                onCambiando: (v) => propiedades.vista({ blur: v })
+                onCambiado: (v) => propiedades.aplicar({ blur: v }, "Desenfoque")
+            }
+
+            CabeceraEfecto {
+                id: seccionEsquinas
+                visible: propiedades.hayVideo && propiedades.fx.cornersOn === true
+                titulo: "Esquinas redondeadas"
+                onQuitar: propiedades.aplicar({ cornersOn: false }, "Quitar esquinas redondeadas")
+            }
+            CampoNumero {
+                visible: seccionEsquinas.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Radio"
+                unidad: "px"
+                paso: 0.5
+                desde: 0
+                hasta: 2000
+                valor: propiedades.fx.corners || 0
+                onCambiando: (v) => propiedades.vista({ corners: v })
+                onCambiado: (v) => propiedades.aplicar({ corners: v }, "Esquinas redondeadas")
+            }
+
+            CabeceraEfecto {
+                id: seccionSombra
+                visible: propiedades.hayVideo && propiedades.fx.shadowOn === true
+                titulo: "Sombra o resplandor"
+                onQuitar: propiedades.aplicar({ shadowOn: false }, "Quitar sombra")
+            }
+            ColumnLayout {
+                visible: seccionSombra.visible
+                enabled: propiedades.videoEditable
+                Layout.fillWidth: true
+                spacing: 6
+                CampoColor {
+                    etiqueta: "Color"
+                    color: propiedades.fx.shadowColor || "#000000"
+                    onElegido: (c) => propiedades.aplicar({ shadowColor: c }, "Color de la sombra")
+                }
+                Repeater {
+                    model: [
+                        { clave: "shadowOpacity", nombre: "Opacidad", unidad: "%", factor: 100, desde: 0, hasta: 100 },
+                        { clave: "shadowSoftness", nombre: "Difuminado", unidad: "px", factor: 1, desde: 0, hasta: 200 },
+                        { clave: "shadowSpread", nombre: "Tamaño", unidad: "px", factor: 1, desde: 0, hasta: 200 },
+                        { clave: "shadowX", nombre: "Distancia X", unidad: "px", factor: 1, desde: -2000, hasta: 2000 },
+                        { clave: "shadowY", nombre: "Distancia Y", unidad: "px", factor: 1, desde: -2000, hasta: 2000 }
+                    ]
+                    delegate: CampoNumero {
+                        required property var modelData
+                        etiqueta: modelData.nombre
+                        unidad: modelData.unidad
+                        paso: 0.5
+                        desde: modelData.desde
+                        hasta: modelData.hasta
+                        valor: (propiedades.fx[modelData.clave] || 0) * modelData.factor
+                        onCambiando: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / modelData.factor
+                            propiedades.vista(valores)
+                        }
+                        onCambiado: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / modelData.factor
+                            propiedades.aplicar(valores, "Sombra")
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Sigue la forma del clip, también su transparencia y la pantalla verde. "
+                          + "Para un resplandor: color vivo, distancia 0 y algo de tamaño."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+
             // --- Audio: volumen ---
             Separador { visible: propiedades.hayAudio }
             RowLayout {
@@ -907,6 +1035,33 @@ Rectangle {
         }
     }
     DialogoNombre { id: dialogoAjuste }
+
+    // Cabecera de un efecto del clip: nombre y botón para quitarlo.
+    component CabeceraEfecto: ColumnLayout {
+        id: cabeceraEfecto
+        property string titulo
+        signal quitar()
+        Layout.fillWidth: true
+        spacing: 6
+        Separador {}
+        RowLayout {
+            Layout.fillWidth: true
+            Text {
+                Layout.fillWidth: true
+                text: cabeceraEfecto.titulo
+                color: Theme.texto
+                font.pixelSize: Theme.tamTexto
+                font.bold: true
+            }
+            BotonIcono {
+                icono: "quitar"
+                implicitHeight: 26
+                enabled: propiedades.videoEditable
+                ayuda: "Quitar el efecto «" + cabeceraEfecto.titulo + "»"
+                onPulsado: cabeceraEfecto.quitar()
+            }
+        }
+    }
 
     // Valor de una propiedad animable del clip: el número y, a su derecha, ⏱ (animarla)
     // y, si está animada, ◀ ◆ ▶ (keyframe anterior, poner o quitar el del cabezal,

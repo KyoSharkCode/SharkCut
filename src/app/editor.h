@@ -398,7 +398,10 @@ public:
     // `fallbackToGreen`: si no se encuentra, la activa igualmente con el color que tenga.
     Q_INVOKABLE void detectKeyColor(qint64 clipId, bool fallbackToGreen = false);
     // Efecto del panel Efectos aplicado a un clip de video (arrastrándolo o con el clip
-    // seleccionado): "croma". Selecciona el clip para ajustarlo en Propiedades.
+    // seleccionado): "croma", "byn", "desenfoque", "esquinas", "sombra" o "resplandor".
+    // Los efectos de imagen son las claves grayscaleOn/grayscale, blurOn/blur,
+    // cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
+    // shadowY/shadowSpread de setClipTransform. Selecciona el clip para ajustarlo en Propiedades.
     Q_INVOKABLE void applyEffect(qint64 clipId, const QString& effect);
     // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
     Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
@@ -532,6 +535,9 @@ signals:
     void captionsCreated(int count);
     void captionsExported(const QString& path);
     void keyColorDetected(bool found);
+    // Se aplicó un efecto desde la pestaña Efectos ("byn", "desenfoque", "esquinas",
+    // "sombra", "resplandor"): Propiedades lo lleva a la vista.
+    void effectApplied(const QString& effect);
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();

@@ -14,8 +14,13 @@ layout(std140, binding = 0) uniform buf {
     vec4 posRect;   // parte visible en coordenadas del video: izquierda, abajo, derecha, arriba
     vec4 uvRect;    // la misma parte en la textura: u0, v0 (arriba), u1, v1 (abajo)
     vec4 params;    // x: opacidad
-    vec4 key;       // pantalla verde (solo layer.frag)
+    vec4 key;       // efectos (solo layer.frag)
     vec4 keyParams;
+    vec4 box;
+    vec4 cropUv;
+    vec4 shadowColor;
+    vec4 shadow;
+    vec4 extra;
 } ubuf;
 
 void main()

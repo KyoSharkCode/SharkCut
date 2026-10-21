@@ -176,6 +176,12 @@ private:
     ClipTransform scaled(ClipTransform t) const {
         t.x *= m_scale;
         t.y *= m_scale;
+        // Las medidas de los efectos también van en píxeles del lienzo.
+        ClipEffects& fx = t.effects;
+        for (double* v : {&fx.blur, &fx.corners, &fx.shadowSoftness, &fx.shadowX, &fx.shadowY,
+                          &fx.shadowSpread}) {
+            *v *= m_scale;
+        }
         return t;
     }
 

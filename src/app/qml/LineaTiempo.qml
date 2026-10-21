@@ -927,58 +927,27 @@ Rectangle {
                                     }
                                 }
 
-                                // Miniaturas del video: solo las casillas que se ven, con el
-                                // instante redondeado a una rejilla (así al desplazarse o hacer
-                                // zoom se reaprovechan las ya calculadas).
-                                Loader {
-                                    anchors.fill: parent
-                                    active: elemento.esVideo && !elemento.bloque && elemento.width > 24
-                                            && (elemento.modelData.thumbSource || "") !== ""
-                                    sourceComponent: Item {
-                                        id: tira
-                                        readonly property real alto: elemento.height - 2
-                                        readonly property real ancho: Math.round(alto * 16 / 9)
-                                        readonly property int primera: Math.max(0,
-                                            Math.floor((vista.contentX - elemento.x) / ancho))
-                                        readonly property int ultima: Math.min(
-                                            Math.ceil(elemento.width / ancho) - 1,
-                                            Math.floor((vista.contentX + vista.width - elemento.x) / ancho))
-                                        readonly property real fps: Math.max(1, raiz.editor.fps)
-                                        // Paso de la rejilla: potencia de 2 (en segundos) no menor
-                                        // que lo que dura una casilla.
-                                        readonly property real paso: {
-                                            const casilla = ancho / raiz.escala / fps
-                                            let p = 0.25
-                                            while (p < casilla)
-                                                p *= 2
-                                            return p
-                                        }
-                                        readonly property string fuente:
-                                            encodeURIComponent(elemento.modelData.thumbSource)
-                                        Repeater {
-                                            model: Math.max(0, tira.ultima - tira.primera + 1)
-                                            delegate: Image {
-                                                required property int index
-                                                readonly property int casilla: tira.primera + index
-                                                readonly property real segundos: {
-                                                    const f = elemento.entradaVista
-                                                        + (casilla + 0.5) * tira.ancho / raiz.escala
-                                                    return Math.round(f / tira.fps / tira.paso) * tira.paso
-                                                }
-                                                x: casilla * tira.ancho
-                                                y: 1
-                                                width: Math.min(tira.ancho, elemento.width - x)
-                                                height: tira.alto
-                                                fillMode: Image.PreserveAspectCrop
-                                                horizontalAlignment: Image.AlignLeft
-                                                asynchronous: true
-                                                sourceSize.width: 160
-                                                opacity: 0.6
-                                                source: "image://fotogramas/" + tira.fuente + "@"
-                                                        + Math.round(segundos * 1e6)
-                                            }
-                                        }
-                                    }
+                                // Miniatura del video: solo el primer fotograma del clip, al
+                                // principio (como pidió Kyo). Cada clip pide siempre la misma
+                                // imagen: al hacer zoom o desplazarse no se decodifica nada.
+                                Image {
+                                    visible: elemento.esVideo && !elemento.bloque && elemento.width > 24
+                                             && (elemento.modelData.thumbSource || "") !== ""
+                                    x: 0
+                                    y: 1
+                                    height: elemento.height - 2
+                                    width: Math.min(Math.round(height * 16 / 9), elemento.width)
+                                    fillMode: Image.PreserveAspectCrop
+                                    horizontalAlignment: Image.AlignLeft
+                                    asynchronous: true
+                                    sourceSize.width: 160
+                                    opacity: 0.6
+                                    source: visible
+                                            ? "image://fotogramas/"
+                                              + encodeURIComponent(elemento.modelData.thumbSource) + "@"
+                                              + Math.round(elemento.modelData["in"] * 1e6
+                                                           / Math.max(1, raiz.editor.fps))
+                                            : ""
                                 }
 
                                 Loader {

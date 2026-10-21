@@ -94,9 +94,9 @@ public:
         if (m_image.isNull() && !m_cancelled) {
             try {
                 sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
-                // El fotograma clave más cercano: sin decodificar hasta el instante exacto
-                // (eso costaba cientos de milisegundos por miniatura en un VOD).
-                decoder.seekNear(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
+                // El primer fotograma del clip, exacto (cada clip pide solo esta imagen
+                // y queda en la caché).
+                decoder.seekToFrame(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
                                                                decoder.info().frameRate));
                 if (auto frame = decoder.nextFrame()) {
                     m_image = toImage(*frame, kFrameThumbnailWidth);

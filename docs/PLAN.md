@@ -810,6 +810,8 @@ ctest --preset windows-debug
        cada fotograma al reproducir; la vista deja de seguir al cabezal si se mueve con la
        rueda. Copiar, cortar y pegar clips (Ctrl+C/X/V, también entre secuencias y
        proyectos): en el cabezal, en las mismas pistas, sobrescribiendo.
+       Después, a petición de Kyo (seguía el lag al hacer zoom): cada clip de video muestra
+       solo su primer fotograma, al inicio, en vez de una tira de miniaturas.
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
        diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían

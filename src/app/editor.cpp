@@ -2397,6 +2397,43 @@ void Editor::openLogFolder() {
     QDesktopServices::openUrl(QUrl::fromLocalFile(logging::folder()));
 }
 
+void Editor::copySelection() {
+    if (m_selection.empty()) {
+        return;
+    }
+    m_clipboard = sharkcut::copyClips(project(), m_selection);
+    emit clipboardChanged();
+}
+
+void Editor::cutSelection() {
+    if (m_selection.empty()) {
+        return;
+    }
+    copySelection();
+    const std::vector<ObjectId> selected = m_selection;
+    edit(QStringLiteral("Cortar"),
+         [&selected](Project& p) { return sharkcut::removeClips(p, selected); });
+}
+
+void Editor::pasteAtPlayhead() {
+    if (m_clipboard.empty()) {
+        return;
+    }
+    const std::int64_t at = m_currentFrame;
+    std::vector<ObjectId> pasted;
+    if (!edit(QStringLiteral("Pegar"), [this, at, &pasted](Project& p) {
+            pasted = sharkcut::pasteClips(p, m_clipboard, at);
+            return !pasted.empty();
+        })) {
+        return;
+    }
+    m_selection = pasted;
+    m_selectedCaptions.clear();
+    m_selectedTransition = 0;
+    emit selectionChanged();
+    seek(at + m_clipboard.length);
+}
+
 void Editor::removeSelection() {
     if (!m_selectedCaptions.empty()) {
         const std::vector<ObjectId> captions = m_selectedCaptions;

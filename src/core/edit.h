@@ -65,6 +65,31 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::in
 // Coloca el medio entero a partir de `start`.
 ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, PlaceTarget target = {});
 
+// --- Copiar y pegar ---
+
+// Clips copiados, con su pista (tipo y número dentro del tipo: 0 = V1 o A1) y su inicio
+// relativo al del primero. Lleva también los medios que usan (para pegar en otro
+// proyecto o secuencia).
+struct ClipboardClip {
+    TrackKind kind = TrackKind::Video;
+    std::size_t trackNumber = 0;
+    Clip clip; // clip.start: desde el inicio de lo copiado
+};
+struct Clipboard {
+    std::vector<ClipboardClip> clips;
+    std::vector<MediaItem> media;
+    std::int64_t length = 0; // de lo copiado, en fotogramas
+    bool empty() const { return clips.empty(); }
+};
+
+// Copia los clips (y sus enlazados), con su transformación, efectos, keyframes y volumen.
+Clipboard copyClips(const Project& project, const std::vector<ObjectId>& clips);
+
+// Pega lo copiado a partir del fotograma `at`, en las mismas pistas (se crean las que
+// falten), sobrescribiendo lo que haya. Los medios que el proyecto no tenga (por su ruta)
+// se añaden. No se pega nada en pistas bloqueadas. Devuelve los clips nuevos.
+std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, std::int64_t at);
+
 // Parte en dos los clips que contienen el fotograma `frame` (sin contar su primer
 // fotograma). Con `clips` vacío parte todas las pistas; si no, solo esos clips (y
 // sus enlazados).

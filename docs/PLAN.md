@@ -802,6 +802,14 @@ ctest --preset windows-debug
        sueltan sobre uno de los clips seleccionados (o con «Aplicar») van a todos sus clips
        de video en un paso de deshacer (la pantalla verde busca el color en ese clip y lo
        pone en todos), y «Desvincular audio y video de todos» separa los de la selección.
+     - [x] Tras la prueba de Kyo con 3 VODs de una hora en vertical: los atajos (Espacio, C,
+       V, Supr) ya no se pierden si un campo de texto se quedó con el teclado; franja
+       amarilla en la regla (ahí se lleva el cabezal) y un clic para llevar el cabezal
+       pausa; miniaturas de la línea de tiempo con el fotograma clave cercano (12 veces
+       menos CPU), en 2 hilos de baja prioridad y cancelables; Propiedades no se rehace en
+       cada fotograma al reproducir; la vista deja de seguir al cabezal si se mueve con la
+       rueda. Copiar, cortar y pegar clips (Ctrl+C/X/V, también entre secuencias y
+       proyectos): en el cabezal, en las mismas pistas, sobrescribiendo.
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
        diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían

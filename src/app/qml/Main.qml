@@ -314,6 +314,10 @@ Window {
     }
     // Q / W: recortar con rizo desde el borde anterior hasta el cabezal / desde el cabezal
     // hasta el borde siguiente.
+    // Copiar, cortar y pegar clips (en el cabezal).
+    Shortcut { sequences: [StandardKey.Copy]; enabled: ventana.enEditor; onActivated: editor.copySelection() }
+    Shortcut { sequences: [StandardKey.Cut]; enabled: ventana.enEditor; onActivated: editor.cutSelection() }
+    Shortcut { sequences: [StandardKey.Paste]; enabled: ventana.enEditor; onActivated: editor.pasteAtPlayhead() }
     Shortcut { sequence: "Q"; enabled: ventana.enEditor; onActivated: editor.rippleTrimPrevious() }
     Shortcut { sequence: "W"; enabled: ventana.enEditor; onActivated: editor.rippleTrimNext() }
     Shortcut { sequences: [StandardKey.Undo]; enabled: ventana.enEditor; onActivated: editor.undo() }

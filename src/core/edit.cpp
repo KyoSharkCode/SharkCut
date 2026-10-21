@@ -5,6 +5,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <unordered_map>
 
 namespace sharkcut {
 
@@ -361,6 +362,89 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::in
 ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, PlaceTarget target) {
     const MediaItem* item = project.findMedia(media);
     return item ? placeClip(project, media, start, 0, project.mediaFrames(*item), target) : 0;
+}
+
+Clipboard copyClips(const Project& project, const std::vector<ObjectId>& clips) {
+    Clipboard clipboard;
+    const std::vector<ObjectId> group = withLinked(project, clips);
+    std::int64_t first = std::numeric_limits<std::int64_t>::max();
+    std::int64_t last = 0;
+    for (std::size_t t = 0; t < project.tracks.size(); ++t) {
+        for (const Clip& clip : project.tracks[t].clips) {
+            if (!contains(group, clip.id)) {
+                continue;
+            }
+            clipboard.clips.push_back({project.tracks[t].kind, project.trackNumber(t), clip});
+            first = std::min(first, clip.start);
+            last = std::max(last, clip.end());
+            const MediaItem* item = project.findMedia(clip.media);
+            if (item && std::none_of(clipboard.media.begin(), clipboard.media.end(),
+                                     [item](const MediaItem& m) { return m.id == item->id; })) {
+                clipboard.media.push_back(*item);
+            }
+        }
+    }
+    if (clipboard.clips.empty()) {
+        return {};
+    }
+    for (ClipboardClip& c : clipboard.clips) {
+        c.clip.start -= first;
+    }
+    clipboard.length = last - first;
+    return clipboard;
+}
+
+std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, std::int64_t at) {
+    if (clipboard.empty() || at < 0) {
+        return {};
+    }
+    // Medios: los del proyecto con la misma ruta, o se añaden.
+    std::unordered_map<ObjectId, ObjectId> mediaIds;
+    for (const MediaItem& item : clipboard.media) {
+        const auto it = std::find_if(project.media.begin(), project.media.end(),
+                                     [&item](const MediaItem& m) { return m.path == item.path; });
+        mediaIds[item.id] = it != project.media.end() ? it->id : addMedia(project, item);
+    }
+    // Pistas de destino (se crean las que falten) e identificadores nuevos.
+    struct Pasting {
+        std::size_t track;
+        Clip clip;
+        ObjectId oldLink;
+    };
+    std::vector<Pasting> pasting;
+    std::unordered_map<ObjectId, ObjectId> ids;
+    for (const ClipboardClip& c : clipboard.clips) {
+        while (project.trackCount(c.kind) <= c.trackNumber) {
+            addTrack(project, c.kind);
+        }
+        const std::size_t track = project.trackIndex(c.kind, c.trackNumber).value();
+        const auto media = mediaIds.find(c.clip.media);
+        if (project.tracks[track].locked || media == mediaIds.end()) {
+            continue;
+        }
+        Clip clip = c.clip;
+        clip.id = newId(project);
+        clip.media = media->second;
+        clip.start += at;
+        ids[c.clip.id] = clip.id;
+        pasting.push_back({track, clip, c.clip.link});
+    }
+    // Enlaces entre los pegados (si el compañero no se pegó, queda suelto).
+    for (Pasting& p : pasting) {
+        const auto partner = ids.find(p.oldLink);
+        p.clip.link = partner != ids.end() ? partner->second : 0;
+    }
+    Splits splits;
+    for (const Pasting& p : pasting) {
+        clearRange(project, p.track, p.clip.start, p.clip.end(), splits);
+    }
+    std::vector<ObjectId> pasted;
+    for (const Pasting& p : pasting) {
+        insertSorted(project.tracks[p.track], p.clip);
+        pasted.push_back(p.clip.id);
+    }
+    fixLinks(project, splits);
+    return pasted;
 }
 
 bool splitAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& clips) {

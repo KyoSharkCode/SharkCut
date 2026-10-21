@@ -121,6 +121,7 @@ class Editor : public CompositionSource {
     Q_PROPERTY(bool anchoring READ anchoring NOTIFY anchorChanged)
     Q_PROPERTY(double anchorProgress READ anchorProgress NOTIFY anchorChanged)
     Q_PROPERTY(QString anchorMessage READ anchorMessage NOTIFY anchorChanged)
+    Q_PROPERTY(bool canPaste READ canPaste NOTIFY clipboardChanged)
     // Ajustes guardados de clips (editor_presets.cpp).
     Q_PROPERTY(QVariantList clipPresets READ clipPresets NOTIFY clipPresetsChanged)
     // Transcripción automática en curso (descarga del modelo incluida)
@@ -343,6 +344,14 @@ public:
     Q_INVOKABLE void splitAtPlayhead();                      // divide lo que hay bajo el cabezal
     Q_INVOKABLE void splitClip(qint64 clipId, qint64 frame); // cuchilla
     Q_INVOKABLE void removeSelection();
+    // Copiar, cortar y pegar clips (Ctrl+C, Ctrl+X, Ctrl+V): se copian con su audio,
+    // transformación, efectos y keyframes; se pegan en el cabezal, en las mismas pistas y
+    // sobrescribiendo lo que haya (también en otra secuencia o proyecto), quedan
+    // seleccionados y el cabezal va a su final.
+    Q_INVOKABLE void copySelection();
+    Q_INVOKABLE void cutSelection();
+    Q_INVOKABLE void pasteAtPlayhead();
+    bool canPaste() const { return !m_clipboard.empty(); }
     // Edición con rizo (cierra el hueco desplazando lo posterior en las pistas no
     // bloqueadas): Q quita desde el borde anterior hasta el cabezal, W desde el cabezal
     // hasta el borde siguiente; rippleDeleteSelection quita la selección (Mayús+Supr).
@@ -585,6 +594,7 @@ signals:
     void captionPresetsChanged();
     void clipPresetsChanged();
     void anchorChanged();
+    void clipboardChanged();
     void transcriptionChanged();
     void captionsCreated(int count);
     void captionsExported(const QString& path);
@@ -794,6 +804,7 @@ private:
     // Propiedades de un clip animado durante la reproducción: unas pocas veces por
     // segundo, no en cada fotograma (rehacer el panel 60 veces por segundo atascaba).
     QTimer m_selectedClipTimer;
+    sharkcut::Clipboard m_clipboard; // clips copiados (para todos los proyectos abiertos)
     bool m_detectingKey = false;
     // Clips a los que va la pantalla verde que se está detectando (vacío: solo ese clip).
     std::vector<sharkcut::ObjectId> m_keyTargets;

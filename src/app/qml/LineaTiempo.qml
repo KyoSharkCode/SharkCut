@@ -1756,6 +1756,11 @@ Rectangle {
             enabled: menuPista.hayHueco
             onTriggered: raiz.editor.closeGap(menuPista.pista.index, menuPista.fotograma)
         }
+        Action {
+            text: "Pegar en el cabezal (Ctrl+V)"
+            enabled: raiz.editor.canPaste
+            onTriggered: raiz.editor.pasteAtPlayhead()
+        }
         MenuSeparator {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
         }
@@ -1871,6 +1876,22 @@ Rectangle {
             text: "Rellenar el lienzo"
             enabled: menuClip.clipMenu !== null && menuClip.clipMenu.video
             onTriggered: raiz.editor.fitClip(menuClip.clipMenu.id, true)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
+            text: "Copiar (Ctrl+C)"
+            onTriggered: raiz.editor.copySelection()
+        }
+        Action {
+            text: "Cortar (Ctrl+X)"
+            onTriggered: raiz.editor.cutSelection()
+        }
+        Action {
+            text: "Pegar en el cabezal (Ctrl+V)"
+            enabled: raiz.editor.canPaste
+            onTriggered: raiz.editor.pasteAtPlayhead()
         }
         MenuSeparator {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }

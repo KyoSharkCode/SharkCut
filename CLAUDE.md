@@ -76,6 +76,12 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   proyectos). Editor: editor_presets.cpp; interfaz: «Guardar como ajuste…» en
   PanelPropiedades (qml/DialogoAjusteClip.qml) y lista en la pestaña Efectos de
   PanelMedios (se arrastran como un efecto, "ajuste:<nombre>" en applyEffect).
+  Punto de anclaje (seguimiento de movimiento): src/media/motion_tracker.h (MotionTracker
+  y trackVideo: correlación cruzada normalizada de la luminancia, de grueso a fino) y
+  src/core/motion_anchor.h (mediaPointOnCanvas/canvasPointOnMedia, como el compositor;
+  anchorClip convierte el recorrido en keyframes de posición, simplificados). Editor:
+  editor_anchor.cpp (en segundo plano, con el proxy si lo hay); interfaz: «Punto de
+  anclaje» en PanelPropiedades y MarcoAnclaje en Main.qml (recuadro en el visor).
   Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
   src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
   Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de

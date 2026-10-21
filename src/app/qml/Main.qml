@@ -541,6 +541,10 @@ Window {
                                     anchors.fill: parent
                                     visible: editor.frameCount > 0
                                 }
+                                MarcoAnclaje {
+                                    anchors.fill: parent
+                                    visible: editor.anchorPicking
+                                }
                             }
 
                             RowLayout {
@@ -722,6 +726,110 @@ Window {
     // para escalarlo. Se ajusta a los bordes y al centro del lienzo (Mayús: sin ajuste).
     // Mientras se arrastra solo es una vista previa; al soltar se aplica (un paso de
     // deshacer).
+    // Punto de anclaje: mientras se marca la zona a seguir, se dibuja un recuadro en el
+    // visor (encima del reencuadre, que no recibe el ratón). Se ve el contorno del clip
+    // seguido. Al soltar empieza el seguimiento; Esc o clic sin arrastrar, cancelar.
+    component MarcoAnclaje: Item {
+        id: marcoAncla
+        clip: true
+
+        readonly property size lienzo: editor.canvas
+        readonly property real escalaVista: Math.min(width / Math.max(1, lienzo.width),
+                                                     height / Math.max(1, lienzo.height))
+        readonly property real x0: (width - lienzo.width * escalaVista) / 2
+        readonly property real y0: (height - lienzo.height * escalaVista) / 2
+        readonly property var caja: editor.anchorTargetBox
+        property point inicio
+        property point fin
+        property bool marcando: false
+
+        function aLienzo(px, py) {
+            return Qt.point((px - x0) / escalaVista, (py - y0) / escalaVista)
+        }
+
+        Shortcut {
+            sequence: "Escape"
+            enabled: marcoAncla.visible
+            onActivated: editor.cancelAnchorPick()
+        }
+
+        // Contorno del clip que se sigue.
+        Rectangle {
+            visible: marcoAncla.caja.width !== undefined
+            x: visible ? marcoAncla.x0 + marcoAncla.caja.left * marcoAncla.escalaVista : 0
+            y: visible ? marcoAncla.y0 + marcoAncla.caja.top * marcoAncla.escalaVista : 0
+            width: visible ? marcoAncla.caja.width * marcoAncla.escalaVista : 0
+            height: visible ? marcoAncla.caja.height * marcoAncla.escalaVista : 0
+            color: "transparent"
+            border.color: Theme.aviso
+            border.width: 1
+            transform: Rotation {
+                origin.x: marcoAncla.caja.width !== undefined
+                          ? (marcoAncla.caja.pivotX - marcoAncla.caja.left) * marcoAncla.escalaVista : 0
+                origin.y: marcoAncla.caja.width !== undefined
+                          ? (marcoAncla.caja.pivotY - marcoAncla.caja.top) * marcoAncla.escalaVista : 0
+                angle: marcoAncla.caja.rotation || 0
+            }
+        }
+        // El recuadro que se está dibujando.
+        Rectangle {
+            visible: marcoAncla.marcando
+            x: Math.min(marcoAncla.inicio.x, marcoAncla.fin.x)
+            y: Math.min(marcoAncla.inicio.y, marcoAncla.fin.y)
+            width: Math.abs(marcoAncla.fin.x - marcoAncla.inicio.x)
+            height: Math.abs(marcoAncla.fin.y - marcoAncla.inicio.y)
+            color: "transparent"
+            border.color: Theme.acento
+            border.width: 2
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.acento
+                opacity: 0.15
+            }
+        }
+        Rectangle {
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 10
+            width: aviso.implicitWidth + 24
+            height: aviso.implicitHeight + 12
+            radius: Theme.radio
+            color: Theme.panelElevado
+            border.color: Theme.acento
+            Text {
+                id: aviso
+                anchors.centerIn: parent
+                text: "Dibuja un recuadro sobre lo que quieres seguir · Esc: cancelar"
+                color: Theme.texto
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.CrossCursor
+            onPressed: (m) => {
+                marcoAncla.inicio = Qt.point(m.x, m.y)
+                marcoAncla.fin = marcoAncla.inicio
+                marcoAncla.marcando = true
+            }
+            onPositionChanged: (m) => {
+                if (marcoAncla.marcando)
+                    marcoAncla.fin = Qt.point(m.x, m.y)
+            }
+            onReleased: {
+                marcoAncla.marcando = false
+                const a = marcoAncla.aLienzo(Math.min(marcoAncla.inicio.x, marcoAncla.fin.x),
+                                             Math.min(marcoAncla.inicio.y, marcoAncla.fin.y))
+                const w = Math.abs(marcoAncla.fin.x - marcoAncla.inicio.x) / marcoAncla.escalaVista
+                const h = Math.abs(marcoAncla.fin.y - marcoAncla.inicio.y) / marcoAncla.escalaVista
+                if (w * marcoAncla.escalaVista < 4 || h * marcoAncla.escalaVista < 4)
+                    editor.cancelAnchorPick()
+                else
+                    editor.startAnchor(a.x, a.y, w, h)
+            }
+        }
+    }
+
     component MarcoReencuadre: Item {
         id: marco
         clip: true // la caja de un clip que se sale del lienzo no tapa el resto de la ventana

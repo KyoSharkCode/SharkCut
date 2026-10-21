@@ -324,6 +324,7 @@ Editor::~Editor() {
     }
     m_recoveryPool.waitForDone();
     shutdownTranscription();
+    cancelAnchor();
     m_exporter.reset(); // cancela y espera
     m_clock.setAudio(nullptr, nullptr);
     m_audioWorker.reset();

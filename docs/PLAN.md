@@ -804,14 +804,22 @@ ctest --preset windows-debug
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).
-     - Idea de Kyo, «punto de anclaje» (seguimiento de movimiento): un clip (texto,
-       imagen, video pequeño) se pega a algo que se mueve en otro clip, por ejemplo
-       una mano, y lo sigue sin despegarse. Se marca un recuadro sobre la zona a seguir
-       en el visor; SharkCut la busca fotograma a fotograma (seguimiento de una zona con
-       textura, en src/media, sin Qt) y guarda el recorrido como un keyframe por
-       fotograma de la posición del clip anclado, que se puede corregir a mano donde el
-       seguimiento se pierda. Opcional: dos puntos para seguir también escala y giro.
-       Va después de los keyframes, porque los usa.
+     - [x] 5.4 Punto de anclaje (idea de Kyo, seguimiento de movimiento): un clip (texto,
+       imagen, video pequeño) se pega a algo que se mueve en otro clip, por ejemplo una
+       mano, y lo sigue. En Propiedades, «Punto de anclaje»: se elige el clip que se sigue
+       (los que se ven en el cabezal) y se dibuja en el visor un recuadro sobre la zona.
+       SharkCut la busca fotograma a fotograma desde el cabezal hacia delante, en segundo
+       plano y con el proxy si lo hay (src/media/motion_tracker.h: correlación cruzada
+       normalizada sobre la luminancia, de baja resolución a fina, con ajuste por debajo
+       del píxel y un patrón que se adapta poco a poco sin derivar; si la zona se tapa unos
+       fotogramas, rellena entre la posición de antes y la de después). El recorrido pasa
+       al lienzo con la colocación del clip seguido en cada momento (escala, giro,
+       posición, también animadas) y se convierte en keyframes de posición del clip
+       anclado (src/core/motion_anchor.h), sin los que sobran (a menos de 1 px de la
+       línea entre sus vecinos), que se pueden corregir a mano. Si la zona se pierde, el
+       clip la sigue hasta ahí y se avisa para marcarla otra vez desde ese punto. Un paso
+       de deshacer.
+       Pendiente (opcional): dos puntos para seguir también escala y giro.
 9. Fase 5: entrega (instalador, licencias, sonidos, 0.1.0 Early Access).
 
 ### Decisiones tomadas

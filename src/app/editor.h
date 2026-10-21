@@ -115,6 +115,12 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
     Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    // Punto de anclaje (editor_anchor.cpp).
+    Q_PROPERTY(bool anchorPicking READ anchorPicking NOTIFY anchorChanged)
+    Q_PROPERTY(QVariantMap anchorTargetBox READ anchorTargetBox NOTIFY anchorChanged)
+    Q_PROPERTY(bool anchoring READ anchoring NOTIFY anchorChanged)
+    Q_PROPERTY(double anchorProgress READ anchorProgress NOTIFY anchorChanged)
+    Q_PROPERTY(QString anchorMessage READ anchorMessage NOTIFY anchorChanged)
     // Ajustes guardados de clips (editor_presets.cpp).
     Q_PROPERTY(QVariantList clipPresets READ clipPresets NOTIFY clipPresetsChanged)
     // Transcripción automática en curso (descarga del modelo incluida)
@@ -425,6 +431,27 @@ public:
     Q_INVOKABLE bool renameClipPreset(const QString& name, const QString& newName);
     Q_INVOKABLE void removeClipPreset(const QString& name);
 
+    // --- Punto de anclaje (editor_anchor.cpp): el clip sigue algo que se mueve en otro
+    // clip de video. Se elige a qué clip se ancla, se marca en el visor un recuadro sobre
+    // la zona a seguir (en el cabezal) y se sigue hacia delante en segundo plano; el
+    // recorrido se convierte en keyframes de posición del clip (un paso de deshacer).
+    // Clips de video a los que se puede anclar `clipId`: los demás que se ven en el
+    // cabezal, de arriba abajo: [{id, name, track}].
+    Q_INVOKABLE QVariantList anchorTargets(qint64 clipId) const;
+    // Empieza a marcar la zona en el visor (anchorPicking) o lo deja.
+    Q_INVOKABLE void beginAnchorPick(qint64 clipId, qint64 targetId);
+    Q_INVOKABLE void cancelAnchorPick();
+    // Recuadro marcado (píxeles del lienzo): empieza el seguimiento.
+    Q_INVOKABLE void startAnchor(double left, double top, double width, double height);
+    Q_INVOKABLE void cancelAnchor();
+    bool anchorPicking() const { return m_anchorPickClip != 0; }
+    // Caja (píxeles del lienzo, como selectedClip.box) del clip a seguir mientras se marca.
+    QVariantMap anchorTargetBox() const;
+    bool anchoring() const { return m_anchor != nullptr; }
+    double anchorProgress() const { return m_anchorProgress; }
+    // Estado o resultado del último anclaje (vacío si no hay nada que contar).
+    QString anchorMessage() const { return m_anchorMessage; }
+
     // --- Subtítulos (editor_captions.cpp) ---
     QVariantList captionTracks() const;
     QVariantList captionSelection() const;
@@ -550,6 +577,7 @@ signals:
     void detectingKeyChanged();
     void captionPresetsChanged();
     void clipPresetsChanged();
+    void anchorChanged();
     void transcriptionChanged();
     void captionsCreated(int count);
     void captionsExported(const QString& path);
@@ -774,6 +802,14 @@ private:
     };
     std::optional<CaptionPreview> m_captionPreview;
     // Transcripción en curso: lo que hace falta para terminarla (ver createCaptions).
+    struct AnchorJob;
+    std::shared_ptr<AnchorJob> m_anchor;
+    sharkcut::ObjectId m_anchorPickClip = 0;
+    sharkcut::ObjectId m_anchorPickTarget = 0;
+    double m_anchorProgress = 0.0;
+    QString m_anchorMessage;
+    void finishAnchor(const std::shared_ptr<AnchorJob>& job);
+
     struct Transcription;
     std::shared_ptr<Transcription> m_transcription;
     double m_transcribeProgress = 0.0;

@@ -715,6 +715,83 @@ Rectangle {
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                 }
+
+                // --- Punto de anclaje: el clip sigue algo que se mueve en otro clip ---
+                Text {
+                    Layout.topMargin: 6
+                    text: "PUNTO DE ANCLAJE"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Selector {
+                    id: selectorAncla
+                    visible: objetivos.length > 0 && !panel.editor.anchoring
+                    etiqueta: "Seguir en"
+                    // Los clips que se ven en el cabezal (se recalcula al moverlo).
+                    readonly property var objetivos: panel.editor.currentFrame >= 0
+                        && propiedades.hayVideo && panel.editor.tracks
+                        ? panel.editor.anchorTargets(propiedades.sel.video) : []
+                    model: objetivos.map((o) => o.track + " · " + o.name)
+                    onObjetivosChanged: indice = Math.min(indice, Math.max(0, objetivos.length - 1))
+                    onElegido: (i) => indice = i
+                }
+                Text {
+                    visible: selectorAncla.objetivos.length === 0 && !panel.editor.anchoring
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Pon el cabezal donde se vea, junto a este clip, el video que tiene "
+                          + "lo que quieres seguir (una mano, una cara, un objeto…)."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                BotonIcono {
+                    visible: selectorAncla.objetivos.length > 0 && !panel.editor.anchoring
+                    Layout.fillWidth: true
+                    icono: "ancla"
+                    texto: panel.editor.anchorPicking ? "Dibuja un recuadro en el visor…"
+                                                      : "Marcar lo que se sigue"
+                    activo: panel.editor.anchorPicking
+                    enabled: propiedades.videoEditable
+                    ayuda: "Dibuja en el visor un recuadro sobre lo que se mueve; el clip lo "
+                           + "seguirá desde el cabezal hacia delante (Esc: cancelar)"
+                    onPulsado: {
+                        if (panel.editor.anchorPicking)
+                            panel.editor.cancelAnchorPick()
+                        else
+                            panel.editor.beginAnchorPick(propiedades.sel.video,
+                                selectorAncla.objetivos[selectorAncla.indice].id)
+                    }
+                }
+                RowLayout {
+                    visible: panel.editor.anchoring
+                    Layout.fillWidth: true
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 6
+                        radius: 3
+                        color: Theme.fondo
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, panel.editor.anchorProgress))
+                            height: parent.height
+                            radius: 3
+                            color: Theme.acento
+                        }
+                    }
+                    BotonIcono {
+                        texto: "Cancelar"
+                        implicitHeight: 24
+                        onPulsado: panel.editor.cancelAnchor()
+                    }
+                }
+                Text {
+                    visible: text.length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: panel.editor.anchorMessage
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
             }
 
             // --- Pantalla verde (croma): solo si se le añadió el efecto (desde Efectos) ---

@@ -19,7 +19,9 @@ TEST_CASE("Las curvas de suavizado empiezan en 0 y terminan en 1", "[easing]") {
 }
 
 TEST_CASE("Las curvas simetricas pasan por el centro y nunca retroceden", "[easing]") {
-    for (const EasingInfo& info : kEasings) {
+    // Las de las transiciones (las demás, solo de keyframes, no son simétricas).
+    for (std::size_t e = 0; e < kTransitionEasings; ++e) {
+        const EasingInfo& info = kEasings[e];
         CAPTURE(info.id);
         if (info.easing != Easing::EaseOutBack) {
             CHECK(applyEasing(info.easing, 0.5) == Catch::Approx(0.5).margin(1e-9));
@@ -35,6 +37,20 @@ TEST_CASE("Las curvas simetricas pasan por el centro y nunca retroceden", "[easi
     }
     // El rebote pasa de 1 antes de asentarse.
     CHECK(applyEasing(Easing::EaseOutBack, 0.7) > 1.0);
+}
+
+TEST_CASE("Keyframe easings go from 0 to 1 without going back", "[easing]") {
+    for (const Easing e : kKeyframeEasings) {
+        CAPTURE(kEasings[static_cast<std::size_t>(e)].id);
+        CHECK(kEasings[static_cast<std::size_t>(e)].easing == e); // catálogo en el orden del enum
+        CHECK(applyEasing(e, 0.0) == Catch::Approx(0.0).margin(1e-9));
+        CHECK(applyEasing(e, 1.0) == Catch::Approx(1.0).margin(1e-9));
+        CHECK(easingFromId(kEasings[static_cast<std::size_t>(e)].id) == e);
+    }
+    CHECK(applyEasing(Easing::EaseInCubic, 0.5) < 0.5);  // arranca despacio
+    CHECK(applyEasing(Easing::EaseOutCubic, 0.5) > 0.5); // frena al llegar
+    CHECK(applyEasing(Easing::Hold, 0.99) == 0.0);       // salta al final
+    CHECK_FALSE(easingFromId("no-existe").has_value());
 }
 
 TEST_CASE("La velocidad de la curva es maxima en el centro de un ease-in-out", "[easing]") {

@@ -37,11 +37,11 @@ Rectangle {
             Layout.topMargin: 4
             spacing: 2
             Repeater {
-                model: ["Medios", "Transiciones", "Efectos", "Subtítulos"]
+                model: ["Medios", "Transiciones", "Efectos", "Subtítulos", "Sonidos"]
                 delegate: Item {
                     required property string modelData
                     required property int index
-                    width: etiqueta.implicitWidth + 28
+                    width: etiqueta.implicitWidth + 16
                     height: 36
                     Text {
                         id: etiqueta
@@ -170,6 +170,127 @@ Rectangle {
                 font.pixelSize: Theme.tamTextoPequeno
             }
             Item { Layout.fillHeight: true }
+        }
+
+        // --- Sonidos: biblioteca de efectos de sonido, por grupos ---
+        Flickable {
+            id: vistaSonidos
+            visible: panel.pestana === 4
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentHeight: columnaSonidos.implicitHeight + 24
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: BarraDesplazamiento {}
+            ColumnLayout {
+                id: columnaSonidos
+                x: 12
+                y: 12
+                width: vistaSonidos.width - 24
+                spacing: 6
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Arrastra un sonido a una pista de audio (empieza donde lo sueltas) o "
+                          + "pulsa + para ponerlo con su golpe en el cabezal."
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                Repeater {
+                    model: panel.editor.soundLibrary
+                    delegate: ColumnLayout {
+                        id: filaSonido
+                        required property var modelData
+                        required property int index
+                        readonly property bool primeroDelGrupo: index === 0
+                            || panel.editor.soundLibrary[index - 1].category !== modelData.category
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            visible: filaSonido.primeroDelGrupo
+                            Layout.topMargin: filaSonido.index === 0 ? 4 : 10
+                            text: filaSonido.modelData.category.toUpperCase()
+                            color: Theme.textoDesactivado
+                            font.pixelSize: Theme.tamTextoPequeno
+                            font.letterSpacing: 1
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 36
+                            radius: Theme.radio
+                            color: arrastreSonido.containsMouse ? Theme.panelElevado : "transparent"
+                            border.color: arrastreSonido.containsMouse ? Theme.acento : Theme.borde
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 6
+                                spacing: 8
+                                Icono { nombre: "sonido"; tam: 15; color: Theme.clipAudioClaro }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: filaSonido.modelData.name
+                                    color: Theme.texto
+                                    font.pixelSize: Theme.tamTexto
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    text: filaSonido.modelData.seconds.toFixed(2).replace(".", ",") + " s"
+                                    color: Theme.textoDesactivado
+                                    font.pixelSize: Theme.tamTextoPequeno
+                                }
+                                BotonIcono {
+                                    icono: "mas"
+                                    implicitWidth: 26
+                                    implicitHeight: 26
+                                    enabled: panel.editor.hasSequence
+                                    ayuda: "En el cabezal (con su golpe ahí)"
+                                    onPulsado: panel.editor.addSoundAtPlayhead(filaSonido.modelData.id)
+                                }
+                            }
+                            MouseArea {
+                                id: arrastreSonido
+                                anchors.fill: parent
+                                anchors.rightMargin: 36
+                                hoverEnabled: true
+                                drag.target: panel.fantasma
+                                drag.threshold: 6
+                                cursorShape: Qt.OpenHandCursor
+                                onPressed: (m) => {
+                                    const f = panel.fantasma
+                                    const p = mapToItem(f.parent, m.x, m.y)
+                                    f.x = p.x - 10
+                                    f.y = p.y - 14
+                                    f.mediaId = undefined
+                                    f.transicion = -1
+                                    f.efecto = ""
+                                    f.sonido = filaSonido.modelData.id
+                                    f.nombre = filaSonido.modelData.name
+                                    f.Drag.keys = ["sharkcut/sonido"]
+                                }
+                                onPositionChanged: {
+                                    if (drag.active && !panel.fantasma.Drag.active)
+                                        panel.fantasma.Drag.active = true
+                                }
+                                onReleased: {
+                                    if (panel.fantasma.Drag.active) {
+                                        panel.fantasma.Drag.drop()
+                                        panel.fantasma.Drag.active = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    wrapMode: Text.WordWrap
+                    text: "Sonidos propios de SharkCut (sintetizados, CC0). Entran a −6 dB; el "
+                          + "volumen se cambia en Propiedades."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
         }
 
         // --- Subtítulos ---

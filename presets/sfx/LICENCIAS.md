@@ -19,6 +19,12 @@ grabaciones ni muestras de terceros). Son obra propia del proyecto y se publican
 | impacto.wav | Golpe grave con cola, para Shake & Distort (1,0 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
 | glitch.wav | Ráfagas digitales entrecortadas (0,5 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
 | riser.wav | Subida de tensión que termina en el corte (1,2 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| clic-raton.wav | Clic de ratón: pulsar y soltar (0,16 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| clic-suave.wav | Clic seco y suave, de un solo golpe (0,08 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| pop-hueco.wav | Pop grave con resonancia de tubo (0,22 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| pop-burbuja.wav | Pop agudo que sube, como una burbuja (0,16 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| swoosh-corto.wav | Swoosh muy rápido, de izquierda a derecha (0,30 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
+| swoosh-grave.wav | Swoosh rápido y más grave, de derecha a izquierda (0,40 s) | Sintetizado (generar_sfx.py) | SharkCut | CC0 1.0 |
 
 Si en el futuro se añaden sonidos descargados (Freesound CC0, Pixabay, Sonniss GDC…),
 cada uno lleva aquí su enlace de origen, su autor y su licencia exacta.

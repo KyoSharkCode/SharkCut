@@ -1144,6 +1144,7 @@ Window {
         property var mediaId: undefined
         property int transicion: -1 // índice del catálogo si se arrastra una transición
         property string efecto      // nombre del efecto si se arrastra uno ("croma")
+        property string sonido      // id del efecto de sonido si se arrastra uno
         property string nombre
         visible: Drag.active
         z: 100

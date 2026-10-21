@@ -3218,6 +3218,71 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
     }
 }
 
+QVariantList Editor::soundLibrary() const {
+    // Por grupos, en este orden (los más usados primero).
+    static constexpr std::string_view kOrder[] = {"Clic", "Pop", "Swoosh", "Whoosh", "Impactos"};
+    QVariantList list;
+    for (const std::string_view category : kOrder) {
+        for (const sharkcut::SoundEffect& e : sharkcut::kSoundEffects) {
+            if (e.category == category) {
+                list.append(QVariantMap{
+                    {QStringLiteral("id"), fromView(e.id)},
+                    {QStringLiteral("name"), fromView(e.name)},
+                    {QStringLiteral("category"), fromView(e.category)},
+                    {QStringLiteral("seconds"), static_cast<double>(e.durationUs) / 1e6}});
+            }
+        }
+    }
+    return list;
+}
+
+void Editor::addSound(const QString& id, int track, qint64 frame) {
+    const sharkcut::SoundEffect* effect = sharkcut::soundEffect(id.toStdString());
+    if (!effect) {
+        return;
+    }
+    ObjectId created = 0;
+    edit(QStringLiteral("Añadir sonido"), [&](Project& p) {
+        const ObjectId media = soundMedia(p, *effect);
+        const std::int64_t at = std::max<qint64>(0, frame);
+        if (track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
+            p.tracks[static_cast<std::size_t>(track)].kind == sharkcut::TrackKind::Audio) {
+            // En esa pista, empezando donde se soltó (sobrescribe, como un medio).
+            const std::size_t number = p.trackNumber(static_cast<std::size_t>(track));
+            const MediaItem* item = p.findMedia(media);
+            created = sharkcut::placeClip(p, media, at, 0, p.mediaFrames(*item),
+                                          {.video = 0, .audio = number});
+            if (created != 0) {
+                sharkcut::setClipVolume(p, created, kSoundVolumeDb);
+            }
+        } else {
+            created = sharkcut::placeSoundHit(p, media, at, 0, kSoundVolumeDb);
+        }
+        return created != 0;
+    });
+    if (created != 0) {
+        select(static_cast<qint64>(created), false);
+    }
+}
+
+void Editor::addSoundAtPlayhead(const QString& id) {
+    const sharkcut::SoundEffect* effect = sharkcut::soundEffect(id.toStdString());
+    if (!effect) {
+        return;
+    }
+    ObjectId created = 0;
+    const std::int64_t at = m_currentFrame;
+    edit(QStringLiteral("Añadir sonido"), [&](Project& p) {
+        const std::int64_t hit = sharkcut::rescale(effect->hitUs, sharkcut::kMicroseconds,
+                                                   p.settings.frameRate.frameDuration());
+        created = sharkcut::placeSoundHit(p, soundMedia(p, *effect), at, hit, kSoundVolumeDb);
+        return created != 0;
+    });
+    if (created != 0) {
+        select(static_cast<qint64>(created), false);
+    }
+}
+
 void Editor::setEffectClip(qint64 clipId, const QVariantMap& values) {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);

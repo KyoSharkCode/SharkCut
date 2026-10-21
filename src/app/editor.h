@@ -84,6 +84,9 @@ class Editor : public CompositionSource {
     // Curvas de los keyframes (índices de setKeyframeEasing)
     Q_PROPERTY(QStringList keyframeEasingNames READ keyframeEasingNames CONSTANT)
     Q_PROPERTY(QStringList soundNames READ soundNames CONSTANT)
+    // Biblioteca de efectos de sonido (pestaña Sonidos), por grupos:
+    // [{id, name, category, seconds}].
+    Q_PROPERTY(QVariantList soundLibrary READ soundLibrary CONSTANT)
     // Sonido que lleva por defecto cada transición ("" = ninguno), en el orden de transitionNames
     Q_PROPERTY(QStringList transitionSounds READ transitionSounds CONSTANT)
     Q_PROPERTY(qint64 frameCount READ frameCount NOTIFY projectChanged)
@@ -551,6 +554,12 @@ public:
     // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
     // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.
     Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex);
+    QVariantList soundLibrary() const;
+    // Efecto de sonido de la biblioteca soltado en la pista `track` en `frame` (empieza
+    // ahí; si no es una pista de audio, en la primera libre). Queda seleccionado.
+    Q_INVOKABLE void addSound(const QString& id, int track, qint64 frame);
+    // Con su golpe (lo más fuerte del whoosh, el chasquido del clic…) en el cabezal.
+    Q_INVOKABLE void addSoundAtPlayhead(const QString& id);
     // Valores de una transición-clip: typeIndex (de transitionNames), intensity y blur
     // (0–1), easingIndex (de easingNames), length (fotogramas). Solo las claves que vengan.
     Q_INVOKABLE void setEffectClip(qint64 clipId, const QVariantMap& values);

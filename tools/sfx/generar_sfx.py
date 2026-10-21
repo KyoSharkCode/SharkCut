@@ -183,6 +183,37 @@ def riser(semilla):
     return paneo(mono, -0.4, 0.4)
 
 
+def clic(semilla, suelta=True):
+    """Clic de ratón: golpe seco de plástico al pulsar y, si `suelta`, otro más flojo al soltar."""
+    duracion = 0.16 if suelta else 0.08
+    t = tiempo(duracion)
+    mono = np.zeros(len(t))
+
+    def golpe(inicio, fuerza, tono):
+        n = len(t) - int(inicio * SR)
+        tt = np.arange(n) / SR
+        chasquido = pasabajo(ruido(n, semilla, rosa=False), 7000) * np.exp(-tt * 900)
+        resonancia = np.sin(2 * math.pi * tono * tt) * np.exp(-tt * 260)
+        mono[int(inicio * SR):] += fuerza * (chasquido + 0.5 * resonancia)
+
+    golpe(0.0, 1.0, 3400)
+    if suelta:
+        golpe(0.075, 0.55, 2900)
+    return paneo(mono, 0, 0)
+
+
+def pop(semilla, f_inicio, f_fin, duracion, caida, hueco):
+    """Pop: tono que cambia rápido de frecuencia con caída corta; `hueco` añade la
+    resonancia grave de una boca o un tubo."""
+    t = tiempo(duracion)
+    f = f_fin + (f_inicio - f_fin) * np.exp(-t * 55)
+    tono = np.sin(2 * math.pi * np.cumsum(f) / SR) * np.exp(-t * caida)
+    ataque = pasabajo(ruido(len(t), semilla, rosa=False), 4000) * np.exp(-t * 500) * 0.4
+    cuerpo = pasabanda(ruido(len(t), semilla + 1), np.full(len(t), 420.0), 4.0) * np.exp(-t * caida * 0.8)
+    mono = np.tanh(1.4 * (tono + ataque + hueco * 1.5 * cuerpo))
+    return paneo(mono, 0, 0)
+
+
 def main():
     carpeta = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "presets/sfx")
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -199,6 +230,14 @@ def main():
     guardar(carpeta, "impacto.wav", impacto(16), pico_db=-1.0)
     guardar(carpeta, "glitch.wav", glitch(17), pico_db=-6.0)
     guardar(carpeta, "riser.wav", riser(18))
+    # Clics, pops y más swooshes (golpe: clics y pops 0,00 · swoosh-corto 0,14 ·
+    # swoosh-grave 0,18).
+    guardar(carpeta, "clic-raton.wav", clic(19), pico_db=-4.0)
+    guardar(carpeta, "clic-suave.wav", clic(20, suelta=False), pico_db=-6.0)
+    guardar(carpeta, "pop-hueco.wav", pop(21, 950, 330, 0.22, 26, 1.0), pico_db=-3.0)
+    guardar(carpeta, "pop-burbuja.wav", pop(22, 380, 1250, 0.16, 34, 0.2), pico_db=-4.0)
+    guardar(carpeta, "swoosh-corto.wav", whoosh(23, 0.30, 0.14, 700, 5200, 1500, 2.6, -0.8, 0.8, 1.8, 6.0))
+    guardar(carpeta, "swoosh-grave.wav", whoosh(24, 0.40, 0.18, 260, 2400, 500, 1.8, 0.6, -0.6, 1.8, 5.0))
 
 
 if __name__ == "__main__":

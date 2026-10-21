@@ -34,7 +34,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
   src/core también: easing, catálogo de transiciones (transition.h), la secuencia
   A → transición → B del laboratorio (sequence.h) y el catálogo de efectos de sonido
-  (sfx.h, archivos en presets/sfx/ generados por tools/sfx/generar_sfx.py).
+  (sfx.h, con su grupo: Clic, Pop, Swoosh, Whoosh, Impactos; archivos en presets/sfx/
+  generados por tools/sfx/generar_sfx.py). Pestaña Sonidos de PanelMedios: se arrastran a
+  una pista de audio (Editor::addSound) o se ponen con su golpe en el cabezal
+  (addSoundAtPlayhead).
   src/core también: proyecto y línea de tiempo (project.h: pistas en número variable,
   primero las de video de V1 hacia arriba y después las de audio; transformación y
   volumen por clip; transiciones en los cortes de las pistas de video, que usan el

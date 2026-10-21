@@ -818,6 +818,11 @@ ctest --preset windows-debug
        lo que hay debajo (también varias pistas: gameplay, facecam y textos), y se pueden
        poner al principio o al final de un clip, mover, cortar y recortar. En Propiedades:
        tipo, duración, intensidad, desenfoque y curva. Archivo .sharkp versión 9.
+     - [x] Biblioteca de efectos de sonido (pestaña Sonidos), con los que Kyo usa en
+       Premiere como guía (sin copiarlos: sintetizados, CC0): clic de ratón, clic suave,
+       pop hueco, pop de burbuja y más swooshes, además de los whoosh, impactos, glitch y
+       riser de las transiciones. Se arrastran a una pista de audio o se ponen con su golpe
+       en el cabezal (+).
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
        diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían

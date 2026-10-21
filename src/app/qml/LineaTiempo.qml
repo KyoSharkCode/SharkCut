@@ -1372,7 +1372,10 @@ Rectangle {
                             width: parent.width
                             height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
                             keys: ["sharkcut/medio", "sharkcut/transicion", "sharkcut/efecto",
-                                   "text/uri-list"]
+                                   "sharkcut/sonido", "text/uri-list"]
+                            function esSonido(d) {
+                                return d.keys.indexOf("sharkcut/sonido") >= 0
+                            }
                             function esTransicion(d) {
                                 return d.keys.indexOf("sharkcut/transicion") >= 0
                             }
@@ -1383,6 +1386,11 @@ Rectangle {
                                 const p = raiz.pistaEnY(d.y + y)
                                 if (esEfecto(d)) {
                                     raiz.pistaSoltar = p && p.video ? p.index : -1
+                                    return
+                                }
+                                if (esSonido(d)) {
+                                    raiz.marcaSoltar = raiz.frameEn(d.x)
+                                    raiz.pistaSoltar = p && !p.video ? p.index : -1
                                     return
                                 }
                                 if (esTransicion(d)) {
@@ -1419,6 +1427,11 @@ Rectangle {
                                     const clip = p && p.video ? raiz.editor.videoClipAt(p.index, raiz.frameEn(d.x)) : 0
                                     if (clip !== 0 && d.source)
                                         Qt.callLater(raiz.editor.applyEffect, clip, d.source.efecto)
+                                    d.accept()
+                                } else if (esSonido(d)) {
+                                    if (d.source)
+                                        Qt.callLater(raiz.editor.addSound, d.source.sonido,
+                                                     p && !p.video ? p.index : -1, raiz.frameEn(d.x))
                                     d.accept()
                                 } else if (esTransicion(d)) {
                                     // Una transición-clip: afecta a todo lo que hay debajo.

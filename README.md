@@ -19,3 +19,8 @@ Estado:
   con reencuadre y onda del audio (etapa 2) y transiciones en la línea de tiempo (etapa 3).
 
 Preparar el PC: [docs/SETUP-WINDOWS.md](docs/SETUP-WINDOWS.md)
+
+## Licencia
+
+SharkCut es software libre y gratuito bajo la licencia GPL 3.0 (ver `LICENSE`). Las
+licencias de las bibliotecas que usa están en `licenses/`.

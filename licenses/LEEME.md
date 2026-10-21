@@ -3,7 +3,8 @@
 SharkCut usa estas bibliotecas de otros autores. Se reparten junto al programa en esta
 carpeta (`licenses/`), con el texto de cada licencia.
 
-El código de SharkCut está en <https://github.com/KyoSharkCode/SharkCut>.
+SharkCut es software libre y gratuito bajo la licencia GPL 3.0 (`GPL-3.0.txt`; el archivo
+`LICENSE` del repositorio). Su código está en <https://github.com/KyoSharkCode/SharkCut>.
 
 | Componente | Para qué | Licencia | Texto | Código |
 |---|---|---|---|---|

@@ -67,6 +67,8 @@ Rectangle {
                 desplazarCroma.restart()
             }
             function onEffectApplied(efecto) {
+                if (efecto.startsWith("ajuste:"))
+                    return // un ajuste guardado: cambia varias secciones a la vez
                 propiedades.seccionPendiente = efecto === "byn" ? seccionByn
                     : efecto === "desenfoque" ? seccionDesenfoque
                     : efecto === "esquinas" ? seccionEsquinas : seccionSombra
@@ -693,6 +695,15 @@ Rectangle {
                         onPulsado: panel.editor.resetTransform(propiedades.sel.video)
                     }
                 }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "estrella"
+                    texto: "Guardar como ajuste…"
+                    ayuda: "Guarda el aspecto del clip (y su animación) para aplicarlo a otros "
+                           + "desde la pestaña Efectos"
+                    onPulsado: dialogoAjusteClip.guardar(propiedades.sel.video,
+                                                         propiedades.anim.any === true)
+                }
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
@@ -1039,6 +1050,7 @@ Rectangle {
         }
     }
     DialogoNombre { id: dialogoAjuste }
+    DialogoAjusteClip { id: dialogoAjusteClip; editor: panel.editor }
 
     // Cabecera de un efecto del clip: nombre y botón para quitarlo.
     component CabeceraEfecto: ColumnLayout {

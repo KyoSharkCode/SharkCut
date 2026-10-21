@@ -70,6 +70,12 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   una distancia a un rectángulo redondeado, y la sombra es la misma capa dibujada antes en
   "modo sombra" (geometría ampliada, forma del clip con su alfa y su croma, difuminada).
   Se aplican desde la pestaña Efectos (Editor::applyEffect) y se ajustan en Propiedades.
+  Ajustes guardados (presets de clips): src/core/clip_preset.h (presetFromClip,
+  applyPreset; partes que lleva y animación en µs desde el inicio o el final del clip;
+  JSON en project_file.cpp). Se guardan en QSettings "efectos/ajustes" (todos los
+  proyectos). Editor: editor_presets.cpp; interfaz: «Guardar como ajuste…» en
+  PanelPropiedades (qml/DialogoAjusteClip.qml) y lista en la pestaña Efectos de
+  PanelMedios (se arrastran como un efecto, "ajuste:<nombre>" en applyEffect).
   Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
   src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
   Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de

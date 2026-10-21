@@ -2593,6 +2593,10 @@ void Editor::applyEffect(qint64 clipId, const QString& effect) {
         return;
     }
     select(clipId, false);
+    if (effect.startsWith(QLatin1String("ajuste:"))) {
+        applyClipPreset(clipId, effect.mid(7));
+        return;
+    }
     if (effect == QLatin1String("croma")) {
         detectKeyColor(clipId, true);
         return;

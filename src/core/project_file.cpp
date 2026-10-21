@@ -1,5 +1,7 @@
 #include "core/project_file.h"
 
+#include "core/clip_preset.h"
+
 #include "core/edit.h"
 
 #include <nlohmann/json.hpp>
@@ -857,6 +859,100 @@ void saveProject(const Project& project, const std::filesystem::path& file) {
 
 Project loadProject(const std::filesystem::path& file) {
     return projectFromJson(readFile(file), file);
+}
+
+// --- Ajustes guardados de clips (clip_preset.h) -------------------------------------
+
+std::string presetsToJson(const std::vector<ClipPreset>& presets) {
+    json list = json::array();
+    for (const ClipPreset& p : presets) {
+        json keys = json::object();
+        for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+            if (p.keys[i].empty()) {
+                continue;
+            }
+            json k = json::array();
+            for (const PresetKeyframe& key : p.keys[i]) {
+                k.push_back(
+                    json::array({key.offsetUs, key.value,
+                                 std::string(kEasings[static_cast<std::size_t>(key.easing)].id)}));
+            }
+            keys[std::string(kAnimPropertyIds[i])] = std::move(k);
+        }
+        list.push_back({
+            {"name", p.name},
+            {"parts",
+             {{"placement", p.parts.placement},
+              {"opacity", p.parts.opacity},
+              {"crop", p.parts.crop},
+              {"effects", p.parts.effects},
+              {"chroma", p.parts.chroma},
+              {"animation", p.parts.animation}}},
+            {"anchor", p.anchor == PresetAnchor::End ? "end" : "start"},
+            {"transform", transformToJson(p.transform)},
+            {"keys", std::move(keys)},
+        });
+    }
+    try {
+        return list.dump();
+    } catch (const json::exception&) {
+        return "[]";
+    }
+}
+
+std::vector<ClipPreset> presetsFromJson(std::string_view text) {
+    std::vector<ClipPreset> presets;
+    json list;
+    try {
+        list = json::parse(text.begin(), text.end());
+    } catch (const json::exception&) {
+        return presets;
+    }
+    if (!list.is_array()) {
+        return presets;
+    }
+    for (const json& entry : list) {
+        try {
+            ClipPreset p;
+            p.name = entry.at("name").get<std::string>();
+            const json parts = entry.value("parts", json::object());
+            p.parts.placement = parts.value("placement", true);
+            p.parts.opacity = parts.value("opacity", true);
+            p.parts.crop = parts.value("crop", true);
+            p.parts.effects = parts.value("effects", true);
+            p.parts.chroma = parts.value("chroma", true);
+            p.parts.animation = parts.value("animation", true);
+            p.anchor = entry.value("anchor", std::string()) == "end" ? PresetAnchor::End
+                                                                     : PresetAnchor::Start;
+            p.transform =
+                clampTransform(transformFromJson(entry.value("transform", json::object())));
+            const json keys = entry.value("keys", json::object());
+            for (auto it = keys.begin(); it != keys.end(); ++it) {
+                const auto property = animPropertyFromId(it.key());
+                if (!property) {
+                    continue;
+                }
+                for (const json& k : it.value()) {
+                    PresetKeyframe key;
+                    key.offsetUs = k.at(0).get<std::int64_t>();
+                    key.value = k.at(1).get<double>();
+                    if (k.size() > 2) {
+                        key.easing =
+                            easingFromId(k.at(2).get<std::string>()).value_or(Easing::Linear);
+                    }
+                    if (std::isfinite(key.value)) {
+                        p.keys[static_cast<std::size_t>(*property)].push_back(key);
+                    }
+                }
+            }
+            if (!p.name.empty()) {
+                presets.push_back(std::move(p));
+            }
+        } catch (const json::exception&) {
+            // ajuste dañado: se ignora
+        }
+    }
+    return presets;
 }
 
 } // namespace sharkcut

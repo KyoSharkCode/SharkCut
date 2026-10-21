@@ -23,6 +23,7 @@ add_executable(sharkcut_tests
     test_project_file.cpp
     test_captions.cpp
     test_keyframes.cpp
+    test_presets.cpp
     test_speech.cpp
     test_clip.h
     test_clip.cpp

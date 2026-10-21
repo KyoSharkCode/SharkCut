@@ -14,6 +14,8 @@ add_library(sharkcut_core STATIC
     project.cpp
     captions.h
     captions.cpp
+    clip_preset.h
+    clip_preset.cpp
     edit.h
     edit.cpp
     history.h

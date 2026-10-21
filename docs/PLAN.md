@@ -785,9 +785,21 @@ ctest --preset windows-debug
        shader de la capa: vista previa y exportación iguales. Archivo .sharkp versión 8.
        Los valores de los efectos también se animan con keyframes (⏱ en cada uno), como
        la posición o la escala.
+     - [x] 5.3 Ajustes guardados (presets de clips): «Guardar como ajuste…» en
+       Propiedades guarda el aspecto del clip de video con nombre, eligiendo qué lleva
+       (posición, escala y rotación; opacidad; recorte; efectos; pantalla verde; animación).
+       Sin animación se guardan los valores que se ven en el cabezal; con ella, los
+       keyframes cuentan desde el inicio del clip (entradas) o desde el final (salidas),
+       en microsegundos: valen para clips de cualquier duración y fps. Aparecen en la
+       pestaña Efectos, debajo de los efectos: se arrastran a un clip (o «Aplicar» al
+       seleccionado), se renombran y se borran. Las partes que lleva sustituyen a las del
+       clip (con deshacer); lo demás no cambia. Se guardan en la configuración de la app
+       (QSettings «efectos/ajustes», JSON): sirven en todos los proyectos. Núcleo sin Qt:
+       src/core/clip_preset.h.
      - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
        los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
-       diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3); un barrido
+       diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían
+       ajustes de fábrica en la misma lista); un barrido
        necesitaría una máscara de desenfoque con dirección, que hoy no existe.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con

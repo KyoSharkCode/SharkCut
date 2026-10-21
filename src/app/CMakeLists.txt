@@ -30,6 +30,7 @@ qt_add_qml_module(SharkCut
         qml/DialogoNuevoProyecto.qml
         qml/DialogoNombre.qml
         qml/DialogoSubtitulos.qml
+        qml/DialogoAjusteClip.qml
         qml/MenuTema.qml
         qml/BarraDesplazamiento.qml
         qml/PanelBiblioteca.qml
@@ -47,6 +48,7 @@ qt_add_qml_module(SharkCut
         editor.h
         editor.cpp
         editor_captions.cpp
+        editor_presets.cpp
         editor_keyframes.cpp
         editor_transcription.cpp
         modeldownload.h

@@ -307,114 +307,110 @@ Rectangle {
             Item { Layout.fillHeight: true }
         }
 
-        // --- Efectos ---
-        ColumnLayout {
+        // --- Efectos (con los ajustes guardados debajo; se desplaza si no cabe) ---
+        Flickable {
+            id: vistaEfectos
             visible: panel.pestana === 2
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 12
-            spacing: 8
-            // Cada efecto se arrastra a un clip de video o se aplica al seleccionado.
-            Repeater {
-                model: [
-                    { clave: "croma", nombre: "Croma (pantalla verde)" },
-                    { clave: "byn", nombre: "Blanco y negro" },
-                    { clave: "desenfoque", nombre: "Desenfoque" },
-                    { clave: "esquinas", nombre: "Esquinas redondeadas" },
-                    { clave: "sombra", nombre: "Sombra" },
-                    { clave: "resplandor", nombre: "Resplandor" }
-                ]
-                delegate: Rectangle {
-                    id: efecto
-                    required property var modelData
+            clip: true
+            contentHeight: columnaEfectos.implicitHeight + 24
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: BarraDesplazamiento {}
+            ColumnLayout {
+                id: columnaEfectos
+                x: 12
+                y: 12
+                width: vistaEfectos.width - 24
+                spacing: 8
+                // Cada efecto se arrastra a un clip de video o se aplica al seleccionado.
+                Repeater {
+                    model: [
+                        { clave: "croma", nombre: "Croma (pantalla verde)" },
+                        { clave: "byn", nombre: "Blanco y negro" },
+                        { clave: "desenfoque", nombre: "Desenfoque" },
+                        { clave: "esquinas", nombre: "Esquinas redondeadas" },
+                        { clave: "sombra", nombre: "Sombra" },
+                        { clave: "resplandor", nombre: "Resplandor" }
+                    ]
+                    delegate: FilaEfecto {
+                        required property var modelData
+                        clave: modelData.clave
+                        nombre: modelData.nombre
+                    }
+                }
+                Text {
                     Layout.fillWidth: true
-                    implicitHeight: 40
-                    radius: Theme.radio
-                    color: arrastreEfecto.containsMouse ? Theme.panelElevado : "transparent"
-                    border.color: arrastreEfecto.containsMouse ? Theme.acento : Theme.borde
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 8
-                        Text {
-                            Layout.fillWidth: true
-                            text: efecto.modelData.nombre
-                            color: Theme.texto
-                            font.pixelSize: Theme.tamTexto
+                    wrapMode: Text.WordWrap
+                    text: "Arrastra un efecto sobre un clip de video de la línea de tiempo (o "
+                          + "selecciona el clip y pulsa Aplicar). Después se ajusta o se quita en "
+                          + "Propiedades. Croma busca solo el color del fondo; la sombra y el "
+                          + "resplandor siguen la forma del clip (también su transparencia)."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                // Ajustes guardados (presets): se arrastran igual que los efectos.
+                Text {
+                    Layout.topMargin: 6
+                    text: "AJUSTES GUARDADOS"
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 1
+                }
+                Text {
+                    visible: panel.editor.clipPresets.length === 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Todavía no hay ninguno. Selecciona un clip de video y pulsa «Guardar como "
+                          + "ajuste…» en Propiedades: su colocación, efectos y animación quedan aquí "
+                          + "para arrastrarlos a otros clips."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                Repeater {
+                    model: panel.editor.clipPresets
+                    delegate: FilaEfecto {
+                        id: filaAjuste
+                        required property var modelData
+                        clave: "ajuste:" + modelData.name
+                        nombre: modelData.name
+                        detalle: modelData.summary
+                        // Borrar pide confirmación: el primer clic arma el botón.
+                        property bool confirmando: false
+                        BotonIcono {
+                            icono: "lapiz"
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            ayuda: "Cambiar el nombre"
+                            onPulsado: dialogoNombreAjuste.pedir("Cambiar el nombre del ajuste",
+                                filaAjuste.modelData.name, "Cambiar",
+                                (nuevo) => panel.editor.renameClipPreset(filaAjuste.modelData.name, nuevo))
                         }
                         BotonIcono {
-                            texto: "Aplicar"
+                            icono: filaAjuste.confirmando ? "" : "quitar"
+                            texto: filaAjuste.confirmando ? "¿Borrar?" : ""
+                            acentuado: filaAjuste.confirmando
+                            implicitWidth: filaAjuste.confirmando ? 74 : 26
                             implicitHeight: 26
-                            enabled: panel.editor.selectedClip.count === 1
-                                     && panel.editor.selectedClip.video !== 0
-                            ayuda: "Al clip de video seleccionado"
-                            onPulsado: panel.editor.applyEffect(panel.editor.selectedClip.video,
-                                                                efecto.modelData.clave)
-                        }
-                    }
-                    MouseArea {
-                        id: arrastreEfecto
-                        // Deja libre el botón Aplicar.
-                        anchors.fill: parent
-                        anchors.rightMargin: 80
-                        hoverEnabled: true
-                        drag.target: panel.fantasma
-                        drag.threshold: 6
-                        cursorShape: Qt.OpenHandCursor
-                        onPressed: (m) => {
-                            const f = panel.fantasma
-                            const p = mapToItem(f.parent, m.x, m.y)
-                            f.x = p.x - 10
-                            f.y = p.y - 14
-                            f.mediaId = undefined
-                            f.transicion = -1
-                            f.efecto = efecto.modelData.clave
-                            f.nombre = efecto.modelData.nombre
-                            f.Drag.keys = ["sharkcut/efecto"]
-                        }
-                        onPositionChanged: {
-                            if (drag.active && !panel.fantasma.Drag.active)
-                                panel.fantasma.Drag.active = true
-                        }
-                        onReleased: {
-                            if (panel.fantasma.Drag.active) {
-                                panel.fantasma.Drag.drop()
-                                panel.fantasma.Drag.active = false
+                            ayuda: "Borrar el ajuste"
+                            onPulsado: {
+                                if (filaAjuste.confirmando)
+                                    panel.editor.removeClipPreset(filaAjuste.modelData.name)
+                                else {
+                                    filaAjuste.confirmando = true
+                                    desarmar.restart()
+                                }
+                            }
+                            Timer {
+                                id: desarmar
+                                interval: 3000
+                                onTriggered: filaAjuste.confirmando = false
                             }
                         }
                     }
                 }
             }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Arrastra un efecto sobre un clip de video de la línea de tiempo (o "
-                      + "selecciona el clip y pulsa Aplicar). Después se ajusta o se quita en "
-                      + "Propiedades. Croma busca solo el color del fondo; la sombra y el "
-                      + "resplandor siguen la forma del clip (también su transparencia)."
-                color: Theme.textoDesactivado
-                font.pixelSize: Theme.tamTextoPequeno
-            }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 40
-                radius: Theme.radio
-                color: "transparent"
-                border.color: Theme.borde
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Ajustes guardados (presets)"
-                        color: Theme.textoSecundario
-                        font.pixelSize: Theme.tamTexto
-                    }
-                    Chip { texto: "PRÓXIMO"; colorTexto: Theme.textoDesactivado }
-                }
-            }
-            Item { Layout.fillHeight: true }
         }
 
     }
@@ -428,6 +424,95 @@ Rectangle {
             if (soltado.hasUrls) {
                 panel.editor.importFiles(soltado.urls, -1, -1, panel.carpeta)
                 soltado.acceptProposedAction()
+            }
+        }
+    }
+
+    DialogoNombre { id: dialogoNombreAjuste }
+
+    // Un efecto (o un ajuste guardado) de la pestaña Efectos: se arrastra sobre un clip de
+    // video o se aplica al seleccionado. Los hijos van como botones a la derecha.
+    component FilaEfecto: Rectangle {
+        id: fila
+        property string clave   // lo que recibe applyEffect
+        property string nombre
+        property string detalle // segunda línea (opcional)
+        default property alias botones: extra.data
+        Layout.fillWidth: true
+        implicitHeight: detalle.length > 0 ? 48 : 40
+        radius: Theme.radio
+        color: arrastre.containsMouse ? Theme.panelElevado : "transparent"
+        border.color: arrastre.containsMouse ? Theme.acento : Theme.borde
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 8
+            spacing: 6
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+                Text {
+                    Layout.fillWidth: true
+                    text: fila.nombre
+                    elide: Text.ElideRight
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTexto
+                }
+                Text {
+                    visible: fila.detalle.length > 0
+                    Layout.fillWidth: true
+                    text: fila.detalle
+                    elide: Text.ElideRight
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+            RowLayout {
+                id: botonesFila
+                spacing: 4
+                RowLayout {
+                    id: extra
+                    spacing: 4
+                }
+                BotonIcono {
+                    texto: "Aplicar"
+                    implicitHeight: 26
+                    enabled: panel.editor.selectedClip.count === 1
+                             && panel.editor.selectedClip.video !== 0
+                    ayuda: "Al clip de video seleccionado"
+                    onPulsado: panel.editor.applyEffect(panel.editor.selectedClip.video, fila.clave)
+                }
+            }
+        }
+        MouseArea {
+            id: arrastre
+            // Deja libres los botones.
+            anchors.fill: parent
+            anchors.rightMargin: botonesFila.width + 12
+            hoverEnabled: true
+            drag.target: panel.fantasma
+            drag.threshold: 6
+            cursorShape: Qt.OpenHandCursor
+            onPressed: (m) => {
+                const f = panel.fantasma
+                const p = mapToItem(f.parent, m.x, m.y)
+                f.x = p.x - 10
+                f.y = p.y - 14
+                f.mediaId = undefined
+                f.transicion = -1
+                f.efecto = fila.clave
+                f.nombre = fila.nombre
+                f.Drag.keys = ["sharkcut/efecto"]
+            }
+            onPositionChanged: {
+                if (drag.active && !panel.fantasma.Drag.active)
+                    panel.fantasma.Drag.active = true
+            }
+            onReleased: {
+                if (panel.fantasma.Drag.active) {
+                    panel.fantasma.Drag.drop()
+                    panel.fantasma.Drag.active = false
+                }
             }
         }
     }

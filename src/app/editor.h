@@ -115,6 +115,8 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
     Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    // Ajustes guardados de clips (editor_presets.cpp).
+    Q_PROPERTY(QVariantList clipPresets READ clipPresets NOTIFY clipPresetsChanged)
     // Transcripción automática en curso (descarga del modelo incluida)
     Q_PROPERTY(bool transcribing READ transcribing NOTIFY transcriptionChanged)
     Q_PROPERTY(double transcribeProgress READ transcribeProgress NOTIFY transcriptionChanged)
@@ -398,7 +400,8 @@ public:
     // `fallbackToGreen`: si no se encuentra, la activa igualmente con el color que tenga.
     Q_INVOKABLE void detectKeyColor(qint64 clipId, bool fallbackToGreen = false);
     // Efecto del panel Efectos aplicado a un clip de video (arrastrándolo o con el clip
-    // seleccionado): "croma", "byn", "desenfoque", "esquinas", "sombra" o "resplandor".
+    // seleccionado): "croma", "byn", "desenfoque", "esquinas", "sombra", "resplandor" o un
+    // ajuste guardado, "ajuste:<nombre>".
     // Los efectos de imagen son las claves grayscaleOn/grayscale, blurOn/blur,
     // cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
     // shadowY/shadowSpread de setClipTransform. Selecciona el clip para ajustarlo en Propiedades.
@@ -406,6 +409,21 @@ public:
     // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
     Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
     bool detectingKey() const { return m_detectingKey; }
+
+    // --- Ajustes guardados de clips (editor_presets.cpp): el aspecto de un clip con nombre,
+    // guardado en la configuración de la app (vale para todos los proyectos).
+    // [{name, parts: {placement, opacity, crop, effects, chroma, animation}, anchor
+    // ("start" | "end"), animated, summary}], por nombre.
+    QVariantList clipPresets() const;
+    // Guarda el aspecto del clip (en el cabezal; con su animación si `options.animation`).
+    // `options`: las partes de `parts` (true/false) y anchor. Si ya hay uno con ese nombre,
+    // lo sustituye. Devuelve si se guardó.
+    Q_INVOKABLE bool saveClipPreset(qint64 clipId, const QString& name, const QVariantMap& options);
+    Q_INVOKABLE bool hasClipPreset(const QString& name) const;
+    // Lo aplica a un clip de video (también applyEffect con "ajuste:<nombre>").
+    Q_INVOKABLE void applyClipPreset(qint64 clipId, const QString& name);
+    Q_INVOKABLE bool renameClipPreset(const QString& name, const QString& newName);
+    Q_INVOKABLE void removeClipPreset(const QString& name);
 
     // --- Subtítulos (editor_captions.cpp) ---
     QVariantList captionTracks() const;
@@ -531,6 +549,7 @@ signals:
     void fileBusyChanged();
     void detectingKeyChanged();
     void captionPresetsChanged();
+    void clipPresetsChanged();
     void transcriptionChanged();
     void captionsCreated(int count);
     void captionsExported(const QString& path);

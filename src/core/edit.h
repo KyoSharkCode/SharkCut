@@ -102,6 +102,32 @@ bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_
 ClipTransform clampTransform(ClipTransform transform);
 bool setClipTransform(Project& project, ObjectId clip, const ClipTransform& transform);
 
+// --- Keyframes (clips de video de pistas sin bloquear) -------------------------------
+// `frame` es siempre un fotograma de la línea de tiempo; el keyframe se guarda en la
+// posición del medio que se ve ahí (Clip::mediaFrameAt).
+
+// Aplica la transformación que se quiere ver en `frame`: las propiedades animadas que
+// cambian reciben (o actualizan) un keyframe ahí; las demás cambian su valor fijo. Es lo
+// que hace cualquier cambio desde Propiedades o el visor.
+bool setClipTransformAt(Project& project, ObjectId clip, const ClipTransform& transform,
+                        std::int64_t frame);
+// Empezar a animar la propiedad (un keyframe en `frame` con el valor que tiene ahí) o dejar
+// de animarla (se queda fija con el valor que tenía en `frame`).
+bool setPropertyAnimated(Project& project, ObjectId clip, AnimProperty property, bool animated,
+                         std::int64_t frame);
+// Crea o cambia el keyframe de la propiedad en `frame` (la propiedad pasa a estar animada).
+bool setKeyframe(Project& project, ObjectId clip, AnimProperty property, std::int64_t frame,
+                 double value);
+// Quita el keyframe en `frame`; si era el último, la propiedad se queda fija con su valor.
+bool removeKeyframe(Project& project, ObjectId clip, AnimProperty property, std::int64_t frame);
+// Curva (hasta el siguiente) de los keyframes que hay en `frame`, de todas las propiedades.
+bool setKeyframeEasing(Project& project, ObjectId clip, std::int64_t frame, Easing easing);
+// Mueve los keyframes de `from` a `to` (todas las propiedades). Los que chocarían con
+// otro que ya está en `to` no se mueven.
+bool moveKeyframes(Project& project, ObjectId clip, std::int64_t from, std::int64_t to);
+// Sustituye toda la animación del clip (p. ej. quitarla al restablecer, o un ajuste guardado).
+bool setClipAnimation(Project& project, ObjectId clip, const ClipAnimation& animation);
+
 // Volumen de un clip de audio, en dB (entre kMinVolumeDb y kMaxVolumeDb).
 bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
 

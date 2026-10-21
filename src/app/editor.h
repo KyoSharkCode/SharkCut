@@ -81,6 +81,8 @@ class Editor : public CompositionSource {
     // Catálogos para la interfaz: transiciones, curvas y efectos de sonido ("Ninguno" el 0)
     Q_PROPERTY(QStringList transitionNames READ transitionNames CONSTANT)
     Q_PROPERTY(QStringList easingNames READ easingNames CONSTANT)
+    // Curvas de los keyframes (índices de setKeyframeEasing)
+    Q_PROPERTY(QStringList keyframeEasingNames READ keyframeEasingNames CONSTANT)
     Q_PROPERTY(QStringList soundNames READ soundNames CONSTANT)
     // Sonido que lleva por defecto cada transición ("" = ninguno), en el orden de transitionNames
     Q_PROPERTY(QStringList transitionSounds READ transitionSounds CONSTANT)
@@ -180,6 +182,7 @@ public:
     QVariantList transitions() const;
     QStringList transitionNames() const;
     QStringList easingNames() const;
+    QStringList keyframeEasingNames() const;
     QStringList soundNames() const;
     QStringList transitionSounds() const;
     QVariantMap selectedTransition() const;
@@ -374,6 +377,20 @@ public:
     // bandas, recortando lo que sobre), centrado y respetando su recorte.
     Q_INVOKABLE void fitClip(qint64 clipId, bool fill);
     Q_INVOKABLE void resetTransform(qint64 clipId);
+
+    // --- Keyframes (en el cabezal). `property`: "x", "y", "scale", "opacity", "cropLeft",
+    // "cropTop", "cropRight" o "cropBottom". Con una propiedad animada, cambiar su valor
+    // (setClipTransform, el visor) crea o actualiza el keyframe del cabezal.
+    Q_INVOKABLE void setPropertyAnimated(qint64 clipId, const QString& property, bool animated);
+    // Pone un keyframe en el cabezal (con el valor de ahora) o lo quita si ya hay uno.
+    Q_INVOKABLE void toggleKeyframe(qint64 clipId, const QString& property);
+    // Lleva el cabezal al keyframe anterior (−1) o siguiente (1) de la propiedad (o de
+    // cualquiera, con `property` vacío).
+    Q_INVOKABLE void goToKeyframe(qint64 clipId, const QString& property, int direction);
+    // Curva (índice de keyframeEasingNames) de los keyframes del cabezal.
+    Q_INVOKABLE void setKeyframeEasing(qint64 clipId, int easingIndex);
+    // Mueve los keyframes de un fotograma de la línea de tiempo a otro.
+    Q_INVOKABLE void moveKeyframes(qint64 clipId, qint64 from, qint64 to);
     // Pantalla verde: las claves keyEnabled, keyColor ("#RRGGBB"), keySimilarity,
     // keySmoothness, keySpill y keyRemove (quita el efecto) de setClipTransform/previewTransform.
     // detectKeyColor() busca el color de fondo del clip en el fotograma que se ve (en otro hilo) y,
@@ -717,6 +734,9 @@ private:
     bool m_detectingKey = false;
     mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
     std::vector<sharkcut::ObjectId> m_selectedCaptions;
+    // Para Propiedades: por propiedad, {animated, key (hay keyframe en el cabezal), prev,
+    // next}; y keyEasing: índice de la curva del keyframe del cabezal (−1 si no hay).
+    QVariantMap animationInfo(const sharkcut::Clip& clip) const;
     // Medidas de división del diálogo de subtítulos y estilo de un ajuste por su nombre
     // (el de fábrica «Clásico» si no existe).
     static sharkcut::CaptionLayout captionLayoutFrom(const QVariantMap& values);

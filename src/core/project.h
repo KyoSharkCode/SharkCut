@@ -14,13 +14,16 @@
 // también medido en fotogramas del proyecto desde el inicio del medio: así un medio
 // a 30 fps en un proyecto a 60 fps no necesita conversiones al editar.
 
+#include "core/easing.h"
 #include "core/time.h"
 #include "core/transition.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sharkcut {
@@ -82,6 +85,49 @@ inline constexpr double kMinScale = 0.01;
 inline constexpr double kMaxScale = 20.0;
 inline constexpr double kMaxCrop = 0.95; // entre dos lados opuestos, como mucho
 
+// --- Animación (keyframes) ----------------------------------------------------------
+
+// Propiedades de un clip de video que se pueden animar.
+enum class AnimProperty { X, Y, Scale, Opacity, CropLeft, CropTop, CropRight, CropBottom };
+inline constexpr std::size_t kAnimPropertyCount = 8;
+// Identificadores estables (archivo de proyecto, interfaz), en el orden del enum.
+inline constexpr std::array<std::string_view, kAnimPropertyCount> kAnimPropertyIds{
+    "x", "y", "scale", "opacity", "cropLeft", "cropTop", "cropRight", "cropBottom"};
+std::optional<AnimProperty> animPropertyFromId(std::string_view id);
+// El campo de la transformación que anima la propiedad.
+double& transformField(ClipTransform& transform, AnimProperty property);
+double transformField(const ClipTransform& transform, AnimProperty property);
+
+// Un valor en un momento. `frame` es la posición en el medio (en fotogramas del proyecto
+// desde el inicio del medio, como Clip::in): así la animación sigue pegada al contenido al
+// recortar el clip o al dividirlo.
+struct Keyframe {
+    std::int64_t frame = 0;
+    double value = 0.0;
+    Easing easing = Easing::Linear; // curva hasta el siguiente
+
+    friend bool operator==(const Keyframe&, const Keyframe&) = default;
+};
+
+// Keyframes de cada propiedad (ordenados por fotograma). Una propiedad con keyframes está
+// animada: su valor fijo en ClipTransform no se usa.
+struct ClipAnimation {
+    std::array<std::vector<Keyframe>, kAnimPropertyCount> keys{};
+
+    bool animated(AnimProperty p) const { return !keys[static_cast<std::size_t>(p)].empty(); }
+    bool empty() const;
+    std::vector<Keyframe>& of(AnimProperty p) { return keys[static_cast<std::size_t>(p)]; }
+    const std::vector<Keyframe>& of(AnimProperty p) const {
+        return keys[static_cast<std::size_t>(p)];
+    }
+
+    friend bool operator==(const ClipAnimation&, const ClipAnimation&) = default;
+};
+
+// Valor de una lista de keyframes en `mediaFrame`: antes del primero, el primero; después
+// del último, el último; entre dos, con la curva del primero.
+double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame);
+
 // Volumen de un clip de audio en dB. kMinVolumeDb o menos equivale a silencio.
 inline constexpr double kMinVolumeDb = -60.0;
 inline constexpr double kMaxVolumeDb = 15.0;
@@ -92,15 +138,18 @@ double gainFromDb(double db);
 struct Clip {
     ObjectId id = 0;
     ObjectId media = 0;
-    ObjectId link = 0;       // clip enlazado de la otra pista; 0 = ninguno
-    std::int64_t start = 0;  // primer fotograma en la línea de tiempo
-    std::int64_t in = 0;     // desfase dentro del medio
-    std::int64_t length = 0; // fotogramas (siempre > 0)
-    ClipTransform transform; // solo clips de video
-    double volumeDb = 0.0;   // solo clips de audio
+    ObjectId link = 0;         // clip enlazado de la otra pista; 0 = ninguno
+    std::int64_t start = 0;    // primer fotograma en la línea de tiempo
+    std::int64_t in = 0;       // desfase dentro del medio
+    std::int64_t length = 0;   // fotogramas (siempre > 0)
+    ClipTransform transform;   // solo clips de video
+    ClipAnimation animation{}; // solo clips de video
+    double volumeDb = 0.0;     // solo clips de audio
 
     std::int64_t end() const { return start + length; } // primer fotograma excluido
     std::int64_t out() const { return in + length; }    // fin del tramo en el medio
+    // Posición en el medio de un fotograma de la línea de tiempo (la de los keyframes).
+    std::int64_t mediaFrameAt(std::int64_t frame) const { return in + (frame - start); }
 
     friend bool operator==(const Clip&, const Clip&) = default;
 };
@@ -204,6 +253,10 @@ struct CaptionTrack {
 
     friend bool operator==(const CaptionTrack&, const CaptionTrack&) = default;
 };
+
+// La transformación del clip en el fotograma `frame` de la línea de tiempo, con sus
+// propiedades animadas ya calculadas (y dentro de sus límites).
+ClipTransform transformAt(const Clip& clip, std::int64_t frame);
 
 // V1 es siempre la primera pista.
 inline constexpr std::size_t kVideoTrack = 0;

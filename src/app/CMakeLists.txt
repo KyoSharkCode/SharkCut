@@ -47,6 +47,7 @@ qt_add_qml_module(SharkCut
         editor.h
         editor.cpp
         editor_captions.cpp
+        editor_keyframes.cpp
         editor_transcription.cpp
         modeldownload.h
         modeldownload.cpp

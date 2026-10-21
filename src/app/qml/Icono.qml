@@ -16,7 +16,7 @@ Item {
 
     // Los que se pintan llenos (el resto, solo el trazo).
     readonly property bool relleno: nombre === "reproducir" || nombre === "pausa"
-                                    || nombre === "estrellaLlena"
+                                    || nombre === "estrellaLlena" || nombre === "keyframeLleno"
 
     Shape {
         anchors.fill: parent

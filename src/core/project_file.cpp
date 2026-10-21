@@ -304,6 +304,54 @@ ClipTransform transformFromJson(const json& value) {
     return t;
 }
 
+// Animación: {"x": [[fotograma, valor, "curva"], …], …}, solo las propiedades animadas.
+json animationToJson(const ClipAnimation& animation) {
+    json result = json::object();
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto& keys = animation.keys[i];
+        if (keys.empty()) {
+            continue;
+        }
+        json list = json::array();
+        for (const Keyframe& k : keys) {
+            list.push_back(json::array(
+                {k.frame, k.value, std::string(kEasings[static_cast<std::size_t>(k.easing)].id)}));
+        }
+        result[std::string(kAnimPropertyIds[i])] = std::move(list);
+    }
+    return result;
+}
+
+ClipAnimation animationFromJson(const json& value) {
+    ClipAnimation animation;
+    for (auto it = value.begin(); it != value.end(); ++it) {
+        const auto property = animPropertyFromId(it.key());
+        if (!property) {
+            continue; // propiedad de una versión más nueva: se ignora
+        }
+        auto& keys = animation.of(*property);
+        for (const json& k : it.value()) {
+            Keyframe key;
+            key.frame = k.at(0).get<std::int64_t>();
+            key.value = k.at(1).get<double>();
+            if (k.size() > 2) {
+                key.easing = easingFromId(k.at(2).get<std::string>()).value_or(Easing::Linear);
+            }
+            if (std::isfinite(key.value)) {
+                keys.push_back(key);
+            }
+        }
+        // Ordenados y sin dos en el mismo fotograma.
+        std::stable_sort(keys.begin(), keys.end(),
+                         [](const Keyframe& a, const Keyframe& b) { return a.frame < b.frame; });
+        keys.erase(
+            std::unique(keys.begin(), keys.end(),
+                        [](const Keyframe& a, const Keyframe& b) { return a.frame == b.frame; }),
+            keys.end());
+    }
+    return animation;
+}
+
 json captionStyleToJson(const CaptionStyle& st) {
     return {
         {"font", st.font},
@@ -451,6 +499,9 @@ json tracksToJson(const std::vector<Track>& tracks) {
             if (video && clip.transform != ClipTransform{}) {
                 entry["transform"] = transformToJson(clip.transform);
             }
+            if (video && !clip.animation.empty()) {
+                entry["animation"] = animationToJson(clip.animation);
+            }
             if (!video && clip.volumeDb != 0.0) {
                 entry["volumeDb"] = clip.volumeDb;
             }
@@ -503,6 +554,9 @@ std::vector<Track> tracksFromJson(const json& value) {
             clip.length = c.at("length").get<std::int64_t>();
             if (const auto t = c.find("transform"); t != c.end()) {
                 clip.transform = transformFromJson(*t);
+            }
+            if (const auto a = c.find("animation"); a != c.end()) {
+                clip.animation = animationFromJson(*a);
             }
             clip.volumeDb = c.value("volumeDb", 0.0);
             track.clips.push_back(clip);

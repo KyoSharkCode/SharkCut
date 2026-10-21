@@ -43,6 +43,7 @@ Rectangle {
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
         readonly property var croma: t.chromaKey || ({})
+        readonly property var anim: hayVideo && sel.animation ? sel.animation : ({})
         readonly property var sub: panel.editor.selectedCaption
         readonly property bool haySubtitulo: sub.count > 0
         readonly property var estilo: haySubtitulo
@@ -552,7 +553,8 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 6
 
-                CampoNumero {
+                CampoAnimable {
+                    clave: "x"
                     etiqueta: "Posición X"
                     unidad: "px"
                     valor: propiedades.t.x || 0
@@ -560,7 +562,8 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ x: v })
                     onCambiado: (v) => propiedades.aplicar({ x: v }, "Posición")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "y"
                     etiqueta: "Posición Y"
                     unidad: "px"
                     valor: propiedades.t.y || 0
@@ -568,7 +571,8 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ y: v })
                     onCambiado: (v) => propiedades.aplicar({ y: v }, "Posición")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "scale"
                     etiqueta: "Escala"
                     unidad: "%"
                     decimales: 1
@@ -580,7 +584,8 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ scale: v / 100 })
                     onCambiado: (v) => propiedades.aplicar({ scale: v / 100 }, "Escala")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "opacity"
                     etiqueta: "Opacidad"
                     unidad: "%"
                     paso: 0.5
@@ -605,8 +610,9 @@ Rectangle {
                         { clave: "cropTop", nombre: "Arriba" },
                         { clave: "cropBottom", nombre: "Abajo" }
                     ]
-                    delegate: CampoNumero {
+                    delegate: CampoAnimable {
                         required property var modelData
+                        clave: modelData.clave
                         etiqueta: modelData.nombre
                         unidad: "%"
                         decimales: 1
@@ -626,6 +632,14 @@ Rectangle {
                             propiedades.aplicar(valores, "Recorte")
                         }
                     }
+                }
+                // Curva de los keyframes del cabezal (hasta el siguiente).
+                Selector {
+                    visible: propiedades.anim.keyEasing !== undefined && propiedades.anim.keyEasing >= 0
+                    etiqueta: "Curva del keyframe"
+                    model: panel.editor.keyframeEasingNames
+                    indice: Math.max(0, propiedades.anim.keyEasing || 0)
+                    onElegido: (i) => panel.editor.setKeyframeEasing(propiedades.sel.video, i)
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -656,7 +670,8 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: "Arrastra el número para cambiarlo (Mayús: más rápido, Ctrl: más fino) "
                           + "o haz clic para escribirlo. En el visor: arrastra el clip para "
-                          + "moverlo y sus esquinas para escalarlo."
+                          + "moverlo y sus esquinas para escalarlo. ⏱ anima la propiedad: "
+                          + "cada cambio en otro momento crea un keyframe ahí (◆)."
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                 }
@@ -878,6 +893,92 @@ Rectangle {
         }
     }
     DialogoNombre { id: dialogoAjuste }
+
+    // Valor de una propiedad animable del clip: el número y, a su derecha, ⏱ (animarla)
+    // y, si está animada, ◀ ◆ ▶ (keyframe anterior, poner o quitar el del cabezal,
+    // siguiente).
+    component CampoAnimable: RowLayout {
+        id: campoA
+        property string clave
+        property alias etiqueta: numero.etiqueta
+        property alias unidad: numero.unidad
+        property alias valor: numero.valor
+        property alias desde: numero.desde
+        property alias hasta: numero.hasta
+        property alias paso: numero.paso
+        property alias decimales: numero.decimales
+        property alias activo: numero.activo
+        signal cambiando(real valor)
+        signal cambiado(real valor)
+        readonly property var info: propiedades.anim[clave] || ({})
+        readonly property bool animada: info.animated === true
+
+        Layout.fillWidth: true
+        spacing: 2
+        CampoNumero {
+            id: numero
+            Layout.fillWidth: true
+            onCambiando: (v) => campoA.cambiando(v)
+            onCambiado: (v) => campoA.cambiado(v)
+        }
+        BotonKey {
+            icono: "reloj"
+            encendido: campoA.animada
+            ayuda: campoA.animada ? "Dejar de animar (se queda con el valor de ahora)"
+                                  : "Animar: los cambios en distintos momentos crean keyframes"
+            onPulsado: panel.editor.setPropertyAnimated(propiedades.sel.video, campoA.clave,
+                                                        !campoA.animada)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: "anterior"
+            enabled: campoA.info.prev === true
+            ayuda: "Keyframe anterior"
+            onPulsado: panel.editor.goToKeyframe(propiedades.sel.video, campoA.clave, -1)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: campoA.info.key ? "keyframeLleno" : "keyframe"
+            encendido: campoA.info.key === true
+            ayuda: campoA.info.key ? "Quitar el keyframe del cabezal" : "Poner un keyframe en el cabezal"
+            onPulsado: panel.editor.toggleKeyframe(propiedades.sel.video, campoA.clave)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: "siguiente"
+            enabled: campoA.info.next === true
+            ayuda: "Keyframe siguiente"
+            onPulsado: panel.editor.goToKeyframe(propiedades.sel.video, campoA.clave, 1)
+        }
+    }
+
+    component BotonKey: Rectangle {
+        id: botonKey
+        property string icono
+        property string ayuda
+        property bool encendido: false
+        signal pulsado()
+        implicitWidth: 20
+        implicitHeight: 22
+        radius: 4
+        opacity: enabled ? 1 : 0.35
+        color: zonaKey.containsMouse ? Theme.panelElevado : "transparent"
+        Icono {
+            anchors.centerIn: parent
+            nombre: botonKey.icono
+            tam: 13
+            color: botonKey.encendido ? Theme.acento : Theme.textoSecundario
+        }
+        MouseArea {
+            id: zonaKey
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: botonKey.pulsado()
+        }
+        ToolTip.visible: zonaKey.containsMouse && ayuda.length > 0
+        ToolTip.delay: 600
+        ToolTip.text: ayuda
+    }
 
     // Color con su muestra y su código (#RRGGBB) editable, y unos colores rápidos.
     component CampoColor: RowLayout {

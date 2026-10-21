@@ -1,5 +1,7 @@
 #include "core/project.h"
 
+#include "core/edit.h" // clampTransform
+
 #include <algorithm>
 #include <cmath>
 
@@ -266,6 +268,84 @@ const Caption* Project::captionAt(std::size_t track, std::int64_t frame) const {
 
 const CaptionStyle& Project::styleOf(std::size_t track, const Caption& caption) const {
     return caption.style ? *caption.style : captionTracks[track].style;
+}
+
+// --- Animación ---------------------------------------------------------------------
+
+std::optional<AnimProperty> animPropertyFromId(std::string_view id) {
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        if (kAnimPropertyIds[i] == id) {
+            return static_cast<AnimProperty>(i);
+        }
+    }
+    return std::nullopt;
+}
+
+double& transformField(ClipTransform& t, AnimProperty p) {
+    switch (p) {
+    case AnimProperty::X:
+        return t.x;
+    case AnimProperty::Y:
+        return t.y;
+    case AnimProperty::Scale:
+        return t.scale;
+    case AnimProperty::Opacity:
+        return t.opacity;
+    case AnimProperty::CropLeft:
+        return t.cropLeft;
+    case AnimProperty::CropTop:
+        return t.cropTop;
+    case AnimProperty::CropRight:
+        return t.cropRight;
+    case AnimProperty::CropBottom:
+        return t.cropBottom;
+    }
+    return t.x;
+}
+
+double transformField(const ClipTransform& t, AnimProperty p) {
+    return transformField(const_cast<ClipTransform&>(t), p);
+}
+
+bool ClipAnimation::empty() const {
+    return std::all_of(keys.begin(), keys.end(), [](const auto& k) { return k.empty(); });
+}
+
+double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame) {
+    if (keys.empty()) {
+        return 0.0;
+    }
+    if (mediaFrame <= static_cast<double>(keys.front().frame)) {
+        return keys.front().value;
+    }
+    if (mediaFrame >= static_cast<double>(keys.back().frame)) {
+        return keys.back().value;
+    }
+    // El último keyframe en o antes de `mediaFrame` (están ordenados).
+    const auto next =
+        std::upper_bound(keys.begin(), keys.end(), mediaFrame, [](double f, const Keyframe& k) {
+            return f < static_cast<double>(k.frame);
+        });
+    const Keyframe& a = *(next - 1);
+    const Keyframe& b = *next;
+    const double t =
+        (mediaFrame - static_cast<double>(a.frame)) / static_cast<double>(b.frame - a.frame);
+    return a.value + (b.value - a.value) * applyEasing(a.easing, t);
+}
+
+ClipTransform transformAt(const Clip& clip, std::int64_t frame) {
+    if (clip.animation.empty()) {
+        return clip.transform;
+    }
+    ClipTransform t = clip.transform;
+    const auto mediaFrame = static_cast<double>(clip.mediaFrameAt(frame));
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto p = static_cast<AnimProperty>(i);
+        if (clip.animation.animated(p)) {
+            transformField(t, p) = keyframeValue(clip.animation.of(p), mediaFrame);
+        }
+    }
+    return clampTransform(t);
 }
 
 } // namespace sharkcut

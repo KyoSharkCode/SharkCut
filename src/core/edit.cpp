@@ -622,6 +622,173 @@ bool setClipTransform(Project& project, ObjectId clip, const ClipTransform& tran
     return true;
 }
 
+// --- Keyframes ----------------------------------------------------------------------
+
+namespace {
+
+// Clip de video editable (existe y su pista no está bloqueada), o nullptr.
+Clip* editableVideoClip(Project& project, ObjectId id) {
+    const auto ref = project.findClip(id);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Video ||
+        project.tracks[ref->track].locked) {
+        return nullptr;
+    }
+    return &project.tracks[ref->track].clips[ref->index];
+}
+
+bool nearlyEqual(double a, double b) {
+    return std::abs(a - b) <= 1e-9 * std::max(1.0, std::max(std::abs(a), std::abs(b)));
+}
+
+// Crea o actualiza el keyframe en `mediaFrame`. Devuelve si cambió algo.
+bool upsertKeyframe(std::vector<Keyframe>& keys, std::int64_t mediaFrame, double value) {
+    const auto it = std::lower_bound(keys.begin(), keys.end(), mediaFrame,
+                                     [](const Keyframe& k, std::int64_t f) { return k.frame < f; });
+    if (it != keys.end() && it->frame == mediaFrame) {
+        if (nearlyEqual(it->value, value)) {
+            return false;
+        }
+        it->value = value;
+        return true;
+    }
+    // Uno nuevo entre dos: con la curva del anterior (así no cambia el estilo del tramo).
+    const Easing easing = it != keys.begin() ? (it - 1)->easing : Easing::Linear;
+    keys.insert(it, Keyframe{mediaFrame, value, easing});
+    return true;
+}
+
+} // namespace
+
+bool setClipTransformAt(Project& project, ObjectId id, const ClipTransform& transform,
+                        std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    const ClipTransform before = transformAt(*clip, frame);
+    const ClipTransform wanted = clampTransform(transform);
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    bool changed = false;
+    ClipTransform fixed = wanted; // lo no animado, tal cual
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto p = static_cast<AnimProperty>(i);
+        if (!clip->animation.animated(p)) {
+            continue;
+        }
+        transformField(fixed, p) = transformField(clip->transform, p);
+        const double value = transformField(wanted, p);
+        if (!nearlyEqual(value, transformField(before, p))) {
+            changed = upsertKeyframe(clip->animation.of(p), mediaFrame, value) || changed;
+        }
+    }
+    if (fixed != clip->transform) {
+        clip->transform = fixed;
+        changed = true;
+    }
+    return changed;
+}
+
+bool setPropertyAnimated(Project& project, ObjectId id, AnimProperty property, bool animated,
+                         std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || clip->animation.animated(property) == animated) {
+        return false;
+    }
+    const double value = transformField(transformAt(*clip, frame), property);
+    if (animated) {
+        clip->animation.of(property).push_back({clip->mediaFrameAt(frame), value, Easing::Linear});
+    } else {
+        clip->animation.of(property).clear();
+        transformField(clip->transform, property) = value;
+        clip->transform = clampTransform(clip->transform);
+    }
+    return true;
+}
+
+bool setKeyframe(Project& project, ObjectId id, AnimProperty property, std::int64_t frame,
+                 double value) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || !std::isfinite(value)) {
+        return false;
+    }
+    return upsertKeyframe(clip->animation.of(property), clip->mediaFrameAt(frame), value);
+}
+
+bool removeKeyframe(Project& project, ObjectId id, AnimProperty property, std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    auto& keys = clip->animation.of(property);
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    const auto it = std::find_if(keys.begin(), keys.end(),
+                                 [mediaFrame](const Keyframe& k) { return k.frame == mediaFrame; });
+    if (it == keys.end()) {
+        return false;
+    }
+    const double value = it->value;
+    keys.erase(it);
+    if (keys.empty()) {
+        transformField(clip->transform, property) = value;
+        clip->transform = clampTransform(clip->transform);
+    }
+    return true;
+}
+
+bool setKeyframeEasing(Project& project, ObjectId id, std::int64_t frame, Easing easing) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    bool changed = false;
+    for (auto& keys : clip->animation.keys) {
+        for (Keyframe& k : keys) {
+            if (k.frame == mediaFrame && k.easing != easing) {
+                k.easing = easing;
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+bool moveKeyframes(Project& project, ObjectId id, std::int64_t from, std::int64_t to) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || from == to) {
+        return false;
+    }
+    const std::int64_t a = clip->mediaFrameAt(from);
+    const std::int64_t b = clip->mediaFrameAt(to);
+    bool changed = false;
+    for (auto& keys : clip->animation.keys) {
+        const bool taken =
+            std::any_of(keys.begin(), keys.end(), [b](const Keyframe& k) { return k.frame == b; });
+        for (Keyframe& k : keys) {
+            if (k.frame == a && !taken) {
+                k.frame = b;
+                changed = true;
+            }
+        }
+        std::sort(keys.begin(), keys.end(),
+                  [](const Keyframe& x, const Keyframe& y) { return x.frame < y.frame; });
+    }
+    return changed;
+}
+
+bool setClipAnimation(Project& project, ObjectId id, const ClipAnimation& animation) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || clip->animation == animation) {
+        return false;
+    }
+    clip->animation = animation;
+    for (auto& keys : clip->animation.keys) {
+        std::sort(keys.begin(), keys.end(),
+                  [](const Keyframe& x, const Keyframe& y) { return x.frame < y.frame; });
+    }
+    return true;
+}
+
 bool setClipVolume(Project& project, ObjectId clip, double volumeDb) {
     const auto ref = project.findClip(clip);
     if (!ref || project.tracks[ref->track].kind != TrackKind::Audio ||

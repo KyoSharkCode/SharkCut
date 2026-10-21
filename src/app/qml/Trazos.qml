@@ -48,6 +48,8 @@ QtObject {
         "audio": "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0M21 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0",
         "aleta": "M3 18c4-1 7-6 9-14 1 6 4 11 9 14M3 18h18",
         "keyframe": "M12 3l9 9-9 9-9-9z",
+        "keyframeLleno": "M12 4l8 8-8 8-8-8z",
+        "reloj": "M12 21a8 8 0 1 0 0-16a8 8 0 1 0 0 16M12 9v4l2.5 1.5M10 2.5h4M12 2.5v2.5",
         "carpeta": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
         "carpetaNueva": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6",
         "secuencia": "M3 6h9M15 6h6M3 12h5M11 12h10M3 18h12M18 18h3",

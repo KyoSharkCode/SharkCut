@@ -152,10 +152,10 @@ public:
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
             CompositorLayer& out = input.layers.emplace_back();
             out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
-            out.transform = scaled(layer.clip->transform);
+            out.transform = scaled(transformAt(*layer.clip, frame));
             if (layer.transition) {
                 out.b = reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
-                out.transformB = scaled(layer.clipB->transform);
+                out.transformB = scaled(transformAt(*layer.clipB, frame));
                 out.transition = layer.transition->params;
                 out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);
             }

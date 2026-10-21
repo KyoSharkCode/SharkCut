@@ -362,6 +362,25 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     placement.chromaKey = {}; // el icono indica solo cambios de colocación
     entry[QStringLiteral("transformed")] = placement != sharkcut::ClipTransform{};
     entry[QStringLiteral("name")] = item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    // Keyframes (de cualquier propiedad) que caen dentro del clip, en la línea de tiempo.
+    QVariantList keyframes;
+    if (!clip.animation.empty()) {
+        std::vector<std::int64_t> frames;
+        for (const auto& keys : clip.animation.keys) {
+            for (const sharkcut::Keyframe& k : keys) {
+                const std::int64_t f = clip.start + (k.frame - clip.in);
+                if (f >= clip.start && f < clip.end()) {
+                    frames.push_back(f);
+                }
+            }
+        }
+        std::sort(frames.begin(), frames.end());
+        frames.erase(std::unique(frames.begin(), frames.end()), frames.end());
+        for (const std::int64_t f : frames) {
+            keyframes.append(static_cast<qint64>(f));
+        }
+    }
+    entry[QStringLiteral("keyframes")] = keyframes;
     // Para las miniaturas de la línea de tiempo: el proxy si lo hay (mucho más rápido),
     // y los fps del medio (el tramo del clip va en fotogramas de la secuencia).
     if (item && item->hasVideo) {
@@ -525,6 +544,7 @@ QVariantMap Editor::selectedClip() const {
             result[QStringLiteral("videoLocked")] = track.locked;
             result[QStringLiteral("videoHidden")] = track.hidden;
             result[QStringLiteral("transform")] = transformToMap(t);
+            result[QStringLiteral("animation")] = animationInfo(clip);
             result[QStringLiteral("box")] = QVariantMap{
                 {QStringLiteral("left"), box.left},
                 {QStringLiteral("top"), box.top},
@@ -648,7 +668,7 @@ sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
         return m_previewTransform;
     }
     const Clip* c = project().clip(clip);
-    return c ? c->transform : sharkcut::ClipTransform{};
+    return c ? sharkcut::transformAt(*c, m_currentFrame) : sharkcut::ClipTransform{};
 }
 
 Editor::CanvasBox Editor::canvasBox(const Clip& clip, const sharkcut::ClipTransform& t) const {
@@ -2439,8 +2459,7 @@ void Editor::previewTransform(qint64 clipId, const QVariantMap& values) {
         project().tracks[ref->track].locked) {
         return;
     }
-    const sharkcut::ClipTransform base =
-        m_previewClip == id ? m_previewTransform : project().clip(id)->transform;
+    const sharkcut::ClipTransform base = transformOf(id); // la vista previa, si ya la hay
     m_previewClip = id;
     m_previewTransform = withValues(base, values);
     emit selectedClipChanged();
@@ -2462,11 +2481,12 @@ void Editor::setClipTransform(qint64 clipId, const QVariantMap& values, const QS
         return;
     }
     // Lo que se previsualizaba es la base: así un arrastre termina donde se soltó.
-    const sharkcut::ClipTransform t =
-        withValues(m_previewClip == id ? m_previewTransform : clip->transform, values);
+    const sharkcut::ClipTransform t = withValues(transformOf(id), values);
     m_previewClip = 0;
-    if (!edit(label.isEmpty() ? QStringLiteral("Transformar") : label,
-              [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); })) {
+    const std::int64_t frame = m_currentFrame;
+    if (!edit(label.isEmpty() ? QStringLiteral("Transformar") : label, [id, t, frame](Project& p) {
+            return sharkcut::setClipTransformAt(p, id, t, frame);
+        })) {
         emit selectedClipChanged();
         emit compositionChanged();
     }
@@ -2478,7 +2498,7 @@ void Editor::fitClip(qint64 clipId, bool fill) {
     if (!clip) {
         return;
     }
-    sharkcut::ClipTransform t = clip->transform;
+    sharkcut::ClipTransform t = transformOf(id);
     t.scale = 1.0;
     const CanvasBox base = canvasBox(*clip, t); // a escala 1, con su recorte
     if (base.width <= 0 || base.height <= 0) {
@@ -2493,8 +2513,9 @@ void Editor::fitClip(qint64 clipId, bool fill) {
     t.x = -(t.cropLeft - t.cropRight) / 2.0 * base.fullWidth * t.scale;
     t.y = -(t.cropTop - t.cropBottom) / 2.0 * base.fullHeight * t.scale;
     m_previewClip = 0;
+    const std::int64_t frame = m_currentFrame;
     edit(fill ? QStringLiteral("Rellenar el lienzo") : QStringLiteral("Ajustar al lienzo"),
-         [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); });
+         [id, t, frame](Project& p) { return sharkcut::setClipTransformAt(p, id, t, frame); });
 }
 
 void Editor::resetTransform(qint64 clipId) {
@@ -2507,8 +2528,11 @@ void Editor::resetTransform(qint64 clipId) {
     sharkcut::ClipTransform t;
     t.chromaKey = clip->transform.chromaKey;
     m_previewClip = 0;
-    edit(QStringLiteral("Restablecer transformación"),
-         [id, t](Project& p) { return sharkcut::setClipTransform(p, id, t); });
+    // También quita los keyframes.
+    edit(QStringLiteral("Restablecer transformación"), [id, t](Project& p) {
+        const bool animation = sharkcut::setClipAnimation(p, id, {});
+        return sharkcut::setClipTransform(p, id, t) || animation;
+    });
 }
 
 void Editor::applyEffect(qint64 clipId, const QString& effect) {
@@ -2707,8 +2731,16 @@ QStringList Editor::transitionNames() const {
 
 QStringList Editor::easingNames() const {
     QStringList names;
-    for (const auto& info : sharkcut::kEasings) {
-        names << fromView(info.name);
+    for (std::size_t i = 0; i < sharkcut::kTransitionEasings; ++i) {
+        names << fromView(sharkcut::kEasings[i].name);
+    }
+    return names;
+}
+
+QStringList Editor::keyframeEasingNames() const {
+    QStringList names;
+    for (const sharkcut::Easing e : sharkcut::kKeyframeEasings) {
+        names << fromView(sharkcut::kEasings[static_cast<std::size_t>(e)].name);
     }
     return names;
 }
@@ -2892,7 +2924,7 @@ void Editor::setTransitionValue(qint64 id, const QString& key, double value) {
         label = QStringLiteral("Desenfoque de la transición");
     } else if (key == QLatin1String("easing")) {
         const auto index = static_cast<std::size_t>(std::max(0.0, value));
-        if (index >= sharkcut::kEasings.size()) {
+        if (index >= sharkcut::kTransitionEasings) {
             return;
         }
         params.easing = sharkcut::kEasings[index].easing;
@@ -3418,6 +3450,14 @@ void Editor::setCurrentFrame(qint64 frame) {
     if (m_currentFrame != frame) {
         m_currentFrame = frame;
         emit currentFrameChanged();
+        // Propiedades muestra los valores en el cabezal: si el clip está animado, cambian.
+        for (const ObjectId id : m_selection) {
+            const Clip* c = project().clip(id);
+            if (c && !c->animation.empty()) {
+                emit selectedClipChanged();
+                break;
+            }
+        }
     }
 }
 

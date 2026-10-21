@@ -766,6 +766,15 @@ ctest --preset windows-debug
        sin AVX-512 ni GGML_NATIVE), que además sirve para repartirlo en la fase 5, y
        transcribe() comprueba AVX2 antes de empezar (mensaje claro en un PC sin él).
        Alternativa futura, más rápida en cada PC: GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS.
+     - [x] 5.1 Keyframes (orden acordado con Kyo: keyframes → efectos → ajustes guardados →
+       anclaje → .webm con transparencia → mover subtítulos en el visor). Posición, escala,
+       opacidad y recorte se animan con ⏱ en Propiedades; con la propiedad animada, cada
+       cambio (en Propiedades o arrastrando en el visor) crea o actualiza el keyframe del
+       cabezal; ◀ ◆ ▶ para ir al anterior, poner o quitar uno, ir al siguiente; curva por
+       keyframe (lineal, suave, entrada suave, salida suave, explosiva, con rebote, cúbica
+       y mantener). Los keyframes se ven (◆) sobre el clip en la línea de tiempo: clic para
+       ir, arrastrar para moverlos. Siguen al contenido al recortar o dividir el clip.
+       Archivo .sharkp versión 7.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).

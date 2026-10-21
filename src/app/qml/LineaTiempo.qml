@@ -947,6 +947,67 @@ Rectangle {
                                     }
                                 }
 
+                                // Keyframes del clip (◆ abajo): clic = ir ahí; arrastrar = moverlo.
+                                Repeater {
+                                    model: elemento.esVideo && !elemento.bloque && elemento.width > 16
+                                           && !elemento.enArrastre ? (elemento.modelData.keyframes || []) : []
+                                    delegate: Item {
+                                        id: rombo
+                                        required property var modelData
+                                        readonly property real fotograma: modelData
+                                        property real desplazado: 0 // fotogramas, mientras se arrastra
+                                        x: (fotograma + desplazado - elemento.modelData.start) * raiz.escala - 6
+                                        y: elemento.height - 13
+                                        width: 12
+                                        height: 12
+                                        z: 5
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: 7
+                                            height: 7
+                                            rotation: 45
+                                            color: zonaRombo.pressed || zonaRombo.containsMouse
+                                                   ? Theme.cabezal : Theme.texto
+                                            border.color: Theme.fondo
+                                        }
+                                        MouseArea {
+                                            id: zonaRombo
+                                            anchors.fill: parent
+                                            anchors.margins: -2
+                                            hoverEnabled: true
+                                            preventStealing: true
+                                            enabled: !elemento.bloqueado
+                                            cursorShape: Qt.SizeHorCursor
+                                            property real xInicial: 0
+                                            onPressed: (m) => {
+                                                xInicial = mapToItem(contenido, m.x, 0).x
+                                                raiz.editor.seek(rombo.fotograma)
+                                            }
+                                            onPositionChanged: (m) => {
+                                                if (!pressed)
+                                                    return
+                                                const c = elemento.modelData
+                                                const f = Math.round(rombo.fotograma
+                                                    + (mapToItem(contenido, m.x, 0).x - xInicial) / raiz.escala)
+                                                rombo.desplazado = Math.max(c.start, Math.min(c.start + c.length - 1, f))
+                                                                   - rombo.fotograma
+                                            }
+                                            onReleased: {
+                                                const d = rombo.desplazado
+                                                rombo.desplazado = 0
+                                                if (d !== 0) {
+                                                    Qt.callLater(raiz.editor.moveKeyframes, elemento.modelData.id,
+                                                                 rombo.fotograma, rombo.fotograma + d)
+                                                    raiz.editor.seek(rombo.fotograma + d)
+                                                }
+                                            }
+                                        }
+                                        ToolTip.visible: zonaRombo.containsMouse && !zonaRombo.pressed
+                                        ToolTip.delay: 600
+                                        ToolTip.text: "Keyframe: clic para ir, arrastra para moverlo"
+                                    }
+                                }
+
                                 // Bloque de clips diminutos: cuántos son.
                                 Loader {
                                     active: elemento.bloque && elemento.width > 160

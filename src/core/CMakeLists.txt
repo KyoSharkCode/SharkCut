@@ -18,6 +18,8 @@ add_library(sharkcut_core STATIC
     clip_preset.cpp
     motion_anchor.h
     motion_anchor.cpp
+    version.h
+    version.cpp
     edit.h
     edit.cpp
     history.h

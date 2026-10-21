@@ -6,9 +6,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 
-ModelDownload::ModelDownload(QUrl url, QString target, qint64 size, QByteArray sha256Hex)
+ModelDownload::ModelDownload(QUrl url, QString target, qint64 size, QByteArray sha256Hex,
+                             QString what)
     : m_url(std::move(url)), m_target(std::move(target)), m_size(size),
-      m_sha256(std::move(sha256Hex)) {}
+      m_sha256(std::move(sha256Hex)), m_what(std::move(what)) {}
 
 void ModelDownload::start() {
     QDir().mkpath(QFileInfo(m_target).absolutePath());
@@ -42,7 +43,7 @@ void ModelDownload::onReadyRead() {
     const QByteArray data = m_reply->readAll();
     if (m_file.write(data) != data.size()) {
         m_reply->abort();
-        fail(QStringLiteral("No se pudo guardar el modelo (¿disco lleno?)"));
+        fail(QStringLiteral("No se pudo guardar %1 (¿disco lleno?)").arg(m_what));
         return;
     }
     m_hash.addData(data);
@@ -59,18 +60,19 @@ void ModelDownload::onFinished() {
         return;
     }
     if (m_reply->error() != QNetworkReply::NoError) {
-        fail(QStringLiteral("No se pudo descargar el modelo: %1").arg(m_reply->errorString()));
+        fail(QStringLiteral("No se pudo descargar %1: %2").arg(m_what, m_reply->errorString()));
         return;
     }
     onReadyRead(); // lo que quede
     m_file.close();
     if (m_received != m_size || m_hash.result().toHex() != m_sha256) {
-        fail(QStringLiteral("El modelo descargado está incompleto o dañado; vuelve a intentarlo"));
+        fail(QStringLiteral("Lo descargado (%1) está incompleto o dañado; vuelve a intentarlo")
+                 .arg(m_what));
         return;
     }
     QFile::remove(m_target);
     if (!QFile::rename(m_file.fileName(), m_target)) {
-        fail(QStringLiteral("No se pudo guardar el modelo en %1").arg(m_target));
+        fail(QStringLiteral("No se pudo guardar %1 en %2").arg(m_what, m_target));
         return;
     }
     m_done = true;

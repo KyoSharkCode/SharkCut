@@ -31,6 +31,7 @@ qt_add_qml_module(SharkCut
         qml/DialogoNombre.qml
         qml/DialogoSubtitulos.qml
         qml/DialogoAjusteClip.qml
+        qml/DialogoActualizacion.qml
         qml/MenuTema.qml
         qml/BarraDesplazamiento.qml
         qml/PanelBiblioteca.qml
@@ -54,6 +55,8 @@ qt_add_qml_module(SharkCut
         editor_transcription.cpp
         modeldownload.h
         modeldownload.cpp
+        updater.h
+        updater.cpp
         logging.h
         logging.cpp
         thumbnails.h
@@ -64,7 +67,15 @@ qt_add_qml_module(SharkCut
         proxies.cpp
         timelinemodel.cpp
         waveforms.cpp
+    RESOURCES
+        icons/sharkcut.png
 )
+
+# Icono y versión del ejecutable en Windows (generados por tools/icono/generar_icono.py).
+if(WIN32)
+    configure_file(sharkcut.rc.in ${CMAKE_CURRENT_BINARY_DIR}/sharkcut.rc @ONLY)
+    target_sources(SharkCut PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/sharkcut.rc)
+endif()
 
 # El ejecutable va a bin/ para no chocar con la carpeta del módulo QML "SharkCut".
 set_target_properties(SharkCut PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
@@ -119,3 +130,5 @@ if(WIN32)
     )
     install(FILES ${SHARKCUT_FFMPEG_LICENSE} DESTINATION licenses RENAME FFmpeg.txt)
 endif()
+# Licencias de los componentes (ver licenses/LEEME.md).
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/licenses/ DESTINATION licenses)

@@ -1,4 +1,5 @@
 #include "core/time.h"
+#include "core/version.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -133,4 +134,17 @@ TEST_CASE("formatTimecode genera HH:MM:SS:FF", "[time]") {
     // 29,97 fps usa 30 como fps nominales (sin drop-frame).
     CHECK(kNtsc.nominal() == 30);
     CHECK(formatTimecode(30, kNtsc) == "00:00:01:00");
+}
+
+TEST_CASE("Version numbers are compared for updates", "[version]") {
+    CHECK(parseVersion("v0.1.0") == Version{0, 1, 0});
+    CHECK(parseVersion("1.2") == Version{1, 2, 0});
+    CHECK(parseVersion("0.10.3-beta") == Version{0, 10, 3});
+    CHECK_FALSE(parseVersion("latest"));
+    CHECK_FALSE(parseVersion("v1"));
+    CHECK(isNewerVersion("v0.1.1", "0.1.0"));
+    CHECK(isNewerVersion("v0.10.0", "0.9.9"));
+    CHECK_FALSE(isNewerVersion("v0.1.0", "0.1.0"));
+    CHECK_FALSE(isNewerVersion("v0.0.9", "0.1.0"));
+    CHECK_FALSE(isNewerVersion("nightly", "0.1.0"));
 }

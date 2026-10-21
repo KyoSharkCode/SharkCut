@@ -1,7 +1,9 @@
 #include "logging.h"
 #include "thumbnails.h"
+#include "updater.h"
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QMouseEvent>
 #include <QNetworkProxyFactory>
 #include <QQmlApplicationEngine>
@@ -48,6 +50,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("SharkCut"));
     QGuiApplication::setApplicationVersion(QStringLiteral(SHARKCUT_VERSION));
     QGuiApplication::setOrganizationName(QStringLiteral("KyoSumiVT"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/SharkCut/icons/sharkcut.png")));
     logging::install();
     // La descarga del modelo de subtítulos usa el proxy del sistema, si lo hay.
     QNetworkProxyFactory::setUseSystemConfiguration(true);
@@ -64,6 +67,7 @@ int main(int argc, char* argv[]) {
     engine.loadFromModule("SharkCut", "Main");
 
     const int result = QGuiApplication::exec();
+    Updater::runPendingInstaller(); // si se pidió instalar una actualización al cerrar
     logging::closing();
     return result;
 }

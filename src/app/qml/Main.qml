@@ -83,6 +83,22 @@ Window {
         onAccepted: editor.saveAs(selectedFile)
         onRejected: ventana.accionPendiente = ""
     }
+    // --- Actualizaciones: al abrir se busca una versión nueva (si está activado) ---
+    DialogoActualizacion {
+        id: dialogoActualizacion
+        onCerrarEInstalar: ventana.close()
+    }
+    Connections {
+        target: Updater
+        function onUpdateFound() { dialogoActualizacion.open() }
+    }
+    Timer {
+        // Un poco después de abrir: que la ventana no espere a la red.
+        interval: 4000
+        running: true
+        onTriggered: Updater.check(true)
+    }
+
     // --- Subtítulos: opciones y archivos .srt ---
     DialogoSubtitulos {
         id: dialogoSubtitulos
@@ -383,6 +399,18 @@ Window {
             }
 
             Item { Layout.fillWidth: true }
+            // Hay una versión nueva: abre su diálogo.
+            BotonIcono {
+                visible: Updater.state === "disponible" || Updater.state === "descargando"
+                         || Updater.state === "lista"
+                acentuado: true
+                implicitHeight: 28
+                icono: "importar"
+                texto: Updater.state === "lista" ? "Instalar " + Updater.latestVersion
+                       : "Actualización " + Updater.latestVersion
+                ayuda: "Hay una versión nueva de SharkCut"
+                onPulsado: dialogoActualizacion.open()
+            }
             Text {
                 text: editor.projectName
                 color: Theme.texto

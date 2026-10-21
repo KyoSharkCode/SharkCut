@@ -299,6 +299,8 @@ double& transformField(ClipTransform& t, AnimProperty p) {
         return t.cropRight;
     case AnimProperty::CropBottom:
         return t.cropBottom;
+    case AnimProperty::Rotation:
+        return t.rotation;
     }
     return t.x;
 }

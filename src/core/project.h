@@ -67,9 +67,10 @@ inline constexpr double kMaxChromaDistance = 1.0;
 // Colocación de un clip de video en el lienzo. Sin transformar (los valores por
 // defecto), el video se ajusta al lienzo sin deformarse y centrado.
 struct ClipTransform {
-    double x = 0.0;     // desplazamiento del centro en píxeles del lienzo (+x derecha)
-    double y = 0.0;     // (+y abajo)
-    double scale = 1.0; // 1 = ajustado al lienzo
+    double x = 0.0;        // desplazamiento del centro en píxeles del lienzo (+x derecha)
+    double y = 0.0;        // (+y abajo)
+    double scale = 1.0;    // 1 = ajustado al lienzo
+    double rotation = 0.0; // grados, en el sentido de las agujas del reloj (alrededor del centro)
     double opacity = 1.0;
     // Recorte de cada lado, en fracción del ancho o alto del video (0 = nada).
     double cropLeft = 0.0;
@@ -83,16 +84,27 @@ struct ClipTransform {
 
 inline constexpr double kMinScale = 0.01;
 inline constexpr double kMaxScale = 20.0;
-inline constexpr double kMaxCrop = 0.95; // entre dos lados opuestos, como mucho
+inline constexpr double kMaxRotation = 3600.0; // grados (10 vueltas a cada lado)
+inline constexpr double kMaxCrop = 0.95;       // entre dos lados opuestos, como mucho
 
 // --- Animación (keyframes) ----------------------------------------------------------
 
 // Propiedades de un clip de video que se pueden animar.
-enum class AnimProperty { X, Y, Scale, Opacity, CropLeft, CropTop, CropRight, CropBottom };
-inline constexpr std::size_t kAnimPropertyCount = 8;
+enum class AnimProperty {
+    X,
+    Y,
+    Scale,
+    Opacity,
+    CropLeft,
+    CropTop,
+    CropRight,
+    CropBottom,
+    Rotation
+};
+inline constexpr std::size_t kAnimPropertyCount = 9;
 // Identificadores estables (archivo de proyecto, interfaz), en el orden del enum.
 inline constexpr std::array<std::string_view, kAnimPropertyCount> kAnimPropertyIds{
-    "x", "y", "scale", "opacity", "cropLeft", "cropTop", "cropRight", "cropBottom"};
+    "x", "y", "scale", "opacity", "cropLeft", "cropTop", "cropRight", "cropBottom", "rotation"};
 std::optional<AnimProperty> animPropertyFromId(std::string_view id);
 // El campo de la transformación que anima la propiedad.
 double& transformField(ClipTransform& transform, AnimProperty property);

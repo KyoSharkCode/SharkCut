@@ -45,6 +45,7 @@
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <numbers>
 #include <numeric>
 
 using sharkcut::Clip;
@@ -239,6 +240,7 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
         {QStringLiteral("x"), t.x},
         {QStringLiteral("y"), t.y},
         {QStringLiteral("scale"), t.scale},
+        {QStringLiteral("rotation"), t.rotation},
         {QStringLiteral("opacity"), t.opacity},
         {QStringLiteral("cropLeft"), t.cropLeft},
         {QStringLiteral("cropTop"), t.cropTop},
@@ -552,6 +554,10 @@ QVariantMap Editor::selectedClip() const {
                 {QStringLiteral("height"), box.height},
                 {QStringLiteral("fullWidth"), box.fullWidth},
                 {QStringLiteral("fullHeight"), box.fullHeight},
+                // Giro (grados, horario) alrededor del centro del video, en el lienzo.
+                {QStringLiteral("rotation"), t.rotation},
+                {QStringLiteral("pivotX"), project().settings.width / 2.0 + t.x},
+                {QStringLiteral("pivotY"), project().settings.height / 2.0 + t.y},
             };
         } else {
             result[QStringLiteral("audio")] = static_cast<qint64>(id);
@@ -2428,6 +2434,7 @@ sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVar
     take("x", t.x);
     take("y", t.y);
     take("scale", t.scale);
+    take("rotation", t.rotation);
     take("opacity", t.opacity);
     take("cropLeft", t.cropLeft);
     take("cropTop", t.cropTop);
@@ -2621,8 +2628,14 @@ qint64 Editor::clipAtCanvas(double x, double y) const {
     for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
         const sharkcut::ClipTransform t = transformOf(it->clip->id);
         const CanvasBox box = canvasBox(*it->clip, t);
-        if (t.opacity > 0.0 && x >= box.left && x < box.left + box.width && y >= box.top &&
-            y < box.top + box.height) {
+        // El punto, deshaciendo el giro del clip (alrededor del centro del video).
+        const double cx = project().settings.width / 2.0 + t.x;
+        const double cy = project().settings.height / 2.0 + t.y;
+        const double a = -t.rotation * std::numbers::pi / 180.0;
+        const double px = cx + (x - cx) * std::cos(a) - (y - cy) * std::sin(a);
+        const double py = cy + (x - cx) * std::sin(a) + (y - cy) * std::cos(a);
+        if (t.opacity > 0.0 && px >= box.left && px < box.left + box.width && py >= box.top &&
+            py < box.top + box.height) {
             return static_cast<qint64>(it->clip->id);
         }
     }

@@ -746,7 +746,18 @@ Window {
         function aLienzo(px, py) {
             return Qt.point((px - x0) / escalaVista, (py - y0) / escalaVista)
         }
-        function contiene(p) {
+        // El punto con el giro del clip deshecho (la caja es la del clip sin girar).
+        function sinGiro(p) {
+            if (caja === null || !caja.rotation)
+                return p
+            const a = -caja.rotation * Math.PI / 180
+            const dx = p.x - caja.pivotX
+            const dy = p.y - caja.pivotY
+            return Qt.point(caja.pivotX + dx * Math.cos(a) - dy * Math.sin(a),
+                            caja.pivotY + dx * Math.sin(a) + dy * Math.cos(a))
+        }
+        function contiene(punto) {
+            const p = sinGiro(punto)
             return caja !== null && p.x >= caja.left && p.x < caja.left + caja.width
                    && p.y >= caja.top && p.y < caja.top + caja.height
         }
@@ -865,6 +876,77 @@ Window {
             color: "transparent"
             border.color: marco.editable ? Theme.acento : Theme.textoDesactivado
             border.width: 1
+            // Girada como el clip, alrededor del centro del video.
+            transform: Rotation {
+                origin.x: marco.caja ? (marco.caja.pivotX - marco.caja.left) * marco.escalaVista : 0
+                origin.y: marco.caja ? (marco.caja.pivotY - marco.caja.top) * marco.escalaVista : 0
+                angle: marco.caja ? marco.caja.rotation : 0
+            }
+
+            // Tirador de giro: arriba, en el centro. Mayús: de 15° en 15°.
+            Rectangle {
+                visible: marco.editable
+                x: cajaVista.width / 2 - 1
+                y: -22
+                width: 2
+                height: 16
+                color: Theme.acento
+            }
+            Rectangle {
+                id: tiradorGiro
+                visible: marco.editable
+                x: cajaVista.width / 2 - width / 2
+                y: -30
+                width: 12
+                height: 12
+                radius: 6
+                color: Theme.visorFondo
+                border.color: Theme.acento
+                border.width: 2
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -5
+                    preventStealing: true
+                    cursorShape: Qt.CrossCursor
+                    property real anguloInicial: 0
+                    property real giroInicial: 0
+                    property bool movido: false
+                    function anguloEn(m) {
+                        const q = mapToItem(marco, m.x, m.y)
+                        const p = marco.aLienzo(q.x, q.y)
+                        return Math.atan2(p.y - marco.caja.pivotY, p.x - marco.caja.pivotX) * 180 / Math.PI
+                    }
+                    onPressed: (m) => {
+                        anguloInicial = anguloEn(m)
+                        giroInicial = marco.sel.transform.rotation || 0
+                        movido = false
+                        marco.modo = "girar"
+                    }
+                    onPositionChanged: (m) => {
+                        if (!pressed)
+                            return
+                        let d = anguloEn(m) - anguloInicial
+                        if (d > 180) d -= 360
+                        if (d < -180) d += 360
+                        let giro = giroInicial + d
+                        if (m.modifiers & Qt.ShiftModifier)
+                            giro = Math.round(giro / 15) * 15
+                        movido = true
+                        editor.previewTransform(marco.sel.video, { rotation: giro })
+                    }
+                    onReleased: {
+                        if (movido)
+                            editor.setClipTransform(marco.sel.video, {}, "Girar en el visor")
+                        else
+                            editor.endPreview()
+                        marco.modo = ""
+                    }
+                    onCanceled: {
+                        editor.endPreview()
+                        marco.modo = ""
+                    }
+                }
+            }
 
             Repeater {
                 model: marco.editable ? [[0, 0], [1, 0], [0, 1], [1, 1]] : []

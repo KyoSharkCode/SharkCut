@@ -585,6 +585,19 @@ Rectangle {
                     onCambiado: (v) => propiedades.aplicar({ scale: v / 100 }, "Escala")
                 }
                 CampoAnimable {
+                    clave: "rotation"
+                    etiqueta: "Rotación"
+                    unidad: "°"
+                    decimales: 1
+                    paso: 0.5
+                    desde: -3600
+                    hasta: 3600
+                    valor: propiedades.t.rotation || 0
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ rotation: v })
+                    onCambiado: (v) => propiedades.aplicar({ rotation: v }, "Rotación")
+                }
+                CampoAnimable {
                     clave: "opacity"
                     etiqueta: "Opacidad"
                     unidad: "%"
@@ -670,7 +683,8 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: "Arrastra el número para cambiarlo (Mayús: más rápido, Ctrl: más fino) "
                           + "o haz clic para escribirlo. En el visor: arrastra el clip para "
-                          + "moverlo y sus esquinas para escalarlo. ⏱ anima la propiedad: "
+                          + "moverlo, sus esquinas para escalarlo y el círculo de arriba para "
+                          + "girarlo (Mayús: de 15° en 15°). ⏱ anima la propiedad: "
                           + "cada cambio en otro momento crea un keyframe ahí (◆)."
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno

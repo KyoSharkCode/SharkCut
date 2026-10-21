@@ -453,10 +453,15 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
     LayerUniforms u{};
     const QSizeF fit = fitScale(sizeY, m_canvasSize);
     QMatrix4x4 transform = m_rhi->clipSpaceCorrMatrix();
-    transform.translate(static_cast<float>(2.0 * t.x / m_canvasSize.width()),
-                        static_cast<float>(-2.0 * t.y / m_canvasSize.height()));
-    transform.scale(static_cast<float>(fit.width() * t.scale),
-                    static_cast<float>(fit.height() * t.scale));
+    // Se gira en píxeles (si no, en un lienzo no cuadrado el giro deformaría la imagen):
+    // del cuadro (−1…1) a píxeles, giro, y de vuelta a coordenadas del lienzo.
+    const double halfW = m_canvasSize.width() / 2.0;
+    const double halfH = m_canvasSize.height() / 2.0;
+    transform.translate(static_cast<float>(t.x / halfW), static_cast<float>(-t.y / halfH));
+    transform.scale(static_cast<float>(1.0 / halfW), static_cast<float>(1.0 / halfH));
+    transform.rotate(static_cast<float>(-t.rotation), 0.0f, 0.0f, 1.0f); // +: horario
+    transform.scale(static_cast<float>(fit.width() * t.scale * halfW),
+                    static_cast<float>(fit.height() * t.scale * halfH));
     std::copy(transform.constData(), transform.constData() + 16, u.transform);
     const auto colors = yuvToRgbMatrix(frame.matrix, frame.fullRange);
     const QMatrix4x4 yuvToRgb(colors.data()); // por filas → se guarda por columnas, como GLSL

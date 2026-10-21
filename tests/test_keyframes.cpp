@@ -126,3 +126,17 @@ TEST_CASE("Animation survives a project round trip", "[keyframes][project]") {
     const Project loaded = projectFromJson(projectToJson(t.p, {}), {});
     CHECK(loaded.clip(t.clip)->animation == t.c().animation);
 }
+
+TEST_CASE("Rotation is animated, saved and kept in range", "[keyframes]") {
+    OneClip t;
+    REQUIRE(setKeyframe(t.p, t.clip, AnimProperty::Rotation, 0, 0.0));
+    REQUIRE(setKeyframe(t.p, t.clip, AnimProperty::Rotation, 120, 720.0)); // dos vueltas
+    CHECK(transformAt(t.c(), 60).rotation == Approx(360.0));
+    ClipTransform still = t.c().transform;
+    still.rotation = 1e9;
+    CHECK(clampTransform(still).rotation == kMaxRotation);
+    REQUIRE(setPropertyAnimated(t.p, t.clip, AnimProperty::Rotation, false, 30));
+    CHECK(t.c().transform.rotation == Approx(180.0));
+    const Project loaded = projectFromJson(projectToJson(t.p, {}), {});
+    CHECK(loaded.clip(t.clip)->transform.rotation == Approx(180.0));
+}

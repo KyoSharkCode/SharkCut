@@ -593,6 +593,8 @@ ClipTransform clampTransform(ClipTransform t) {
     constexpr double kMaxOffset = 1'000'000.0;
     t.x = std::clamp(finite(t.x, 0.0), -kMaxOffset, kMaxOffset);
     t.y = std::clamp(finite(t.y, 0.0), -kMaxOffset, kMaxOffset);
+    // Varias vueltas valen (para animar un giro de 720°…).
+    t.rotation = std::clamp(finite(t.rotation, 0.0), -kMaxRotation, kMaxRotation);
     t.scale = std::clamp(finite(t.scale, 1.0), kMinScale, kMaxScale);
     t.opacity = std::clamp(finite(t.opacity, 1.0), 0.0, 1.0);
     t.cropLeft = std::clamp(finite(t.cropLeft, 0.0), 0.0, kMaxCrop);

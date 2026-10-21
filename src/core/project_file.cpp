@@ -266,6 +266,7 @@ json transformToJson(const ClipTransform& t) {
         {"x", t.x},
         {"y", t.y},
         {"scale", t.scale},
+        {"rotation", t.rotation},
         {"opacity", t.opacity},
         {"crop", json::array({t.cropLeft, t.cropTop, t.cropRight, t.cropBottom})},
     };
@@ -285,6 +286,7 @@ ClipTransform transformFromJson(const json& value) {
     t.x = value.value("x", 0.0);
     t.y = value.value("y", 0.0);
     t.scale = value.value("scale", 1.0);
+    t.rotation = value.value("rotation", 0.0);
     t.opacity = value.value("opacity", 1.0);
     if (const auto crop = value.find("crop"); crop != value.end()) {
         t.cropLeft = crop->at(0).get<double>();

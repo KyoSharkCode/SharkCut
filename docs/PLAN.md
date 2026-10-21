@@ -770,7 +770,9 @@ ctest --preset windows-debug
        anclaje → .webm con transparencia → mover subtítulos en el visor). Posición, escala,
        opacidad y recorte se animan con ⏱ en Propiedades; con la propiedad animada, cada
        cambio (en Propiedades o arrastrando en el visor) crea o actualiza el keyframe del
-       cabezal; ◀ ◆ ▶ para ir al anterior, poner o quitar uno, ir al siguiente; curva por
+       cabezal (también la rotación, añadida tras la prueba de Kyo: en Propiedades y con un
+       tirador en el visor, Mayús de 15° en 15°); ◀ ◆ ▶ para ir al anterior, poner o quitar
+       uno, ir al siguiente; curva por
        keyframe (lineal, suave, entrada suave, salida suave, explosiva, con rebote, cúbica
        y mantener). Los keyframes se ven (◆) sobre el clip en la línea de tiempo: clic para
        ir, arrastrar para moverlos. Siguen al contenido al recortar o dividir el clip.

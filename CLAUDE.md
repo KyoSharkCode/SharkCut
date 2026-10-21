@@ -165,6 +165,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   <datos de la app>/registros/sharkcut-<fecha>.log (se guardan las últimas 8); en Windows,
   un cierre por fallo apunta el código y deja ultimo-cierre.dmp. Botón «Abrir la carpeta
   de registros» en Proyectos. SHARKCUT_LOG=consola: todo por la consola, sin archivo.
+- Entrega: versión en CMakeLists (project VERSION) y src/core/version.h (comparar versiones).
+  Updater (src/app/updater.h, qml/DialogoActualizacion.qml): al abrir consulta
+  releases/latest de GitHub (SHARKCUT_UPDATE_FEED la cambia para pruebas), descarga el
+  *-Setup.exe con ModelDownload (SHA-256 del `digest`) y lo ejecuta en silencio al cerrar.
+  Instalador: installer/SharkCut.iss (Inno Setup, sin administrador). Icono:
+  src/app/icons (tools/icono/generar_icono.py). Licencias de terceros: licenses/.
+  Publicar: subir la etiqueta vX.Y.Z (igual a la versión de CMake) con
+  docs/novedades/X.Y.Z.md; CI crea la versión con el instalador y el .zip. Página de
+  descarga: web/ (GitHub Pages, .github/workflows/pages.yml).
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.

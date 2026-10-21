@@ -170,6 +170,30 @@ Item {
                     ayuda: "Lo que pasó en cada sesión (y si se cerró por un fallo), para enviarlo"
                     onPulsado: pagina.editor.openLogFolder()
                 }
+
+                // Actualizaciones
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "importar"
+                    texto: Updater.state === "buscando" ? "Buscando…" : "Buscar actualizaciones"
+                    enabled: Updater.state !== "buscando" && Updater.state !== "descargando"
+                    onPulsado: Updater.check(false)
+                }
+                Text {
+                    visible: Updater.message.length > 0 && Updater.state !== "descargando"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: Updater.message
+                    color: Updater.state === "error" ? Theme.error : Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    texto: "Buscar al abrir SharkCut"
+                    activo: Updater.autoCheck
+                    ayuda: "Al abrir, mira si hay una versión nueva y te la ofrece"
+                    onPulsado: Updater.autoCheck = !Updater.autoCheck
+                }
             }
         }
 

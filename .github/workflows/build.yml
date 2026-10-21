@@ -3,6 +3,8 @@ name: Compilación
 on:
   push:
     branches: [main, "claude/**"]
+    # Una etiqueta vX.Y.Z publica esa versión (GitHub Releases): instalador y .zip.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -13,6 +15,8 @@ jobs:
   windows:
     name: Windows (MSVC)
     runs-on: windows-latest
+    permissions:
+      contents: write # publicar la versión (solo con una etiqueta v*)
     steps:
       - uses: actions/checkout@v5
 
@@ -52,6 +56,49 @@ jobs:
         with:
           name: SharkCut-windows
           path: dist/SharkCut
+
+      # Versión del proyecto (CMakeLists.txt). Con una etiqueta, debe coincidir con ella.
+      - name: Versión
+        id: version
+        shell: pwsh
+        run: |
+          $linea = Select-String -Path CMakeLists.txt -Pattern '^\s*VERSION\s+(\d+\.\d+\.\d+)' | Select-Object -First 1
+          $version = $linea.Matches[0].Groups[1].Value
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$version") {
+            throw "La etiqueta ${{ github.ref_name }} no coincide con la versión del proyecto ($version)"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Instalador
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc /Qp "/DAppVersion=${{ steps.version.outputs.version }}" `
+            "/DSourceDir=${{ github.workspace }}\dist\SharkCut" `
+            "/DOutputDir=${{ github.workspace }}\dist" installer\SharkCut.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup falló ($LASTEXITCODE)" }
+          Compress-Archive -Path dist\SharkCut -DestinationPath "dist\SharkCut-${{ steps.version.outputs.version }}-Windows.zip"
+
+      - name: Subir instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: SharkCut-instalador
+          path: dist/SharkCut-*-Setup.exe
+
+      # Solo con una etiqueta v*: la versión en GitHub Releases, con sus novedades
+      # (docs/novedades/<versión>.md). SharkCut y la página de descarga la buscan ahí.
+      - name: Publicar la versión
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SharkCut ${{ steps.version.outputs.version }}
+          body_path: docs/novedades/${{ steps.version.outputs.version }}.md
+          files: |
+            dist/SharkCut-${{ steps.version.outputs.version }}-Setup.exe
+            dist/SharkCut-${{ steps.version.outputs.version }}-Windows.zip
 
   linux:
     name: Linux (GCC)

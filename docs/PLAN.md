@@ -420,6 +420,12 @@ echar de menos Premiere.
 - Mejora de los efectos de sonido (generador o sonidos CC0 registrados).
 - 0.1.0 Early Access para Kyo y sus amigos (.zip o instalador, y si se quiere una web
   sencilla de descarga).
+- Hecho: instalador Inno Setup por usuario (installer/SharkCut.iss, con asociación de
+  .sharkp), icono propio (tools/icono), carpeta licenses/, página de descarga (web/, en
+  GitHub Pages) y actualizaciones automáticas (Updater: mira la última versión publicada
+  en GitHub al abrir, descarga el instalador, comprueba su SHA-256 y lo ejecuta al cerrar).
+  Una versión se publica subiendo la etiqueta vX.Y.Z (CI compila y crea la versión con
+  docs/novedades/X.Y.Z.md).
 **Hecho cuando:** los amigos de Kyo instalan SharkCut y editan con él.
 
 ### Fase 6 — Lo pro

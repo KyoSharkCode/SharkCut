@@ -68,11 +68,15 @@ ColumnLayout {
             y: control.height + 2
             width: control.width
             padding: 2
-            implicitHeight: contentItem.implicitHeight + 4
+            // Las listas largas no pasan de 360 px: se desplazan.
+            implicitHeight: Math.min(contentItem.implicitHeight, 360) + 4
             contentItem: ListView {
                 clip: true
                 implicitHeight: contentHeight
                 model: control.popup.visible ? control.delegateModel : null
+                currentIndex: control.highlightedIndex
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: BarraDesplazamiento {}
             }
             background: Rectangle {
                 color: Theme.panel

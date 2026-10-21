@@ -89,7 +89,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.
   tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
   edición de una línea de tiempo grande (sin Qt).
-  Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
+  Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir). Listas
+  desplegables: qml/Selector.qml (con desplazamiento); fuentes: qml/SelectorFuente.qml
+  (búsqueda y favoritas, guardadas en QSettings "fuentes/favoritas").
   Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
   añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.

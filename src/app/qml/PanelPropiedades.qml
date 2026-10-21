@@ -335,17 +335,9 @@ Rectangle {
                                                             propiedades.estiloPista)
                     }
                 }
-                Selector {
-                    etiqueta: "Fuente"
-                    // La del estilo aunque no esté instalada (p. ej. un proyecto de otro PC).
-                    readonly property string actual: propiedades.estilo.font || ""
-                    readonly property var fuentes: {
-                        const lista = Qt.fontFamilies()
-                        return lista.indexOf(actual) >= 0 || actual === "" ? lista : [actual].concat(lista)
-                    }
-                    model: fuentes
-                    indice: Math.max(0, fuentes.indexOf(actual))
-                    onElegido: (i) => propiedades.aplicarEstilo({ font: fuentes[i] }, "Fuente")
+                SelectorFuente {
+                    fuente: propiedades.estilo.font || ""
+                    onElegida: (f) => propiedades.aplicarEstilo({ font: f }, "Fuente")
                 }
                 CampoNumero {
                     etiqueta: "Tamaño"

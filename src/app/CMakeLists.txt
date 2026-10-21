@@ -18,6 +18,7 @@ qt_add_qml_module(SharkCut
         qml/Deslizador.qml
         qml/CampoNumero.qml
         qml/Selector.qml
+        qml/SelectorFuente.qml
         qml/LineaTiempo.qml
         qml/Icono.qml
         qml/Trazos.qml

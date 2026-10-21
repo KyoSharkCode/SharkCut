@@ -72,6 +72,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Se aplican desde la pestaña Efectos (Editor::applyEffect; a todos los clips de video
   seleccionados si el clip es uno de ellos) y se ajustan en Propiedades. Selección por
   cuadro en LineaTiempo (marcoSeleccion → Editor::selectArea).
+  Copiar y pegar clips: copyClips/pasteClips (edit.h, Clipboard con sus medios) y
+  Editor::copySelection/cutSelection/pasteAtPlayhead (Ctrl+C/X/V).
+  Un clic fuera de un campo de texto le quita el teclado (FocusRelease en main.cpp): si
+  no, los atajos de una tecla dejaban de funcionar.
   Ajustes guardados (presets de clips): src/core/clip_preset.h (presetFromClip,
   applyPreset; partes que lleva y animación en µs desde el inicio o el final del clip;
   JSON en project_file.cpp). Se guardan en QSettings "efectos/ajustes" (todos los

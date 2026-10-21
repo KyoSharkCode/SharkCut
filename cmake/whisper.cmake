@@ -41,6 +41,15 @@ FetchContent_Declare(
 )
 # Biblioteca estática y siempre optimizada: sin optimizar (Debug), transcribir unos
 # segundos tarda minutos. Solo afecta a whisper y ggml (las variables se restauran).
+# whisper.cpp pide CMake 3.5, así que su option(BUILD_SHARED_LIBS) seguía la política
+# antigua (CMP0077): ignoraba el OFF de aquí y creaba ggml y whisper como DLL en bin/,
+# donde sharkcut_tests.exe no las encontraba (0xc0000135 en Windows). Con la política
+# nueva respeta el OFF. Las compilaciones anteriores guardaron ese ON en la caché: fuera.
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+get_property(SHARKCUT_SHARED_HELP CACHE BUILD_SHARED_LIBS PROPERTY HELPSTRING)
+if(SHARKCUT_SHARED_HELP STREQUAL "build shared libraries")
+    unset(BUILD_SHARED_LIBS CACHE)
+endif()
 set(SHARKCUT_SAVED_SHARED_LIBS ${BUILD_SHARED_LIBS})
 set(SHARKCUT_SAVED_C_DEBUG ${CMAKE_C_FLAGS_DEBUG})
 set(SHARKCUT_SAVED_CXX_DEBUG ${CMAKE_CXX_FLAGS_DEBUG})
@@ -56,6 +65,7 @@ FetchContent_MakeAvailable(whisper)
 set(BUILD_SHARED_LIBS ${SHARKCUT_SAVED_SHARED_LIBS})
 set(CMAKE_C_FLAGS_DEBUG ${SHARKCUT_SAVED_C_DEBUG})
 set(CMAKE_CXX_FLAGS_DEBUG ${SHARKCUT_SAVED_CXX_DEBUG})
+unset(CMAKE_POLICY_DEFAULT_CMP0077)
 
 # Sus avisos al compilar (p. ej. «pragma GCC desconocida» con MSVC) no son nuestros: fuera.
 foreach(target IN ITEMS whisper ggml ggml-base ggml-cpu)

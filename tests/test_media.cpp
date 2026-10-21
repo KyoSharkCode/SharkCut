@@ -201,6 +201,20 @@ TEST_CASE("VideoDecoder salta al fotograma exacto", "[media]") {
     }
 }
 
+TEST_CASE("VideoDecoder seekNear entrega el fotograma clave anterior", "[media]") {
+    TempClip clip({.frames = 120, .gopSize = 30});
+    VideoDecoder decoder(clip.path.string(), HwAccel::None);
+    for (const std::int64_t target : {57, 0, 119, 30, 89}) {
+        CAPTURE(target);
+        decoder.seekNear(target);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index <= target);
+        CHECK(frame->index > target - 30);
+        CHECK(contentIndex(*frame) == frame->index);
+    }
+}
+
 TEST_CASE("Buscar mas alla del final muestra el ultimo fotograma", "[media]") {
     TempClip clip({.frames = 120});
     VideoDecoder decoder(clip.path.string(), HwAccel::None);

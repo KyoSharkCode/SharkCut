@@ -791,6 +791,9 @@ private:
     QVariantList m_recentProjects;
     QVariantList m_recoverable;
     QTimer m_autosaveTimer;
+    // Propiedades de un clip animado durante la reproducción: unas pocas veces por
+    // segundo, no en cada fotograma (rehacer el panel 60 veces por segundo atascaba).
+    QTimer m_selectedClipTimer;
     bool m_detectingKey = false;
     // Clips a los que va la pantalla verde que se está detectando (vacío: solo ese clip).
     std::vector<sharkcut::ObjectId> m_keyTargets;

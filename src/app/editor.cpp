@@ -285,6 +285,9 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     OpenProject& first = addProject(newDocument("Secuencia 1", 0, 0, 0), {}, {});
     m_activeProject = first.uid;
     m_tabs.push_back({first.uid, first.history.state().sequences.front().id, 0});
+    m_selectedClipTimer.setSingleShot(true);
+    m_selectedClipTimer.setInterval(150);
+    connect(&m_selectedClipTimer, &QTimer::timeout, this, &Editor::selectedClipChanged);
     m_activeTab = 0;
     refreshView();
     resetVideoSlots();
@@ -3664,11 +3667,17 @@ void Editor::setCurrentFrame(qint64 frame) {
     if (m_currentFrame != frame) {
         m_currentFrame = frame;
         emit currentFrameChanged();
-        // Propiedades muestra los valores en el cabezal: si el clip está animado, cambian.
+        // Propiedades muestra los valores en el cabezal: si el clip está animado, cambian
+        // (reproduciendo, como mucho unas veces por segundo).
         for (const ObjectId id : m_selection) {
             const Clip* c = project().clip(id);
             if (c && !c->animation.empty()) {
-                emit selectedClipChanged();
+                if (!m_playing) {
+                    m_selectedClipTimer.stop();
+                    emit selectedClipChanged();
+                } else if (!m_selectedClipTimer.isActive()) {
+                    m_selectedClipTimer.start();
+                }
                 break;
             }
         }

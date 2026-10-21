@@ -248,9 +248,21 @@ int main(int argc, char* argv[]) {
             decoder.nextFrame();
             ahead.add(msSince(t0));
         }
+        // Miniatura de la línea de tiempo: abrir el archivo y el fotograma clave más
+        // cercano (seekNear), como FrameThumbnailProvider.
+        Stats thumbnail;
+        for (int i = 0; i < seeks; ++i) {
+            const std::int64_t target = anywhere(rng);
+            t0 = Clock::now();
+            VideoDecoder fresh(path, HwAccel::None);
+            fresh.seekNear(target);
+            fresh.nextFrame();
+            thumbnail.add(msSince(t0));
+        }
         far.print("a una posición al azar");
         ahead.print("10 fotogramas hacia delante");
         back.print("un fotograma hacia atrás (sin caché)");
+        thumbnail.print("miniatura (fotograma clave cercano)");
 
         // Marcha atrás con DecodeWorker (como J): lo que tarda cada paso en estar listo.
         {

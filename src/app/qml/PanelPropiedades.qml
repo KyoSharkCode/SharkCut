@@ -742,10 +742,22 @@ Rectangle {
                     id: selectorAncla
                     visible: objetivos.length > 0 && !panel.editor.anchoring
                     etiqueta: "Seguir en"
-                    // Los clips que se ven en el cabezal (se recalcula al moverlo).
-                    readonly property var objetivos: panel.editor.currentFrame >= 0
-                        && propiedades.hayVideo && panel.editor.tracks
-                        ? panel.editor.anchorTargets(propiedades.sel.video) : []
+                    // Los clips que se ven en el cabezal: se recalcula al moverlo, pero no
+                    // en cada fotograma de la reproducción.
+                    property var objetivos: []
+                    function actualizar() {
+                        if (!panel.editor.playing)
+                            objetivos = propiedades.hayVideo
+                                ? panel.editor.anchorTargets(propiedades.sel.video) : []
+                    }
+                    Component.onCompleted: actualizar()
+                    Connections {
+                        target: panel.editor
+                        function onCurrentFrameChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onPlayingChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onSelectionChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onProjectChanged() { Qt.callLater(selectorAncla.actualizar) }
+                    }
                     model: objetivos.map((o) => o.track + " · " + o.name)
                     onObjetivosChanged: indice = Math.min(indice, Math.max(0, objetivos.length - 1))
                     onElegido: (i) => indice = i

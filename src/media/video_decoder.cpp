@@ -509,6 +509,12 @@ void VideoDecoder::seekToFrame(std::int64_t index, std::int64_t keepBefore) {
     d->seek(index, std::max<std::int64_t>(0, keepBefore));
 }
 
+void VideoDecoder::seekNear(std::int64_t index) {
+    d->lastIndex = -1; // siempre al fotograma clave (nada de seguir decodificando)
+    d->seek(index, 0);
+    d->skipUntil = 0; // el primero que salga, sin descartar hasta el destino
+}
+
 std::vector<VideoFrame> VideoDecoder::takeKeptFrames() {
     return std::exchange(d->kept, {});
 }

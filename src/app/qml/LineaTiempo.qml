@@ -159,6 +159,12 @@ Rectangle {
 
     // --- Utilidades --------------------------------------------------------------
 
+    // Clic para llevar el cabezal: la reproducción se pausa (petición de Kyo).
+    function llevarCabezal(frame) {
+        editor.pause()
+        editor.seek(frame)
+    }
+
     function frameEn(xContenido) {
         return Math.max(0, Math.round(xContenido / escala))
     }
@@ -267,6 +273,15 @@ Rectangle {
         return (db > 0 ? "+" : db < 0 ? "−" : "") + Math.abs(db).toFixed(1) + " dB"
     }
 
+    property bool seguirCabezal: true
+    Connections {
+        target: raiz.editor
+        function onPlayingChanged() {
+            if (raiz.editor.playing)
+                raiz.seguirCabezal = true
+        }
+    }
+
     // Al añadir el primer clip, ver la línea de tiempo entera.
     property real duracionAnterior: 0
     Connections {
@@ -276,9 +291,10 @@ Rectangle {
                 Qt.callLater(raiz.encajar)
             raiz.duracionAnterior = raiz.editor.frameCount
         }
-        // Durante la reproducción, la vista sigue al cabezal.
+        // Durante la reproducción, la vista sigue al cabezal (salvo si se movió la vista
+        // con la rueda: entonces se deja donde está hasta volver a reproducir).
         function onCurrentFrameChanged() {
-            if (!raiz.editor.playing)
+            if (!raiz.editor.playing || !raiz.seguirCabezal)
                 return
             const x = raiz.editor.currentFrame * raiz.escala
             if (x > vista.contentX + vista.width - 30 || x < vista.contentX)
@@ -531,7 +547,7 @@ Rectangle {
                                         if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
                                             return
                                         raiz.editor.clearSelection()
-                                        raiz.editor.seek(raiz.cabezalEn(m.x))
+                                        raiz.llevarCabezal(raiz.cabezalEn(m.x))
                                     }
                                     onCanceled: raiz.marcoSeleccion = null
                                 }
@@ -568,7 +584,7 @@ Rectangle {
                                         if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
                                             return
                                         raiz.editor.clearSelection()
-                                        raiz.editor.seek(raiz.cabezalEn(m.x))
+                                        raiz.llevarCabezal(raiz.cabezalEn(m.x))
                                     }
                                     onCanceled: raiz.marcoSeleccion = null
                                     onDoubleClicked: raiz.editor.addCaptionAtPlayhead(parent.modelData.pista.index)
@@ -1039,7 +1055,7 @@ Rectangle {
                                             property real xInicial: 0
                                             onPressed: (m) => {
                                                 xInicial = mapToItem(contenido, m.x, 0).x
-                                                raiz.editor.seek(rombo.fotograma)
+                                                raiz.llevarCabezal(rombo.fotograma)
                                             }
                                             onPositionChanged: (m) => {
                                                 if (!pressed)
@@ -1499,10 +1515,22 @@ Rectangle {
                                     }
                                 }
                             }
+                            // Franja amarilla a lo largo de la regla: ahí se lleva el cabezal
+                            // (clic o arrastre).
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                height: 3
+                                color: Theme.reglaCabezal
+                                opacity: zonaRegla.containsMouse || zonaRegla.pressed ? 1 : 0.7
+                            }
                             MouseArea {
+                                id: zonaRegla
                                 anchors.fill: parent
                                 preventStealing: true
-                                onPressed: (m) => raiz.editor.seek(raiz.cabezalEn(m.x))
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onPressed: (m) => raiz.llevarCabezal(raiz.cabezalEn(m.x))
                                 onPositionChanged: (m) => {
                                     if (pressed)
                                         raiz.editor.seek(raiz.cabezalEn(m.x))
@@ -1581,7 +1609,7 @@ Rectangle {
                                                 raiz.editor.moveMarker(marcador.modelData.id, destino)
                                             } else {
                                                 raiz.editor.pause()
-                                                raiz.editor.seek(marcador.modelData.frame)
+                                                raiz.llevarCabezal(marcador.modelData.frame)
                                             }
                                         }
                                         onDoubleClicked: (m) => {
@@ -1693,6 +1721,8 @@ Rectangle {
         target: null
         onWheel: (e) => {
             const p = raiz.mapToItem(vista, e.x, e.y)
+            if (raiz.editor.playing && !(e.modifiers & (Qt.AltModifier | Qt.ControlModifier)))
+                raiz.seguirCabezal = false
             if (e.modifiers & Qt.ControlModifier) {
                 raiz.zoomEn(e.angleDelta.y > 0 ? 1.25 : 0.8, p.x)
             } else if (e.modifiers & Qt.AltModifier) {

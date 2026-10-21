@@ -24,6 +24,7 @@ QtObject {
     // Acentos derivados de la marca, con saturación contenida
     readonly property color acento: "#4FC3D1"      // Bioluz suavizado: foco, selección
     readonly property color cabezal: "#6FE3F0"     // Bioluz puro: solo el cabezal de reproducción
+    readonly property color reglaCabezal: "#E0B440" // franja de la regla: ahí se mueve el cabezal
     readonly property color acentoSecundario: "#3A7BD5" // Aleta
 
     // Colores de clips en la línea de tiempo (apagados para no competir con el video)

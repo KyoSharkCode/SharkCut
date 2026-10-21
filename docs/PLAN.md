@@ -887,6 +887,7 @@ y neutralidad de color. Por eso la interfaz usa una variante sobria.
 | Texto desactivado | `#5F6778` |
 | Acento (foco, selección) | `#4FC3D1` (Bioluz suavizado) |
 | Cabezal de reproducción | `#6FE3F0` (Bioluz) |
+| Franja de la regla (donde se mueve el cabezal) | `#E0B440` (petición de Kyo) |
 | Acento secundario | `#3A7BD5` (Aleta) |
 | Clip de video / audio / transición / texto | `#3D5A8A` / `#2F6F6A` / `#7D74A8` / `#9C8340` |
 | Fila de pista de video / audio | `#161C29` / `#14201F` |

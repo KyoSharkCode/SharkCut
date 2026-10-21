@@ -8,10 +8,12 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRunnable>
+#include <QThread>
 #include <QThreadPool>
 #include <QUrl>
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 
 namespace {
@@ -50,6 +52,19 @@ QImage toImage(const sharkcut::VideoFrame& frame, int width) {
     return image;
 }
 
+// Hilos para las miniaturas: pocos y de baja prioridad, para que nunca le quiten la CPU
+// a la reproducción (con VODs de una hora, un zoom pedía decenas a la vez y la app se
+// atascaba).
+QThreadPool& thumbnailPool() {
+    static QThreadPool* pool = [] {
+        auto* p = new QThreadPool;
+        p->setMaxThreadCount(2);
+        p->setThreadPriority(QThread::LowPriority);
+        return p;
+    }();
+    return *pool;
+}
+
 // Caché de los fotogramas de la línea de tiempo (≈ 25 MB de imágenes de 160 px).
 QMutex frameCacheMutex;
 QCache<QString, QImage> frameCache(400);
@@ -66,6 +81,9 @@ public:
         return QQuickTextureFactory::textureFactoryForImage(m_image);
     }
 
+    // El clip dejó de verse (desplazamiento, zoom): si aún no empezó, no se decodifica.
+    void cancel() override { m_cancelled = true; }
+
     void run() override {
         {
             QMutexLocker lock(&frameCacheMutex);
@@ -73,11 +91,13 @@ public:
                 m_image = *cached;
             }
         }
-        if (m_image.isNull()) {
+        if (m_image.isNull() && !m_cancelled) {
             try {
                 sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
-                decoder.seekToFrame(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
-                                                                  decoder.info().frameRate));
+                // El fotograma clave más cercano: sin decodificar hasta el instante exacto
+                // (eso costaba cientos de milisegundos por miniatura en un VOD).
+                decoder.seekNear(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
+                                                               decoder.info().frameRate));
                 if (auto frame = decoder.nextFrame()) {
                     m_image = toImage(*frame, kFrameThumbnailWidth);
                     QMutexLocker lock(&frameCacheMutex);
@@ -95,6 +115,7 @@ private:
     QString m_path;
     qint64 m_us = 0;
     QImage m_image;
+    std::atomic<bool> m_cancelled{false};
 };
 
 class ThumbnailResponse : public QQuickImageResponse, public QRunnable {
@@ -115,7 +136,7 @@ public:
         if (m_image.isNull()) {
             try {
                 sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
-                decoder.seekToFrame(decoder.info().frameCount / 10);
+                decoder.seekNear(decoder.info().frameCount / 10);
                 if (auto frame = decoder.nextFrame()) {
                     m_image = toImage(*frame, kThumbnailWidth);
                     QMutexLocker lock(&cacheMutex);
@@ -141,12 +162,14 @@ QQuickImageResponse* FrameThumbnailProvider::requestImageResponse(const QString&
     const QString path = QUrl::fromPercentEncoding(id.left(at).toUtf8());
     const qint64 us = at >= 0 ? id.mid(at + 1).toLongLong() : 0;
     auto* response = new FrameResponse(id, path, us);
-    QThreadPool::globalInstance()->start(response);
+    // Las más recientes primero: son las de lo que se ve ahora.
+    static std::atomic<int> order{0};
+    thumbnailPool().start(response, order.fetch_add(1) & 0x3fffffff);
     return response;
 }
 
 QQuickImageResponse* ThumbnailProvider::requestImageResponse(const QString& id, const QSize&) {
     auto* response = new ThumbnailResponse(QUrl::fromPercentEncoding(id.toUtf8()));
-    QThreadPool::globalInstance()->start(response);
+    thumbnailPool().start(response);
     return response;
 }

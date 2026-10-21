@@ -16,7 +16,7 @@ constexpr std::size_t kCacheBytes = 64u << 20;
 constexpr std::int64_t kReverseKeep = 20;
 
 std::size_t bytesOf(const VideoFrame& frame) {
-    return frame.y.size() + frame.uv.size();
+    return frame.y.size() + frame.uv.size() + frame.a.size();
 }
 
 } // namespace

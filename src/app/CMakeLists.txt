@@ -18,6 +18,7 @@ qt_add_qml_module(SharkCut
         qml/Deslizador.qml
         qml/CampoNumero.qml
         qml/Selector.qml
+        qml/SelectorFuente.qml
         qml/LineaTiempo.qml
         qml/Icono.qml
         qml/Trazos.qml
@@ -28,6 +29,8 @@ qt_add_qml_module(SharkCut
         qml/PanelMedios.qml
         qml/DialogoNuevoProyecto.qml
         qml/DialogoNombre.qml
+        qml/DialogoSubtitulos.qml
+        qml/DialogoAjusteClip.qml
         qml/MenuTema.qml
         qml/BarraDesplazamiento.qml
         qml/PanelBiblioteca.qml
@@ -44,6 +47,15 @@ qt_add_qml_module(SharkCut
         playbackclock.cpp
         editor.h
         editor.cpp
+        editor_captions.cpp
+        editor_presets.cpp
+        editor_anchor.cpp
+        editor_keyframes.cpp
+        editor_transcription.cpp
+        modeldownload.h
+        modeldownload.cpp
+        logging.h
+        logging.cpp
         thumbnails.h
         thumbnails.cpp
         waveforms.h
@@ -62,12 +74,17 @@ target_link_libraries(SharkCut PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::GuiPrivate
+    Qt6::Network
     sharkcut_render
+    sharkcut_speech
     sharkcut_core
     sharkcut_media
     sharkcut_audio
     sharkcut_warnings
 )
+if(WIN32)
+    target_link_libraries(SharkCut PRIVATE dbghelp) # volcado al cerrarse por un fallo
+endif()
 sharkcut_copy_runtime_dlls(SharkCut)
 
 # Efectos de sonido de las transiciones: junto al ejecutable (presets/sfx/), donde los

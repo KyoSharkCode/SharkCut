@@ -3,6 +3,8 @@
 add_library(sharkcut_render STATIC
     compositor.h
     compositor.cpp
+    caption_renderer.h
+    caption_renderer.cpp
     sequence_exporter.h
     sequence_exporter.cpp
 )
@@ -16,6 +18,7 @@ qt_add_shaders(sharkcut_render "sharkcut_render_shaders"
         shaders/quad.vert
         shaders/transition.frag
         shaders/present.frag
+        shaders/overlay.frag
 )
 
 target_include_directories(sharkcut_render PUBLIC ${PROJECT_SOURCE_DIR}/src)

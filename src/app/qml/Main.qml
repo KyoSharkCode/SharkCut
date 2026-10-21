@@ -83,6 +83,33 @@ Window {
         onAccepted: editor.saveAs(selectedFile)
         onRejected: ventana.accionPendiente = ""
     }
+    // --- Subtítulos: opciones y archivos .srt ---
+    DialogoSubtitulos {
+        id: dialogoSubtitulos
+        editor: editor
+        onAceptado: (opciones) => {
+            if (modo === "dividir")
+                editor.relayoutCaptionTrack(pista, opciones)
+            else
+                editor.createCaptions(opciones)
+        }
+    }
+    FileDialog {
+        id: dialogoImportarSrt
+        title: "Importar subtítulos"
+        nameFilters: ["Subtítulos (*.srt)", "Todos los archivos (*)"]
+        onAccepted: editor.importSrt(selectedFile)
+    }
+    FileDialog {
+        id: dialogoExportarSrt
+        property int pista: 0
+        title: "Exportar subtítulos"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "srt"
+        nameFilters: ["Subtítulos (*.srt)"]
+        onAccepted: editor.exportSrt(pista, selectedFile)
+    }
+
     DialogoNuevoProyecto {
         id: dialogoNuevo
         onCrear: (nombre, ancho, alto, fps) => {
@@ -238,6 +265,9 @@ Window {
     Shortcut { sequence: "Right"; enabled: ventana.conSecuencia; onActivated: editor.step(1) }
     Shortcut { sequence: "Shift+Left"; enabled: ventana.conSecuencia; onActivated: editor.step(-10) }
     Shortcut { sequence: "Shift+Right"; enabled: ventana.conSecuencia; onActivated: editor.step(10) }
+    // Flechas arriba/abajo (como en Premiere): al corte anterior / siguiente.
+    Shortcut { sequence: "Up"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(-1) }
+    Shortcut { sequence: "Down"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(1) }
     Shortcut {
         sequence: "Home"
         enabled: ventana.conSecuencia
@@ -284,6 +314,10 @@ Window {
     }
     // Q / W: recortar con rizo desde el borde anterior hasta el cabezal / desde el cabezal
     // hasta el borde siguiente.
+    // Copiar, cortar y pegar clips (en el cabezal).
+    Shortcut { sequences: [StandardKey.Copy]; enabled: ventana.enEditor; onActivated: editor.copySelection() }
+    Shortcut { sequences: [StandardKey.Cut]; enabled: ventana.enEditor; onActivated: editor.cutSelection() }
+    Shortcut { sequences: [StandardKey.Paste]; enabled: ventana.enEditor; onActivated: editor.pasteAtPlayhead() }
     Shortcut { sequence: "Q"; enabled: ventana.enEditor; onActivated: editor.rippleTrimPrevious() }
     Shortcut { sequence: "W"; enabled: ventana.enEditor; onActivated: editor.rippleTrimNext() }
     Shortcut { sequences: [StandardKey.Undo]; enabled: ventana.enEditor; onActivated: editor.undo() }
@@ -418,6 +452,13 @@ Window {
                         editor: editor
                         fantasma: fantasma
                         onImportar: dialogoImportar.open()
+                        onCrearSubtitulos: dialogoSubtitulos.crear()
+                        onImportarSrt: dialogoImportarSrt.open()
+                        onDividirSubtitulos: (pista) => dialogoSubtitulos.dividir(pista)
+                        onExportarSrt: (pista) => {
+                            dialogoExportarSrt.pista = pista
+                            dialogoExportarSrt.open()
+                        }
                         onNuevaSecuencia: dialogoSecuencia.open()
                         onCerrarProyecto: (uid) => ventana.cerrarProyecto(uid)
                     }
@@ -504,6 +545,10 @@ Window {
                                     anchors.fill: parent
                                     visible: editor.frameCount > 0
                                 }
+                                MarcoAnclaje {
+                                    anchors.fill: parent
+                                    visible: editor.anchorPicking
+                                }
                             }
 
                             RowLayout {
@@ -583,6 +628,11 @@ Window {
                         id: lineaTiempo
                         editor: editor
                         onNuevaSecuencia: dialogoSecuencia.open()
+                        onExportarSrt: (pista) => {
+                            dialogoExportarSrt.pista = pista
+                            dialogoExportarSrt.open()
+                        }
+                        onDividirSubtitulos: (pista) => dialogoSubtitulos.dividir(pista)
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                     }
@@ -680,6 +730,110 @@ Window {
     // para escalarlo. Se ajusta a los bordes y al centro del lienzo (Mayús: sin ajuste).
     // Mientras se arrastra solo es una vista previa; al soltar se aplica (un paso de
     // deshacer).
+    // Punto de anclaje: mientras se marca la zona a seguir, se dibuja un recuadro en el
+    // visor (encima del reencuadre, que no recibe el ratón). Se ve el contorno del clip
+    // seguido. Al soltar empieza el seguimiento; Esc o clic sin arrastrar, cancelar.
+    component MarcoAnclaje: Item {
+        id: marcoAncla
+        clip: true
+
+        readonly property size lienzo: editor.canvas
+        readonly property real escalaVista: Math.min(width / Math.max(1, lienzo.width),
+                                                     height / Math.max(1, lienzo.height))
+        readonly property real x0: (width - lienzo.width * escalaVista) / 2
+        readonly property real y0: (height - lienzo.height * escalaVista) / 2
+        readonly property var caja: editor.anchorTargetBox
+        property point inicio
+        property point fin
+        property bool marcando: false
+
+        function aLienzo(px, py) {
+            return Qt.point((px - x0) / escalaVista, (py - y0) / escalaVista)
+        }
+
+        Shortcut {
+            sequence: "Escape"
+            enabled: marcoAncla.visible
+            onActivated: editor.cancelAnchorPick()
+        }
+
+        // Contorno del clip que se sigue.
+        Rectangle {
+            visible: marcoAncla.caja.width !== undefined
+            x: visible ? marcoAncla.x0 + marcoAncla.caja.left * marcoAncla.escalaVista : 0
+            y: visible ? marcoAncla.y0 + marcoAncla.caja.top * marcoAncla.escalaVista : 0
+            width: visible ? marcoAncla.caja.width * marcoAncla.escalaVista : 0
+            height: visible ? marcoAncla.caja.height * marcoAncla.escalaVista : 0
+            color: "transparent"
+            border.color: Theme.aviso
+            border.width: 1
+            transform: Rotation {
+                origin.x: marcoAncla.caja.width !== undefined
+                          ? (marcoAncla.caja.pivotX - marcoAncla.caja.left) * marcoAncla.escalaVista : 0
+                origin.y: marcoAncla.caja.width !== undefined
+                          ? (marcoAncla.caja.pivotY - marcoAncla.caja.top) * marcoAncla.escalaVista : 0
+                angle: marcoAncla.caja.rotation || 0
+            }
+        }
+        // El recuadro que se está dibujando.
+        Rectangle {
+            visible: marcoAncla.marcando
+            x: Math.min(marcoAncla.inicio.x, marcoAncla.fin.x)
+            y: Math.min(marcoAncla.inicio.y, marcoAncla.fin.y)
+            width: Math.abs(marcoAncla.fin.x - marcoAncla.inicio.x)
+            height: Math.abs(marcoAncla.fin.y - marcoAncla.inicio.y)
+            color: "transparent"
+            border.color: Theme.acento
+            border.width: 2
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.acento
+                opacity: 0.15
+            }
+        }
+        Rectangle {
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 10
+            width: aviso.implicitWidth + 24
+            height: aviso.implicitHeight + 12
+            radius: Theme.radio
+            color: Theme.panelElevado
+            border.color: Theme.acento
+            Text {
+                id: aviso
+                anchors.centerIn: parent
+                text: "Dibuja un recuadro sobre lo que quieres seguir · Esc: cancelar"
+                color: Theme.texto
+                font.pixelSize: Theme.tamTextoPequeno
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.CrossCursor
+            onPressed: (m) => {
+                marcoAncla.inicio = Qt.point(m.x, m.y)
+                marcoAncla.fin = marcoAncla.inicio
+                marcoAncla.marcando = true
+            }
+            onPositionChanged: (m) => {
+                if (marcoAncla.marcando)
+                    marcoAncla.fin = Qt.point(m.x, m.y)
+            }
+            onReleased: {
+                marcoAncla.marcando = false
+                const a = marcoAncla.aLienzo(Math.min(marcoAncla.inicio.x, marcoAncla.fin.x),
+                                             Math.min(marcoAncla.inicio.y, marcoAncla.fin.y))
+                const w = Math.abs(marcoAncla.fin.x - marcoAncla.inicio.x) / marcoAncla.escalaVista
+                const h = Math.abs(marcoAncla.fin.y - marcoAncla.inicio.y) / marcoAncla.escalaVista
+                if (w * marcoAncla.escalaVista < 4 || h * marcoAncla.escalaVista < 4)
+                    editor.cancelAnchorPick()
+                else
+                    editor.startAnchor(a.x, a.y, w, h)
+            }
+        }
+    }
+
     component MarcoReencuadre: Item {
         id: marco
         clip: true // la caja de un clip que se sale del lienzo no tapa el resto de la ventana
@@ -704,7 +858,18 @@ Window {
         function aLienzo(px, py) {
             return Qt.point((px - x0) / escalaVista, (py - y0) / escalaVista)
         }
-        function contiene(p) {
+        // El punto con el giro del clip deshecho (la caja es la del clip sin girar).
+        function sinGiro(p) {
+            if (caja === null || !caja.rotation)
+                return p
+            const a = -caja.rotation * Math.PI / 180
+            const dx = p.x - caja.pivotX
+            const dy = p.y - caja.pivotY
+            return Qt.point(caja.pivotX + dx * Math.cos(a) - dy * Math.sin(a),
+                            caja.pivotY + dx * Math.sin(a) + dy * Math.cos(a))
+        }
+        function contiene(punto) {
+            const p = sinGiro(punto)
             return caja !== null && p.x >= caja.left && p.x < caja.left + caja.width
                    && p.y >= caja.top && p.y < caja.top + caja.height
         }
@@ -823,6 +988,77 @@ Window {
             color: "transparent"
             border.color: marco.editable ? Theme.acento : Theme.textoDesactivado
             border.width: 1
+            // Girada como el clip, alrededor del centro del video.
+            transform: Rotation {
+                origin.x: marco.caja ? (marco.caja.pivotX - marco.caja.left) * marco.escalaVista : 0
+                origin.y: marco.caja ? (marco.caja.pivotY - marco.caja.top) * marco.escalaVista : 0
+                angle: marco.caja ? marco.caja.rotation : 0
+            }
+
+            // Tirador de giro: arriba, en el centro. Mayús: de 15° en 15°.
+            Rectangle {
+                visible: marco.editable
+                x: cajaVista.width / 2 - 1
+                y: -22
+                width: 2
+                height: 16
+                color: Theme.acento
+            }
+            Rectangle {
+                id: tiradorGiro
+                visible: marco.editable
+                x: cajaVista.width / 2 - width / 2
+                y: -30
+                width: 12
+                height: 12
+                radius: 6
+                color: Theme.visorFondo
+                border.color: Theme.acento
+                border.width: 2
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -5
+                    preventStealing: true
+                    cursorShape: Qt.CrossCursor
+                    property real anguloInicial: 0
+                    property real giroInicial: 0
+                    property bool movido: false
+                    function anguloEn(m) {
+                        const q = mapToItem(marco, m.x, m.y)
+                        const p = marco.aLienzo(q.x, q.y)
+                        return Math.atan2(p.y - marco.caja.pivotY, p.x - marco.caja.pivotX) * 180 / Math.PI
+                    }
+                    onPressed: (m) => {
+                        anguloInicial = anguloEn(m)
+                        giroInicial = marco.sel.transform.rotation || 0
+                        movido = false
+                        marco.modo = "girar"
+                    }
+                    onPositionChanged: (m) => {
+                        if (!pressed)
+                            return
+                        let d = anguloEn(m) - anguloInicial
+                        if (d > 180) d -= 360
+                        if (d < -180) d += 360
+                        let giro = giroInicial + d
+                        if (m.modifiers & Qt.ShiftModifier)
+                            giro = Math.round(giro / 15) * 15
+                        movido = true
+                        editor.previewTransform(marco.sel.video, { rotation: giro })
+                    }
+                    onReleased: {
+                        if (movido)
+                            editor.setClipTransform(marco.sel.video, {}, "Girar en el visor")
+                        else
+                            editor.endPreview()
+                        marco.modo = ""
+                    }
+                    onCanceled: {
+                        editor.endPreview()
+                        marco.modo = ""
+                    }
+                }
+            }
 
             Repeater {
                 model: marco.editable ? [[0, 0], [1, 0], [0, 1], [1, 1]] : []
@@ -907,6 +1143,8 @@ Window {
         id: fantasma
         property var mediaId: undefined
         property int transicion: -1 // índice del catálogo si se arrastra una transición
+        property string efecto      // nombre del efecto si se arrastra uno ("croma")
+        property string sonido      // id del efecto de sonido si se arrastra uno
         property string nombre
         visible: Drag.active
         z: 100
@@ -914,7 +1152,7 @@ Window {
         height: 28
         radius: Theme.radio
         color: Theme.panelElevado
-        border.color: transicion >= 0 ? Theme.clipTransicion : Theme.acento
+        border.color: transicion >= 0 || efecto !== "" ? Theme.clipTransicion : Theme.acento
         border.width: 2
         opacity: 0.9
         Drag.keys: ["sharkcut/medio"]

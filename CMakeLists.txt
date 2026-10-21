@@ -27,17 +27,19 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(FFmpeg)
 include(miniaudio)
 include(json)
+include(whisper)
 
 add_subdirectory(src/core)
 add_subdirectory(src/media)
 add_subdirectory(src/audio)
+add_subdirectory(src/speech)
 add_subdirectory(tools/bench)
 
 if(SHARKCUT_BUILD_APP)
     # GuiPrivate: cabeceras de QRhi (rhi/qrhi.h), la capa gráfica que usa el visor.
     # Su uso es intencionado (API documentada con compatibilidad limitada): sin aviso.
     set(QT_NO_PRIVATE_MODULE_WARNING ON)
-    find_package(Qt6 6.10 REQUIRED COMPONENTS Quick QuickControls2 ShaderTools GuiPrivate)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS Quick QuickControls2 ShaderTools GuiPrivate Network)
     qt_standard_project_setup(REQUIRES 6.10)
     add_subdirectory(src/render)
     add_subdirectory(src/app)

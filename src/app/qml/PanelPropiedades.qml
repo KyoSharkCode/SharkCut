@@ -42,7 +42,49 @@ Rectangle {
         readonly property bool hayVideo: uno && sel.video !== 0
         readonly property bool hayAudio: uno && sel.audio !== 0
         readonly property var t: hayVideo ? sel.transform : ({})
+        readonly property var croma: t.chromaKey || ({})
+        readonly property var fx: t.effects || ({})
+        readonly property var anim: hayVideo && sel.animation ? sel.animation : ({})
+        readonly property var sub: panel.editor.selectedCaption
+        readonly property bool haySubtitulo: sub.count > 0
+        readonly property var estilo: haySubtitulo
+            ? (estiloPista ? sub.trackStyle : sub.style) : ({})
+        property bool estiloPista: false // el estilo se aplica a la pista entera
+        function vistaEstilo(valores) { panel.editor.previewCaptionStyle(valores, estiloPista) }
+        function aplicarEstilo(valores, etiqueta) {
+            panel.editor.setCaptionStyle(valores, estiloPista, etiqueta)
+        }
+        readonly property bool hayCroma: hayVideo && croma.added === true
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
+
+        // Al aplicar o detectar la pantalla verde, se lleva a la vista su sección.
+        // Lo mismo con los demás efectos al aplicarlos desde la pestaña Efectos.
+        property Item seccionPendiente: null
+        Connections {
+            target: panel.editor
+            function onKeyColorDetected(found) {
+                propiedades.seccionPendiente = cabeceraCroma
+                desplazarCroma.restart()
+            }
+            function onEffectApplied(efecto) {
+                if (efecto.startsWith("ajuste:"))
+                    return // un ajuste guardado: cambia varias secciones a la vez
+                propiedades.seccionPendiente = efecto === "byn" ? seccionByn
+                    : efecto === "desenfoque" ? seccionDesenfoque
+                    : efecto === "esquinas" ? seccionEsquinas : seccionSombra
+                desplazarCroma.restart()
+            }
+        }
+        // Espera a que la columna coloque la sección recién añadida.
+        Timer {
+            id: desplazarCroma
+            interval: 80
+            onTriggered: {
+                if (propiedades.seccionPendiente)
+                    propiedades.contentY = Math.max(0, Math.min(propiedades.seccionPendiente.y,
+                        propiedades.contentHeight - propiedades.height))
+            }
+        }
 
         function vista(valores) { panel.editor.previewTransform(sel.video, valores) }
         function aplicar(valores, etiqueta) { panel.editor.setClipTransform(sel.video, valores, etiqueta) }
@@ -53,6 +95,96 @@ Rectangle {
             y: 14
             width: propiedades.width - 28
             spacing: 10
+
+            // --- Transición-clip seleccionada (afecta a todo lo de debajo) ---
+            ColumnLayout {
+                id: propiedadesEfecto
+                readonly property var ef: propiedades.sel.effect || ({})
+                readonly property var idClip: propiedades.sel.effectClip || 0
+                visible: propiedades.sel.count === 1 && idClip !== 0
+                enabled: visible && !ef.locked
+                Layout.fillWidth: true
+                spacing: 10
+                function cambiar(valores) { panel.editor.setEffectClip(idClip, valores) }
+
+                Text {
+                    text: "TRANSICIÓN"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Rectangle {
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        radius: 4
+                        color: Theme.clipTransicion
+                        Icono { anchors.centerIn: parent; nombre: "transicion"; tam: 14; color: Theme.texto }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: (propiedades.sel.name || "") + " · " + (propiedadesEfecto.ef.track || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Chip {
+                        visible: propiedadesEfecto.ef.locked === true
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                Selector {
+                    etiqueta: "Tipo"
+                    model: panel.editor.transitionNames
+                    indice: propiedadesEfecto.ef.typeIndex !== undefined ? propiedadesEfecto.ef.typeIndex : 0
+                    onElegido: (i) => propiedadesEfecto.cambiar({ typeIndex: i })
+                }
+                CampoNumero {
+                    etiqueta: "Duración"
+                    unidad: "fot."
+                    paso: 0.25
+                    desde: 2
+                    hasta: 36000
+                    valor: propiedadesEfecto.ef.length || 0
+                    onCambiado: (v) => propiedadesEfecto.cambiar({ length: Math.round(v) })
+                }
+                Deslizador {
+                    etiqueta: "Intensidad"
+                    from: 0
+                    to: 1
+                    stepSize: 0.01
+                    valor: propiedadesEfecto.ef.intensity !== undefined ? propiedadesEfecto.ef.intensity : 0.6
+                    textoValor: Math.round(valorActual * 100) + " %"
+                    onSoltado: (v) => propiedadesEfecto.cambiar({ intensity: v })
+                }
+                Deslizador {
+                    etiqueta: "Desenfoque de movimiento"
+                    from: 0
+                    to: 1
+                    stepSize: 0.01
+                    valor: propiedadesEfecto.ef.blur !== undefined ? propiedadesEfecto.ef.blur : 0.6
+                    textoValor: Math.round(valorActual * 100) + " %"
+                    onSoltado: (v) => propiedadesEfecto.cambiar({ blur: v })
+                }
+                Selector {
+                    etiqueta: "Curva de movimiento"
+                    model: panel.editor.easingNames
+                    indice: propiedadesEfecto.ef.easingIndex !== undefined ? propiedadesEfecto.ef.easingIndex : 0
+                    onElegido: (i) => propiedadesEfecto.cambiar({ easingIndex: i })
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Se aplica a todo lo que hay debajo en su tramo. Muévela, córtala (C) o "
+                          + "recorta sus bordes en la línea de tiempo como un clip; al cambiar la "
+                          + "duración vuelve a verse entera. Su sonido es un clip de audio aparte."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
 
             // --- Transición seleccionada ---
             ColumnLayout {
@@ -195,15 +327,295 @@ Rectangle {
                 }
             }
 
+            // --- Subtítulo seleccionado: texto y estilo ---
+            ColumnLayout {
+                id: propiedadesSubtitulo
+                visible: propiedades.haySubtitulo
+                Layout.fillWidth: true
+                spacing: 6
+                enabled: !propiedades.sub.locked
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        Layout.fillWidth: true
+                        text: propiedades.sub.count > 1
+                              ? propiedades.sub.count + " subtítulos seleccionados"
+                              : "Subtítulo · " + (propiedades.sub.trackName || "")
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        font.bold: true
+                    }
+                    Chip {
+                        visible: propiedades.sub.locked === true
+                        texto: "BLOQUEADA"
+                        colorTexto: Theme.aviso
+                    }
+                }
+                Text {
+                    visible: propiedades.sub.count === 1
+                    text: panel.editor.timecodeFor(propiedades.sub.start || 0) + " → "
+                          + panel.editor.timecodeFor(propiedades.sub.end || 0)
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                // Texto (Ctrl+Intro o al salir del campo se aplica).
+                Rectangle {
+                    visible: propiedades.sub.count === 1
+                    Layout.fillWidth: true
+                    implicitHeight: Math.max(56, campoTexto.implicitHeight + 12)
+                    radius: Theme.radio
+                    color: Theme.fondo
+                    border.color: campoTexto.activeFocus ? Theme.acento : Theme.borde
+                    TextEdit {
+                        id: campoTexto
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        text: propiedades.sub.text || ""
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTexto
+                        wrapMode: TextEdit.Wrap
+                        selectByMouse: true
+                        function aplicar() {
+                            if (text !== propiedades.sub.text)
+                                panel.editor.setCaptionText(propiedades.sub.id, text)
+                            text = Qt.binding(() => propiedades.sub.text || "")
+                        }
+                        onEditingFinished: aplicar()
+                        Keys.onPressed: (e) => {
+                            if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter)
+                                    && (e.modifiers & Qt.ControlModifier)) {
+                                aplicar()
+                                campoTexto.focus = false
+                                e.accepted = true
+                            } else if (e.key === Qt.Key_Escape) {
+                                text = Qt.binding(() => propiedades.sub.text || "")
+                                campoTexto.focus = false
+                                e.accepted = true
+                            }
+                        }
+                    }
+                }
+                Text {
+                    visible: propiedades.sub.count === 1
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Intro: nueva línea · Ctrl+Intro: aplicar · doble clic en la pista: "
+                          + "subtítulo nuevo."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                Separador {}
+                Text {
+                    text: "ESTILO"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                // A qué se aplica: a lo seleccionado o a la pista entera.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        texto: propiedades.sub.count > 1 ? "Seleccionados" : "Este subtítulo"
+                        activo: !propiedades.estiloPista
+                        implicitHeight: 26
+                        onPulsado: propiedades.estiloPista = false
+                    }
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        texto: "Toda la pista"
+                        activo: propiedades.estiloPista
+                        implicitHeight: 26
+                        ayuda: "El estilo de la pista: lo usan todos sus subtítulos"
+                        onPulsado: propiedades.estiloPista = true
+                    }
+                }
+                Selector {
+                    etiqueta: "Ajuste guardado"
+                    model: ["Elegir…"].concat(panel.editor.captionPresets.map((p) => p.name))
+                    indice: 0
+                    onElegido: (i) => {
+                        if (i > 0)
+                            panel.editor.applyCaptionPreset(panel.editor.captionPresets[i - 1].name,
+                                                            propiedades.estiloPista)
+                    }
+                }
+                SelectorFuente {
+                    fuente: propiedades.estilo.font || ""
+                    onElegida: (f) => propiedades.aplicarEstilo({ font: f }, "Fuente")
+                }
+                CampoNumero {
+                    etiqueta: "Tamaño"
+                    unidad: "px"
+                    paso: 0.5
+                    desde: 8
+                    hasta: 400
+                    valor: propiedades.estilo.size || 64
+                    onCambiando: (v) => propiedades.vistaEstilo({ size: v })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ size: v }, "Tamaño")
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: [{ clave: "bold", texto: "Negrita" }, { clave: "italic", texto: "Cursiva" },
+                                { clave: "uppercase", texto: "MAYÚSCULAS" }]
+                        delegate: BotonIcono {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            texto: modelData.texto
+                            implicitHeight: 26
+                            activo: propiedades.estilo[modelData.clave] === true
+                            onPulsado: {
+                                const valores = {}
+                                valores[modelData.clave] = !propiedades.estilo[modelData.clave]
+                                propiedades.aplicarEstilo(valores, modelData.texto)
+                            }
+                        }
+                    }
+                }
+                CampoColor {
+                    etiqueta: "Color"
+                    color: propiedades.estilo.color || "#FFFFFF"
+                    onElegido: (c) => propiedades.aplicarEstilo({ color: c }, "Color")
+                }
+                CampoColor {
+                    etiqueta: "Contorno"
+                    color: propiedades.estilo.outlineColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ outlineColor: c }, "Contorno")
+                }
+                CampoNumero {
+                    etiqueta: "Grosor del contorno"
+                    anchoEtiqueta: 140
+                    unidad: "px"
+                    paso: 0.1
+                    decimales: 1
+                    desde: 0
+                    hasta: 40
+                    valor: propiedades.estilo.outline !== undefined ? propiedades.estilo.outline : 6
+                    onCambiando: (v) => propiedades.vistaEstilo({ outline: v })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ outline: v }, "Contorno")
+                }
+                CampoColor {
+                    etiqueta: "Sombra"
+                    color: propiedades.estilo.shadowColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ shadowColor: c }, "Sombra")
+                }
+                CampoNumero {
+                    etiqueta: "Opacidad de la sombra"
+                    anchoEtiqueta: 140
+                    unidad: "%"
+                    paso: 0.5
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.estilo.shadow || 0) * 100
+                    onCambiando: (v) => propiedades.vistaEstilo({ shadow: v / 100 })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ shadow: v / 100 }, "Sombra")
+                }
+                CampoColor {
+                    etiqueta: "Caja de fondo"
+                    color: propiedades.estilo.boxColor || "#000000"
+                    onElegido: (c) => propiedades.aplicarEstilo({ boxColor: c }, "Caja de fondo")
+                }
+                CampoNumero {
+                    etiqueta: "Opacidad de la caja"
+                    anchoEtiqueta: 140
+                    unidad: "%"
+                    paso: 0.5
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.estilo.box || 0) * 100
+                    onCambiando: (v) => propiedades.vistaEstilo({ box: v / 100 })
+                    onCambiado: (v) => propiedades.aplicarEstilo({ box: v / 100 }, "Caja de fondo")
+                }
+                Text {
+                    Layout.topMargin: 4
+                    text: "POSICIÓN"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Repeater {
+                    model: [{ clave: "x", nombre: "Horizontal" }, { clave: "y", nombre: "Vertical" },
+                            { clave: "maxWidth", nombre: "Ancho máximo" }]
+                    delegate: CampoNumero {
+                        required property var modelData
+                        etiqueta: modelData.nombre
+                        unidad: "%"
+                        decimales: 1
+                        paso: 0.2
+                        desde: modelData.clave === "maxWidth" ? 10 : 0
+                        hasta: 100
+                        valor: (propiedades.estilo[modelData.clave] || 0) * 100
+                        onCambiando: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / 100
+                            propiedades.vistaEstilo(valores)
+                        }
+                        onCambiado: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / 100
+                            propiedades.aplicarEstilo(valores, "Posición")
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    spacing: 6
+                    BotonIcono {
+                        Layout.fillWidth: true
+                        icono: "guardar"
+                        texto: "Guardar como ajuste…"
+                        ayuda: "Guarda este estilo con un nombre para aplicarlo después"
+                        onPulsado: dialogoAjuste.pedir("Nombre del ajuste", "", "Guardar",
+                                                       (nombre) => panel.editor.saveCaptionPreset(nombre))
+                    }
+                    BotonIcono {
+                        icono: "restablecer"
+                        visible: propiedades.sub.ownStyle === true && !propiedades.estiloPista
+                        ayuda: "Quitar su estilo propio: vuelve al de la pista"
+                        onPulsado: panel.editor.resetCaptionStyle()
+                    }
+                }
+                // Ajustes guardados por ti: se pueden borrar.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: panel.editor.captionPresets.filter((p) => !p.builtin)
+                        delegate: Chip {
+                            required property var modelData
+                            texto: modelData.name + "  ✕"
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: panel.editor.removeCaptionPreset(parent.modelData.name)
+                            }
+                        }
+                    }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "quitar"
+                    texto: propiedades.sub.count > 1 ? "Quitar los subtítulos" : "Quitar el subtítulo"
+                    ayuda: "Supr"
+                    onPulsado: panel.editor.removeSelection()
+                }
+            }
+
             Text {
-                visible: !propiedades.hayTransicion
+                visible: !propiedades.hayTransicion && !propiedades.haySubtitulo
                 text: "CLIP SELECCIONADO"
                 color: Theme.textoDesactivado
                 font.pixelSize: Theme.tamTextoPequeno
                 font.letterSpacing: 0.6
             }
             Text {
-                visible: !propiedades.hayTransicion
+                visible: !propiedades.hayTransicion && !propiedades.haySubtitulo
                 Layout.fillWidth: true
                 text: panel.editor.selectionDescription.length > 0
                       ? panel.editor.selectionDescription : "Ningún clip seleccionado"
@@ -214,13 +626,27 @@ Rectangle {
             }
             Text {
                 Layout.fillWidth: true
-                visible: !propiedades.uno && !propiedades.hayTransicion
+                visible: !propiedades.uno && !propiedades.hayTransicion && !propiedades.haySubtitulo
                 wrapMode: Text.WordWrap
                 text: propiedades.sel.count > 1
-                      ? "Selecciona un solo clip para ver y cambiar sus propiedades."
-                      : "Selecciona un clip en la línea de tiempo (o haz clic sobre él en el visor)."
+                      ? (propiedades.sel.videoCount > 0
+                         ? "Efectos y ajustes guardados (pestaña Efectos) se aplican a los "
+                           + propiedades.sel.videoCount + " clips de video seleccionados a la vez: "
+                           + "arrástralos sobre uno de ellos o pulsa Aplicar. Para ver y cambiar "
+                           + "sus valores, selecciona un solo clip."
+                         : "Selecciona un solo clip para ver y cambiar sus propiedades.")
+                      : "Selecciona un clip en la línea de tiempo (o haz clic sobre él en el visor). "
+                        + "Para marcar varios, arrastra en una zona vacía de la línea de tiempo."
                 color: Theme.textoDesactivado
                 font.pixelSize: Theme.tamTextoPequeno
+            }
+            BotonIcono {
+                visible: propiedades.sel.count > 1 && propiedades.sel.linked === true
+                Layout.fillWidth: true
+                icono: "desvincular"
+                texto: "Desvincular audio y video de todos"
+                ayuda: "Cada clip seleccionado queda separado de su audio (o de su video)"
+                onPulsado: panel.editor.unlinkSelection()
             }
 
             // --- Video: posición, escala, opacidad y recorte ---
@@ -248,7 +674,8 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 6
 
-                CampoNumero {
+                CampoAnimable {
+                    clave: "x"
                     etiqueta: "Posición X"
                     unidad: "px"
                     valor: propiedades.t.x || 0
@@ -256,7 +683,8 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ x: v })
                     onCambiado: (v) => propiedades.aplicar({ x: v }, "Posición")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "y"
                     etiqueta: "Posición Y"
                     unidad: "px"
                     valor: propiedades.t.y || 0
@@ -264,7 +692,8 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ y: v })
                     onCambiado: (v) => propiedades.aplicar({ y: v }, "Posición")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "scale"
                     etiqueta: "Escala"
                     unidad: "%"
                     decimales: 1
@@ -276,7 +705,21 @@ Rectangle {
                     onCambiando: (v) => propiedades.vista({ scale: v / 100 })
                     onCambiado: (v) => propiedades.aplicar({ scale: v / 100 }, "Escala")
                 }
-                CampoNumero {
+                CampoAnimable {
+                    clave: "rotation"
+                    etiqueta: "Rotación"
+                    unidad: "°"
+                    decimales: 1
+                    paso: 0.5
+                    desde: -3600
+                    hasta: 3600
+                    valor: propiedades.t.rotation || 0
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ rotation: v })
+                    onCambiado: (v) => propiedades.aplicar({ rotation: v }, "Rotación")
+                }
+                CampoAnimable {
+                    clave: "opacity"
                     etiqueta: "Opacidad"
                     unidad: "%"
                     paso: 0.5
@@ -301,8 +744,9 @@ Rectangle {
                         { clave: "cropTop", nombre: "Arriba" },
                         { clave: "cropBottom", nombre: "Abajo" }
                     ]
-                    delegate: CampoNumero {
+                    delegate: CampoAnimable {
                         required property var modelData
+                        clave: modelData.clave
                         etiqueta: modelData.nombre
                         unidad: "%"
                         decimales: 1
@@ -322,6 +766,14 @@ Rectangle {
                             propiedades.aplicar(valores, "Recorte")
                         }
                     }
+                }
+                // Curva de los keyframes del cabezal (hasta el siguiente).
+                Selector {
+                    visible: propiedades.anim.keyEasing !== undefined && propiedades.anim.keyEasing >= 0
+                    etiqueta: "Curva del keyframe"
+                    model: panel.editor.keyframeEasingNames
+                    indice: Math.max(0, propiedades.anim.keyEasing || 0)
+                    onElegido: (i) => panel.editor.setKeyframeEasing(propiedades.sel.video, i)
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -347,12 +799,387 @@ Rectangle {
                         onPulsado: panel.editor.resetTransform(propiedades.sel.video)
                     }
                 }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "estrella"
+                    texto: "Guardar como ajuste…"
+                    ayuda: "Guarda el aspecto del clip (y su animación) para aplicarlo a otros "
+                           + "desde la pestaña Efectos"
+                    onPulsado: dialogoAjusteClip.guardar(propiedades.sel.video,
+                                                         propiedades.anim.any === true)
+                }
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Arrastra el número para cambiarlo (Mayús: más rápido, Ctrl: más fino) "
                           + "o haz clic para escribirlo. En el visor: arrastra el clip para "
-                          + "moverlo y sus esquinas para escalarlo."
+                          + "moverlo, sus esquinas para escalarlo y el círculo de arriba para "
+                          + "girarlo (Mayús: de 15° en 15°). ⏱ anima la propiedad: "
+                          + "cada cambio en otro momento crea un keyframe ahí (◆)."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                // --- Punto de anclaje: el clip sigue algo que se mueve en otro clip ---
+                Text {
+                    Layout.topMargin: 6
+                    text: "PUNTO DE ANCLAJE"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Selector {
+                    id: selectorAncla
+                    visible: objetivos.length > 0 && !panel.editor.anchoring
+                    etiqueta: "Seguir en"
+                    // Los clips que se ven en el cabezal: se recalcula al moverlo, pero no
+                    // en cada fotograma de la reproducción.
+                    property var objetivos: []
+                    function actualizar() {
+                        if (!panel.editor.playing)
+                            objetivos = propiedades.hayVideo
+                                ? panel.editor.anchorTargets(propiedades.sel.video) : []
+                    }
+                    Component.onCompleted: actualizar()
+                    Connections {
+                        target: panel.editor
+                        function onCurrentFrameChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onPlayingChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onSelectionChanged() { Qt.callLater(selectorAncla.actualizar) }
+                        function onProjectChanged() { Qt.callLater(selectorAncla.actualizar) }
+                    }
+                    model: objetivos.map((o) => o.track + " · " + o.name)
+                    onObjetivosChanged: indice = Math.min(indice, Math.max(0, objetivos.length - 1))
+                    onElegido: (i) => indice = i
+                }
+                Text {
+                    visible: selectorAncla.objetivos.length === 0 && !panel.editor.anchoring
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Pon el cabezal donde se vea, junto a este clip, el video que tiene "
+                          + "lo que quieres seguir (una mano, una cara, un objeto…)."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                BotonIcono {
+                    visible: selectorAncla.objetivos.length > 0 && !panel.editor.anchoring
+                    Layout.fillWidth: true
+                    icono: "ancla"
+                    texto: panel.editor.anchorPicking ? "Dibuja un recuadro en el visor…"
+                                                      : "Marcar lo que se sigue"
+                    activo: panel.editor.anchorPicking
+                    enabled: propiedades.videoEditable
+                    ayuda: "Dibuja en el visor un recuadro sobre lo que se mueve; el clip lo "
+                           + "seguirá desde el cabezal hacia delante (Esc: cancelar)"
+                    onPulsado: {
+                        if (panel.editor.anchorPicking)
+                            panel.editor.cancelAnchorPick()
+                        else
+                            panel.editor.beginAnchorPick(propiedades.sel.video,
+                                selectorAncla.objetivos[selectorAncla.indice].id)
+                    }
+                }
+                RowLayout {
+                    visible: panel.editor.anchoring
+                    Layout.fillWidth: true
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 6
+                        radius: 3
+                        color: Theme.fondo
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, panel.editor.anchorProgress))
+                            height: parent.height
+                            radius: 3
+                            color: Theme.acento
+                        }
+                    }
+                    BotonIcono {
+                        texto: "Cancelar"
+                        implicitHeight: 24
+                        onPulsado: panel.editor.cancelAnchor()
+                    }
+                }
+                Text {
+                    visible: text.length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: panel.editor.anchorMessage
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+
+            // --- Pantalla verde (croma): solo si se le añadió el efecto (desde Efectos) ---
+            Separador { visible: propiedades.hayCroma }
+            RowLayout {
+                id: cabeceraCroma
+                visible: propiedades.hayCroma
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: "Pantalla verde"
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTexto
+                    font.bold: true
+                }
+                BotonIcono {
+                    texto: propiedades.croma.enabled ? "Activada" : "Desactivada"
+                    activo: propiedades.croma.enabled === true
+                    enabled: propiedades.videoEditable
+                    implicitHeight: 26
+                    ayuda: "Vuelve transparente el color de fondo del clip"
+                    onPulsado: propiedades.aplicar({ keyEnabled: !propiedades.croma.enabled },
+                                                   "Pantalla verde")
+                }
+                BotonIcono {
+                    icono: "quitar"
+                    enabled: propiedades.videoEditable
+                    implicitHeight: 26
+                    ayuda: "Quitar el efecto de pantalla verde del clip"
+                    onPulsado: propiedades.aplicar({ keyRemove: true }, "Quitar pantalla verde")
+                }
+            }
+            ColumnLayout {
+                visible: propiedades.hayCroma
+                enabled: propiedades.videoEditable
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    // Muestra del color que se quita (es un color del video, no del tema).
+                    Rectangle {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: Theme.radio
+                        color: propiedades.croma.color || "transparent"
+                        border.color: Theme.borde
+                    }
+                    TextField {
+                        id: campoColor
+                        Layout.preferredWidth: 84
+                        implicitHeight: 26
+                        text: propiedades.croma.color || ""
+                        color: Theme.texto
+                        font.pixelSize: Theme.tamTextoPequeno
+                        font.family: "monospace"
+                        selectByMouse: true
+                        maximumLength: 7
+                        validator: RegularExpressionValidator { regularExpression: /#?[0-9a-fA-F]{0,6}/ }
+                        background: Rectangle {
+                            radius: Theme.radio
+                            color: Theme.fondo
+                            border.color: campoColor.activeFocus ? Theme.acento : Theme.borde
+                        }
+                        onEditingFinished: {
+                            const hex = text.startsWith("#") ? text : "#" + text
+                            if (/^#[0-9a-fA-F]{6}$/.test(hex))
+                                propiedades.aplicar({ keyEnabled: true, keyColor: hex }, "Pantalla verde")
+                            // Al escribir se pierde el enlace: que siga al clip seleccionado.
+                            text = Qt.binding(() => propiedades.croma.color || "")
+                        }
+                    }
+                    BotonIcono {
+                        texto: "Verde"
+                        implicitHeight: 26
+                        ayuda: "Verde puro (#00FF00), el de la mayoría de los efectos con fondo verde"
+                        onPulsado: propiedades.aplicar({ keyEnabled: true, keyColor: "#00FF00" },
+                                                       "Pantalla verde")
+                    }
+                    BotonIcono {
+                        texto: "Azul"
+                        implicitHeight: 26
+                        ayuda: "Pantalla azul (#0047BB)"
+                        onPulsado: propiedades.aplicar({ keyEnabled: true, keyColor: "#0047BB" },
+                                                       "Pantalla verde")
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "gotero"
+                    texto: panel.editor.detectingKey ? "Buscando el color…" : "Detectar el color del fondo"
+                    enabled: !panel.editor.detectingKey
+                    ayuda: "Busca el color de fondo en los bordes del fotograma que se ve y activa "
+                           + "la pantalla verde con él"
+                    onPulsado: {
+                        avisoCroma.visible = false
+                        panel.editor.detectKeyColor(propiedades.sel.video)
+                    }
+                }
+                Text {
+                    id: avisoCroma
+                    Layout.fillWidth: true
+                    visible: false
+                    wrapMode: Text.WordWrap
+                    text: "No se encontró un color de fondo en los bordes de este fotograma. "
+                          + "Mueve el cabezal a un momento en que se vea el fondo o escribe el color."
+                    color: Theme.aviso
+                    font.pixelSize: Theme.tamTextoPequeno
+                    Connections {
+                        target: panel.editor
+                        function onKeyColorDetected(found) { avisoCroma.visible = !found }
+                    }
+                }
+                CampoNumero {
+                    etiqueta: "Similitud"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.similarity || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySimilarity: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySimilarity: v / 100 }, "Pantalla verde")
+                }
+                CampoNumero {
+                    etiqueta: "Suavidad"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.smoothness || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySmoothness: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySmoothness: v / 100 }, "Pantalla verde")
+                }
+                CampoNumero {
+                    etiqueta: "Quitar reflejo"
+                    unidad: "%"
+                    paso: 0.2
+                    desde: 0
+                    hasta: 100
+                    valor: (propiedades.croma.spill || 0) * 100
+                    activo: propiedades.videoEditable
+                    onCambiando: (v) => propiedades.vista({ keySpill: v / 100 })
+                    onCambiado: (v) => propiedades.aplicar({ keySpill: v / 100 }, "Pantalla verde")
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Similitud: cuánto se parece un color al del fondo para quitarlo (súbela "
+                          + "si quedan restos del fondo). Suavidad: borde gradual. Quitar reflejo: "
+                          + "elimina el tono del fondo que se cuela en los bordes."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+
+            // --- Efectos de imagen (solo los que tiene el clip) ---
+            CabeceraEfecto {
+                id: seccionByn
+                visible: propiedades.hayVideo && propiedades.fx.grayscaleOn === true
+                titulo: "Blanco y negro"
+                onQuitar: propiedades.aplicar({ grayscaleOn: false }, "Quitar blanco y negro")
+            }
+            CampoAnimable {
+                clave: "grayscale"
+                visible: seccionByn.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Intensidad"
+                unidad: "%"
+                paso: 0.5
+                desde: 0
+                hasta: 100
+                valor: (propiedades.fx.grayscale !== undefined ? propiedades.fx.grayscale : 1) * 100
+                onCambiando: (v) => propiedades.vista({ grayscale: v / 100 })
+                onCambiado: (v) => propiedades.aplicar({ grayscale: v / 100 }, "Blanco y negro")
+            }
+
+            CabeceraEfecto {
+                id: seccionDesenfoque
+                visible: propiedades.hayVideo && propiedades.fx.blurOn === true
+                titulo: "Desenfoque"
+                onQuitar: propiedades.aplicar({ blurOn: false }, "Quitar desenfoque")
+            }
+            CampoAnimable {
+                clave: "blur"
+                visible: seccionDesenfoque.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Cantidad"
+                unidad: "px"
+                decimales: 1
+                paso: 0.2
+                desde: 0
+                hasta: 200
+                valor: propiedades.fx.blur || 0
+                onCambiando: (v) => propiedades.vista({ blur: v })
+                onCambiado: (v) => propiedades.aplicar({ blur: v }, "Desenfoque")
+            }
+
+            CabeceraEfecto {
+                id: seccionEsquinas
+                visible: propiedades.hayVideo && propiedades.fx.cornersOn === true
+                titulo: "Esquinas redondeadas"
+                onQuitar: propiedades.aplicar({ cornersOn: false }, "Quitar esquinas redondeadas")
+            }
+            CampoAnimable {
+                clave: "corners"
+                visible: seccionEsquinas.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Radio"
+                unidad: "px"
+                paso: 0.5
+                desde: 0
+                hasta: 2000
+                valor: propiedades.fx.corners || 0
+                onCambiando: (v) => propiedades.vista({ corners: v })
+                onCambiado: (v) => propiedades.aplicar({ corners: v }, "Esquinas redondeadas")
+            }
+
+            CabeceraEfecto {
+                id: seccionSombra
+                visible: propiedades.hayVideo && propiedades.fx.shadowOn === true
+                titulo: "Sombra o resplandor"
+                onQuitar: propiedades.aplicar({ shadowOn: false }, "Quitar sombra")
+            }
+            ColumnLayout {
+                visible: seccionSombra.visible
+                enabled: propiedades.videoEditable
+                Layout.fillWidth: true
+                spacing: 6
+                CampoColor {
+                    etiqueta: "Color"
+                    color: propiedades.fx.shadowColor || "#000000"
+                    onElegido: (c) => propiedades.aplicar({ shadowColor: c }, "Color de la sombra")
+                }
+                Repeater {
+                    model: [
+                        { clave: "shadowOpacity", nombre: "Opacidad", unidad: "%", factor: 100, desde: 0, hasta: 100 },
+                        { clave: "shadowSoftness", nombre: "Difuminado", unidad: "px", factor: 1, desde: 0, hasta: 200 },
+                        { clave: "shadowSpread", nombre: "Tamaño", unidad: "px", factor: 1, desde: 0, hasta: 200 },
+                        { clave: "shadowX", nombre: "Distancia X", unidad: "px", factor: 1, desde: -2000, hasta: 2000 },
+                        { clave: "shadowY", nombre: "Distancia Y", unidad: "px", factor: 1, desde: -2000, hasta: 2000 }
+                    ]
+                    delegate: CampoAnimable {
+                        required property var modelData
+                        clave: modelData.clave
+                        etiqueta: modelData.nombre
+                        unidad: modelData.unidad
+                        paso: 0.5
+                        desde: modelData.desde
+                        hasta: modelData.hasta
+                        valor: (propiedades.fx[modelData.clave] || 0) * modelData.factor
+                        onCambiando: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / modelData.factor
+                            propiedades.vista(valores)
+                        }
+                        onCambiado: (v) => {
+                            const valores = {}
+                            valores[modelData.clave] = v / modelData.factor
+                            propiedades.aplicar(valores, "Sombra")
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Sigue la forma del clip, también su transparencia y la pantalla verde. "
+                          + "Para un resplandor: color vivo, distancia 0 y algo de tamaño."
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                 }
@@ -415,6 +1242,188 @@ Rectangle {
             }
         }
     }
+    DialogoNombre { id: dialogoAjuste }
+    DialogoAjusteClip { id: dialogoAjusteClip; editor: panel.editor }
+
+    // Cabecera de un efecto del clip: nombre y botón para quitarlo.
+    component CabeceraEfecto: ColumnLayout {
+        id: cabeceraEfecto
+        property string titulo
+        signal quitar()
+        Layout.fillWidth: true
+        spacing: 6
+        Separador {}
+        RowLayout {
+            Layout.fillWidth: true
+            Text {
+                Layout.fillWidth: true
+                text: cabeceraEfecto.titulo
+                color: Theme.texto
+                font.pixelSize: Theme.tamTexto
+                font.bold: true
+            }
+            BotonIcono {
+                icono: "quitar"
+                implicitHeight: 26
+                enabled: propiedades.videoEditable
+                ayuda: "Quitar el efecto «" + cabeceraEfecto.titulo + "»"
+                onPulsado: cabeceraEfecto.quitar()
+            }
+        }
+    }
+
+    // Valor de una propiedad animable del clip: el número y, a su derecha, ⏱ (animarla)
+    // y, si está animada, ◀ ◆ ▶ (keyframe anterior, poner o quitar el del cabezal,
+    // siguiente).
+    component CampoAnimable: RowLayout {
+        id: campoA
+        property string clave
+        property alias etiqueta: numero.etiqueta
+        property alias unidad: numero.unidad
+        property alias valor: numero.valor
+        property alias desde: numero.desde
+        property alias hasta: numero.hasta
+        property alias paso: numero.paso
+        property alias decimales: numero.decimales
+        property alias activo: numero.activo
+        signal cambiando(real valor)
+        signal cambiado(real valor)
+        readonly property var info: propiedades.anim[clave] || ({})
+        readonly property bool animada: info.animated === true
+
+        Layout.fillWidth: true
+        spacing: 2
+        CampoNumero {
+            id: numero
+            Layout.fillWidth: true
+            onCambiando: (v) => campoA.cambiando(v)
+            onCambiado: (v) => campoA.cambiado(v)
+        }
+        BotonKey {
+            icono: "reloj"
+            encendido: campoA.animada
+            ayuda: campoA.animada ? "Dejar de animar (se queda con el valor de ahora)"
+                                  : "Animar: los cambios en distintos momentos crean keyframes"
+            onPulsado: panel.editor.setPropertyAnimated(propiedades.sel.video, campoA.clave,
+                                                        !campoA.animada)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: "anterior"
+            enabled: campoA.info.prev === true
+            ayuda: "Keyframe anterior"
+            onPulsado: panel.editor.goToKeyframe(propiedades.sel.video, campoA.clave, -1)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: campoA.info.key ? "keyframeLleno" : "keyframe"
+            encendido: campoA.info.key === true
+            ayuda: campoA.info.key ? "Quitar el keyframe del cabezal" : "Poner un keyframe en el cabezal"
+            onPulsado: panel.editor.toggleKeyframe(propiedades.sel.video, campoA.clave)
+        }
+        BotonKey {
+            visible: campoA.animada
+            icono: "siguiente"
+            enabled: campoA.info.next === true
+            ayuda: "Keyframe siguiente"
+            onPulsado: panel.editor.goToKeyframe(propiedades.sel.video, campoA.clave, 1)
+        }
+    }
+
+    component BotonKey: Rectangle {
+        id: botonKey
+        property string icono
+        property string ayuda
+        property bool encendido: false
+        signal pulsado()
+        implicitWidth: 20
+        implicitHeight: 22
+        radius: 4
+        opacity: enabled ? 1 : 0.35
+        color: zonaKey.containsMouse ? Theme.panelElevado : "transparent"
+        Icono {
+            anchors.centerIn: parent
+            nombre: botonKey.icono
+            tam: 13
+            color: botonKey.encendido ? Theme.acento : Theme.textoSecundario
+        }
+        MouseArea {
+            id: zonaKey
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: botonKey.pulsado()
+        }
+        ToolTip.visible: zonaKey.containsMouse && ayuda.length > 0
+        ToolTip.delay: 600
+        ToolTip.text: ayuda
+    }
+
+    // Color con su muestra y su código (#RRGGBB) editable, y unos colores rápidos.
+    component CampoColor: RowLayout {
+        id: campo
+        property string etiqueta
+        property string color
+        signal elegido(string color)
+        Layout.fillWidth: true
+        spacing: 5
+        Text {
+            Layout.preferredWidth: 72
+            text: campo.etiqueta
+            color: Theme.textoSecundario
+            font.pixelSize: Theme.tamTextoPequeno
+            elide: Text.ElideRight
+        }
+        // Muestra del color elegido (es un color del video, no del tema).
+        Rectangle {
+            implicitWidth: 22
+            implicitHeight: 22
+            radius: 4
+            color: campo.color
+            border.color: Theme.borde
+        }
+        TextField {
+            id: codigo
+            Layout.preferredWidth: 70
+            implicitHeight: 24
+            text: campo.color
+            color: Theme.texto
+            font.pixelSize: Theme.tamTextoPequeno
+            font.family: "monospace"
+            selectByMouse: true
+            maximumLength: 7
+            validator: RegularExpressionValidator { regularExpression: /#?[0-9a-fA-F]{0,6}/ }
+            background: Rectangle {
+                radius: Theme.radio
+                color: Theme.fondo
+                border.color: codigo.activeFocus ? Theme.acento : Theme.borde
+            }
+            onEditingFinished: {
+                const hex = text.startsWith("#") ? text : "#" + text
+                if (/^#[0-9a-fA-F]{6}$/.test(hex) && hex.toUpperCase() !== campo.color.toUpperCase())
+                    campo.elegido(hex.toUpperCase())
+                text = Qt.binding(() => campo.color)
+            }
+        }
+        Repeater {
+            // Colores rápidos (del video, no del tema).
+            model: ["#FFFFFF", "#000000", "#FFD800"]
+            delegate: Rectangle {
+                required property string modelData
+                implicitWidth: 14
+                implicitHeight: 14
+                radius: 7
+                color: modelData
+                border.color: Theme.borde
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: campo.elegido(parent.modelData)
+                }
+            }
+        }
+        Item { Layout.fillWidth: true }
+    }
+
     component Separador: Rectangle {
         Layout.fillWidth: true
         Layout.topMargin: 2

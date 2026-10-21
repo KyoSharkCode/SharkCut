@@ -957,3 +957,63 @@ TEST_CASE("Markers live in their sequence and are copied with new ids", "[docume
     CHECK(duplicated->markers[0].frame == 30);
     CHECK(duplicated->markers[0].id != d.sequences.front().markers[0].id);
 }
+
+TEST_CASE("Copied clips are pasted at the playhead overwriting what is there", "[timeline]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("a.mp4", 60, true, true));
+    placeClip(p, a, 0, 0, 600);   // 0–600
+    placeClip(p, a, 600, 0, 600); // 600–1200
+    const ObjectId first = video(p).front().id;
+    ClipTransform t;
+    t.scale = 0.5;
+    t.effects.grayscaleOn = true;
+    REQUIRE(setClipTransform(p, first, t));
+    p.tracks[*p.trackIndex(TrackKind::Audio, 0)].clips.front().volumeDb = -6.0;
+
+    const Clipboard copied = copyClips(p, {first});
+    REQUIRE(copied.clips.size() == 2); // con su audio
+    CHECK(copied.length == 600);
+
+    const std::vector<ObjectId> pasted = pasteClips(p, copied, 900);
+    REQUIRE(pasted.size() == 2);
+    checkInvariants(p);
+    // 0–600, 600–900 (recortado), 900–1500 (pegado).
+    REQUIRE(video(p).size() == 3);
+    const Clip& v = video(p).back();
+    CHECK(v.start == 900);
+    CHECK(v.length == 600);
+    CHECK(v.transform.scale == 0.5);
+    CHECK(v.transform.effects.grayscaleOn);
+    CHECK(video(p)[1].end() == 900);
+    const Clip& sound = audio(p).back();
+    CHECK(sound.start == 900);
+    CHECK(sound.volumeDb == -6.0);
+    CHECK(v.link == sound.id); // enlazados entre sí
+    CHECK(sound.link == v.id);
+    // Lo copiado sigue igual: se puede pegar otra vez.
+    CHECK(pasteClips(p, copied, 2000).size() == 2);
+    checkInvariants(p);
+}
+
+TEST_CASE("Pasting into another project adds the media and missing tracks", "[timeline]") {
+    Project source;
+    const ObjectId a = addMedia(source, media("a.mp4", 60, true, false));
+    addTrack(source, TrackKind::Video);
+    placeClip(source, a, 100, 0, 300, PlaceTarget{.video = 1}); // en V2
+    const Clipboard copied = copyClips(source, {source.tracks[1].clips.front().id});
+
+    Project target;
+    REQUIRE(target.media.empty());
+    const std::vector<ObjectId> pasted = pasteClips(target, copied, 0);
+    REQUIRE(pasted.size() == 1);
+    REQUIRE(target.media.size() == 1);
+    CHECK(target.media.front().path == "/videos/a.mp4");
+    const auto ref = target.findClip(pasted.front());
+    REQUIRE(ref);
+    CHECK(target.trackNumber(ref->track) == 1); // V2 (creada)
+    CHECK(target.clip(pasted.front())->media == target.media.front().id);
+    // Una segunda vez reutiliza el medio.
+    pasteClips(target, copied, 1000);
+    CHECK(target.media.size() == 1);
+    checkInvariants(target);
+}

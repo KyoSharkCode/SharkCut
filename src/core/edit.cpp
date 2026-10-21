@@ -5,6 +5,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <unordered_map>
 
 namespace sharkcut {
 
@@ -363,6 +364,150 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, PlaceTa
     return item ? placeClip(project, media, start, 0, project.mediaFrames(*item), target) : 0;
 }
 
+Clipboard copyClips(const Project& project, const std::vector<ObjectId>& clips) {
+    Clipboard clipboard;
+    const std::vector<ObjectId> group = withLinked(project, clips);
+    std::int64_t first = std::numeric_limits<std::int64_t>::max();
+    std::int64_t last = 0;
+    for (std::size_t t = 0; t < project.tracks.size(); ++t) {
+        for (const Clip& clip : project.tracks[t].clips) {
+            if (!contains(group, clip.id)) {
+                continue;
+            }
+            clipboard.clips.push_back({project.tracks[t].kind, project.trackNumber(t), clip});
+            first = std::min(first, clip.start);
+            last = std::max(last, clip.end());
+            const MediaItem* item = project.findMedia(clip.media);
+            if (item && std::none_of(clipboard.media.begin(), clipboard.media.end(),
+                                     [item](const MediaItem& m) { return m.id == item->id; })) {
+                clipboard.media.push_back(*item);
+            }
+        }
+    }
+    if (clipboard.clips.empty()) {
+        return {};
+    }
+    for (ClipboardClip& c : clipboard.clips) {
+        c.clip.start -= first;
+    }
+    clipboard.length = last - first;
+    return clipboard;
+}
+
+std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, std::int64_t at) {
+    if (clipboard.empty() || at < 0) {
+        return {};
+    }
+    // Medios: los del proyecto con la misma ruta, o se añaden.
+    std::unordered_map<ObjectId, ObjectId> mediaIds;
+    for (const MediaItem& item : clipboard.media) {
+        const auto it = std::find_if(project.media.begin(), project.media.end(),
+                                     [&item](const MediaItem& m) { return m.path == item.path; });
+        mediaIds[item.id] = it != project.media.end() ? it->id : addMedia(project, item);
+    }
+    // Pistas de destino (se crean las que falten) e identificadores nuevos.
+    struct Pasting {
+        std::size_t track;
+        Clip clip;
+        ObjectId oldLink;
+    };
+    std::vector<Pasting> pasting;
+    std::unordered_map<ObjectId, ObjectId> ids;
+    for (const ClipboardClip& c : clipboard.clips) {
+        while (project.trackCount(c.kind) <= c.trackNumber) {
+            addTrack(project, c.kind);
+        }
+        const std::size_t track = project.trackIndex(c.kind, c.trackNumber).value();
+        const auto media = mediaIds.find(c.clip.media);
+        if (project.tracks[track].locked || (media == mediaIds.end() && !c.clip.isEffect())) {
+            continue;
+        }
+        Clip clip = c.clip;
+        clip.id = newId(project);
+        clip.media = c.clip.isEffect() ? 0 : media->second;
+        clip.start += at;
+        ids[c.clip.id] = clip.id;
+        pasting.push_back({track, clip, c.clip.link});
+    }
+    // Enlaces entre los pegados (si el compañero no se pegó, queda suelto).
+    for (Pasting& p : pasting) {
+        const auto partner = ids.find(p.oldLink);
+        p.clip.link = partner != ids.end() ? partner->second : 0;
+    }
+    Splits splits;
+    for (const Pasting& p : pasting) {
+        clearRange(project, p.track, p.clip.start, p.clip.end(), splits);
+    }
+    std::vector<ObjectId> pasted;
+    for (const Pasting& p : pasting) {
+        insertSorted(project.tracks[p.track], p.clip);
+        pasted.push_back(p.clip.id);
+    }
+    fixLinks(project, splits);
+    return pasted;
+}
+
+ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
+                     TransitionParams params) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||
+        start < 0) {
+        return 0;
+    }
+    params.durationFrames = std::max<std::int64_t>(params.durationFrames, 2);
+    const std::int64_t end = start + params.durationFrames;
+    // La primera pista de video, desde `track` hacia arriba, libre en ese tramo (para no
+    // tapar clips); si no hay, una nueva encima.
+    auto free = [&](std::size_t t) {
+        const Track& candidate = project.tracks[t];
+        return candidate.kind == TrackKind::Video && !candidate.locked &&
+               std::none_of(candidate.clips.begin(), candidate.clips.end(),
+                            [&](const Clip& c) { return c.start < end && c.end() > start; });
+    };
+    std::optional<std::size_t> target;
+    for (std::size_t t = track; t < project.tracks.size(); ++t) {
+        if (free(t)) {
+            target = t;
+            break;
+        }
+    }
+    if (!target) {
+        target = addTrack(project, TrackKind::Video);
+    }
+    Clip clip;
+    clip.id = newId(project);
+    clip.start = start;
+    clip.length = params.durationFrames;
+    clip.effect = params;
+    insertSorted(project.tracks[*target], clip);
+    return clip.id;
+}
+
+bool setClipEffect(Project& project, ObjectId id, TransitionParams params) {
+    Clip* clip = findMutable(project, id);
+    if (!clip || !clip->isEffect() || inLockedTrack(project, id)) {
+        return false;
+    }
+    params.durationFrames = std::clamp<std::int64_t>(params.durationFrames, 2, 60 * 60 * 120);
+    params.intensity = std::clamp(params.intensity, 0.0, 1.0);
+    params.blur = std::clamp(params.blur, 0.0, 1.0);
+    if (params.durationFrames != clip->effect->durationFrames) {
+        // Otra duración: el efecto entero, desde su inicio, hasta donde quepa.
+        const auto ref = project.findClip(id);
+        const Track& track = project.tracks[ref->track];
+        std::int64_t room = params.durationFrames;
+        if (ref->index + 1 < track.clips.size()) {
+            room = std::min(room, track.clips[ref->index + 1].start - clip->start);
+        }
+        clip->in = 0;
+        clip->length = std::max<std::int64_t>(1, room);
+    }
+    if (clip->effect == params) {
+        return false;
+    }
+    clip->effect = params;
+    return true;
+}
+
 bool splitAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& clips) {
     const bool all = clips.empty();
     const std::vector<ObjectId> targets =
@@ -461,7 +606,9 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
         const Clip& c = track.clips[ref->index];
         current = c.end();
         lo = std::max(lo, c.start + 1); // al menos un fotograma
-        if (const MediaItem* item = project.findMedia(c.media)) {
+        if (c.isEffect()) {
+            hi = std::min(hi, c.start + c.effect->durationFrames - c.in); // fin del efecto
+        } else if (const MediaItem* item = project.findMedia(c.media)) {
             hi = std::min(hi, c.start + project.mediaFrames(*item) - c.in); // fin del medio
         }
         if (ref->index + 1 < track.clips.size()) {
@@ -593,12 +740,29 @@ ClipTransform clampTransform(ClipTransform t) {
     constexpr double kMaxOffset = 1'000'000.0;
     t.x = std::clamp(finite(t.x, 0.0), -kMaxOffset, kMaxOffset);
     t.y = std::clamp(finite(t.y, 0.0), -kMaxOffset, kMaxOffset);
+    // Varias vueltas valen (para animar un giro de 720°…).
+    t.rotation = std::clamp(finite(t.rotation, 0.0), -kMaxRotation, kMaxRotation);
     t.scale = std::clamp(finite(t.scale, 1.0), kMinScale, kMaxScale);
     t.opacity = std::clamp(finite(t.opacity, 1.0), 0.0, 1.0);
     t.cropLeft = std::clamp(finite(t.cropLeft, 0.0), 0.0, kMaxCrop);
     t.cropTop = std::clamp(finite(t.cropTop, 0.0), 0.0, kMaxCrop);
     t.cropRight = std::clamp(finite(t.cropRight, 0.0), 0.0, kMaxCrop - t.cropLeft);
     t.cropBottom = std::clamp(finite(t.cropBottom, 0.0), 0.0, kMaxCrop - t.cropTop);
+    ClipEffects& fx = t.effects;
+    fx.grayscale = std::clamp(finite(fx.grayscale, 1.0), 0.0, 1.0);
+    fx.blur = std::clamp(finite(fx.blur, 12.0), 0.0, kMaxBlur);
+    fx.corners = std::clamp(finite(fx.corners, 40.0), 0.0, kMaxEffectPixels);
+    fx.shadowColor &= 0xFFFFFFu;
+    fx.shadowOpacity = std::clamp(finite(fx.shadowOpacity, 0.6), 0.0, 1.0);
+    fx.shadowSoftness = std::clamp(finite(fx.shadowSoftness, 30.0), 0.0, kMaxBlur);
+    fx.shadowX = std::clamp(finite(fx.shadowX, 0.0), -kMaxEffectPixels, kMaxEffectPixels);
+    fx.shadowY = std::clamp(finite(fx.shadowY, 12.0), -kMaxEffectPixels, kMaxEffectPixels);
+    fx.shadowSpread = std::clamp(finite(fx.shadowSpread, 0.0), 0.0, kMaxBlur);
+    ChromaKey& key = t.chromaKey;
+    key.color &= 0xFFFFFFu;
+    key.similarity = std::clamp(finite(key.similarity, 0.40), 0.0, kMaxChromaDistance);
+    key.smoothness = std::clamp(finite(key.smoothness, 0.10), 0.0, kMaxChromaDistance);
+    key.spill = std::clamp(finite(key.spill, 0.40), 0.0, kMaxChromaDistance);
     return t;
 }
 
@@ -614,6 +778,173 @@ bool setClipTransform(Project& project, ObjectId clip, const ClipTransform& tran
         return false;
     }
     c.transform = clamped;
+    return true;
+}
+
+// --- Keyframes ----------------------------------------------------------------------
+
+namespace {
+
+// Clip de video editable (existe y su pista no está bloqueada), o nullptr.
+Clip* editableVideoClip(Project& project, ObjectId id) {
+    const auto ref = project.findClip(id);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Video ||
+        project.tracks[ref->track].locked) {
+        return nullptr;
+    }
+    return &project.tracks[ref->track].clips[ref->index];
+}
+
+bool nearlyEqual(double a, double b) {
+    return std::abs(a - b) <= 1e-9 * std::max(1.0, std::max(std::abs(a), std::abs(b)));
+}
+
+// Crea o actualiza el keyframe en `mediaFrame`. Devuelve si cambió algo.
+bool upsertKeyframe(std::vector<Keyframe>& keys, std::int64_t mediaFrame, double value) {
+    const auto it = std::lower_bound(keys.begin(), keys.end(), mediaFrame,
+                                     [](const Keyframe& k, std::int64_t f) { return k.frame < f; });
+    if (it != keys.end() && it->frame == mediaFrame) {
+        if (nearlyEqual(it->value, value)) {
+            return false;
+        }
+        it->value = value;
+        return true;
+    }
+    // Uno nuevo entre dos: con la curva del anterior (así no cambia el estilo del tramo).
+    const Easing easing = it != keys.begin() ? (it - 1)->easing : Easing::Linear;
+    keys.insert(it, Keyframe{mediaFrame, value, easing});
+    return true;
+}
+
+} // namespace
+
+bool setClipTransformAt(Project& project, ObjectId id, const ClipTransform& transform,
+                        std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    const ClipTransform before = transformAt(*clip, frame);
+    const ClipTransform wanted = clampTransform(transform);
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    bool changed = false;
+    ClipTransform fixed = wanted; // lo no animado, tal cual
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto p = static_cast<AnimProperty>(i);
+        if (!clip->animation.animated(p)) {
+            continue;
+        }
+        transformField(fixed, p) = transformField(clip->transform, p);
+        const double value = transformField(wanted, p);
+        if (!nearlyEqual(value, transformField(before, p))) {
+            changed = upsertKeyframe(clip->animation.of(p), mediaFrame, value) || changed;
+        }
+    }
+    if (fixed != clip->transform) {
+        clip->transform = fixed;
+        changed = true;
+    }
+    return changed;
+}
+
+bool setPropertyAnimated(Project& project, ObjectId id, AnimProperty property, bool animated,
+                         std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || clip->animation.animated(property) == animated) {
+        return false;
+    }
+    const double value = transformField(transformAt(*clip, frame), property);
+    if (animated) {
+        clip->animation.of(property).push_back({clip->mediaFrameAt(frame), value, Easing::Linear});
+    } else {
+        clip->animation.of(property).clear();
+        transformField(clip->transform, property) = value;
+        clip->transform = clampTransform(clip->transform);
+    }
+    return true;
+}
+
+bool setKeyframe(Project& project, ObjectId id, AnimProperty property, std::int64_t frame,
+                 double value) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || !std::isfinite(value)) {
+        return false;
+    }
+    return upsertKeyframe(clip->animation.of(property), clip->mediaFrameAt(frame), value);
+}
+
+bool removeKeyframe(Project& project, ObjectId id, AnimProperty property, std::int64_t frame) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    auto& keys = clip->animation.of(property);
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    const auto it = std::find_if(keys.begin(), keys.end(),
+                                 [mediaFrame](const Keyframe& k) { return k.frame == mediaFrame; });
+    if (it == keys.end()) {
+        return false;
+    }
+    const double value = it->value;
+    keys.erase(it);
+    if (keys.empty()) {
+        transformField(clip->transform, property) = value;
+        clip->transform = clampTransform(clip->transform);
+    }
+    return true;
+}
+
+bool setKeyframeEasing(Project& project, ObjectId id, std::int64_t frame, Easing easing) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip) {
+        return false;
+    }
+    const std::int64_t mediaFrame = clip->mediaFrameAt(frame);
+    bool changed = false;
+    for (auto& keys : clip->animation.keys) {
+        for (Keyframe& k : keys) {
+            if (k.frame == mediaFrame && k.easing != easing) {
+                k.easing = easing;
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+bool moveKeyframes(Project& project, ObjectId id, std::int64_t from, std::int64_t to) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || from == to) {
+        return false;
+    }
+    const std::int64_t a = clip->mediaFrameAt(from);
+    const std::int64_t b = clip->mediaFrameAt(to);
+    bool changed = false;
+    for (auto& keys : clip->animation.keys) {
+        const bool taken =
+            std::any_of(keys.begin(), keys.end(), [b](const Keyframe& k) { return k.frame == b; });
+        for (Keyframe& k : keys) {
+            if (k.frame == a && !taken) {
+                k.frame = b;
+                changed = true;
+            }
+        }
+        std::sort(keys.begin(), keys.end(),
+                  [](const Keyframe& x, const Keyframe& y) { return x.frame < y.frame; });
+    }
+    return changed;
+}
+
+bool setClipAnimation(Project& project, ObjectId id, const ClipAnimation& animation) {
+    Clip* clip = editableVideoClip(project, id);
+    if (!clip || clip->animation == animation) {
+        return false;
+    }
+    clip->animation = animation;
+    for (auto& keys : clip->animation.keys) {
+        std::sort(keys.begin(), keys.end(),
+                  [](const Keyframe& x, const Keyframe& y) { return x.frame < y.frame; });
+    }
     return true;
 }
 
@@ -755,27 +1086,21 @@ bool setTransitionLength(Project& project, ObjectId transition, std::int64_t bef
     return true;
 }
 
-ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
-                              std::int64_t hitFrames, double volumeDb) {
-    const Transition* t = project.transition(transition);
+ObjectId placeSoundHit(Project& project, ObjectId soundMedia, std::int64_t hit,
+                       std::int64_t hitFrames, double volumeDb) {
     const MediaItem* item = project.findMedia(soundMedia);
-    if (!t || !item || !item->hasAudio || transitionLocked(project, transition)) {
+    if (!item || !item->hasAudio || hit < 0) {
         return 0;
     }
-    const std::int64_t cut = project.cutOf(*t);
     const std::int64_t length = project.mediaFrames(*item);
-    if (cut < 0 || length <= 0) {
+    if (length <= 0) {
         return 0;
     }
-    // El golpe del sonido cae en el corte (si empezaría antes del 0, se recorta).
-    const std::int64_t start = std::max<std::int64_t>(0, cut - hitFrames);
-    const std::int64_t in = start - (cut - hitFrames);
+    // El golpe del sonido cae en `hit` (si empezaría antes del 0, se recorta).
+    const std::int64_t start = std::max<std::int64_t>(0, hit - hitFrames);
+    const std::int64_t in = start - (hit - hitFrames);
     if (in >= length) {
         return 0;
-    }
-    const ObjectId previous = t->sound;
-    if (previous != 0) {
-        removeClips(project, {previous});
     }
     // Primera pista de audio sin nada en ese tramo; si no hay, una nueva debajo.
     const std::int64_t end = start + (length - in);
@@ -796,10 +1121,30 @@ ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId so
     }
     const ObjectId clip =
         placeClip(project, soundMedia, start, in, length - in, {.video = 0, .audio = number});
+    if (clip != 0) {
+        setClipVolume(project, clip, volumeDb);
+    }
+    return clip;
+}
+
+ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId soundMedia,
+                              std::int64_t hitFrames, double volumeDb) {
+    const Transition* t = project.transition(transition);
+    if (!t || transitionLocked(project, transition)) {
+        return 0;
+    }
+    const std::int64_t cut = project.cutOf(*t);
+    if (cut < 0) {
+        return 0;
+    }
+    const ObjectId previous = t->sound;
+    if (previous != 0) {
+        removeClips(project, {previous});
+    }
+    const ObjectId clip = placeSoundHit(project, soundMedia, cut, hitFrames, volumeDb);
     if (clip == 0) {
         return 0;
     }
-    setClipVolume(project, clip, volumeDb);
     if (Transition* mutableT = findTransitionMutable(project, transition)) {
         mutableT->sound = clip;
     }
@@ -904,6 +1249,64 @@ bool rangeFree(const Project& project, std::int64_t from, std::int64_t to) {
     return true;
 }
 
+// Quita de la pista de subtítulos el tramo [from, to) y adelanta lo que sigue. Los que
+// lo cruzan se recortan (y pierden las palabras que caían dentro).
+bool extractCaptions(CaptionTrack& track, std::int64_t from, std::int64_t to) {
+    const std::int64_t length = to - from;
+    bool changed = false;
+    std::vector<Caption> kept;
+    for (Caption c : track.captions) {
+        if (c.end() <= from) {
+            kept.push_back(std::move(c));
+            continue;
+        }
+        changed = true;
+        if (c.start >= to) {
+            c.start -= length;
+            kept.push_back(std::move(c));
+            continue;
+        }
+        // Lo que queda antes y después del tramo quitado, unido.
+        const std::int64_t before = std::max<std::int64_t>(0, from - c.start);
+        const std::int64_t after = std::max<std::int64_t>(0, c.end() - to);
+        if (before + after <= 0) {
+            continue; // estaba entero dentro
+        }
+        // Nuevo inicio; las palabras se recolocan en tiempo absoluto.
+        const std::int64_t newStart = before > 0 ? c.start : from;
+        std::vector<CaptionWord> words;
+        for (CaptionWord w : c.words) {
+            const std::int64_t a = c.start + w.start;
+            const std::int64_t b = c.start + w.end;
+            if (b <= from) {
+                w.start = a - newStart;
+                w.end = b - newStart;
+                words.push_back(std::move(w));
+            } else if (a >= to) {
+                w.start = a - length - newStart;
+                w.end = b - length - newStart;
+                words.push_back(std::move(w));
+            }
+        }
+        if (!c.words.empty() && words.empty()) {
+            continue; // se quitaron todas sus palabras
+        }
+        if (!c.words.empty() && words.size() != c.words.size()) {
+            std::string text;
+            for (const CaptionWord& w : words) {
+                text += (text.empty() ? "" : " ") + w.text;
+            }
+            c.text = text;
+        }
+        c.words = std::move(words);
+        c.start = newStart;
+        c.length = before + after;
+        kept.push_back(std::move(c));
+    }
+    track.captions = std::move(kept);
+    return changed;
+}
+
 void sortMarkers(Project& project) {
     std::stable_sort(project.markers.begin(), project.markers.end(),
                      [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
@@ -939,6 +1342,11 @@ bool extractRange(Project& project, std::int64_t from, std::int64_t to) {
         } else if (marker.frame > from) {
             marker.frame = from; // estaba en lo que se quitó: queda en el corte
             changed = true;
+        }
+    }
+    for (CaptionTrack& track : project.captionTracks) {
+        if (!track.locked) {
+            changed = extractCaptions(track, from, to) || changed;
         }
     }
     if (!changed) {
@@ -1067,6 +1475,301 @@ bool moveMarker(Project& project, ObjectId marker, std::int64_t frame) {
         }
     }
     return false;
+}
+
+// --- Subtítulos -------------------------------------------------------------------
+
+namespace {
+
+Caption* findCaptionMutable(Project& project, ObjectId id) {
+    const auto ref = project.findCaption(id);
+    return ref ? &project.captionTracks[ref->track].captions[ref->index] : nullptr;
+}
+
+bool captionLocked(const Project& project, ObjectId id) {
+    const auto ref = project.findCaption(id);
+    return !ref || project.captionTracks[ref->track].locked;
+}
+
+// Ordena y recorta los solapes (cada uno empieza donde acaba el anterior, como mínimo).
+void normalizeCaptions(std::vector<Caption>& captions) {
+    std::stable_sort(captions.begin(), captions.end(),
+                     [](const Caption& a, const Caption& b) { return a.start < b.start; });
+    std::vector<Caption> result;
+    for (Caption& c : captions) {
+        c.start = std::max<std::int64_t>(0, c.start);
+        c.length = std::max<std::int64_t>(1, c.length);
+        if (!result.empty() && c.start < result.back().end()) {
+            Caption& previous = result.back();
+            if (c.start <= previous.start) {
+                c.start = previous.end(); // empieza igual: se pone detrás
+            } else {
+                previous.length = c.start - previous.start;
+                std::erase_if(previous.words, [&previous](const CaptionWord& w) {
+                    return w.start >= previous.length;
+                });
+                for (CaptionWord& w : previous.words) {
+                    w.end = std::min(w.end, previous.length);
+                }
+            }
+        }
+        result.push_back(std::move(c));
+    }
+    captions = std::move(result);
+}
+
+// Límites libres alrededor del subtítulo `index` de la pista: [fin del anterior, inicio
+// del siguiente) (el siguiente: sin límite si es el último).
+std::pair<std::int64_t, std::int64_t> captionRoom(const CaptionTrack& track, std::size_t index) {
+    const std::int64_t low = index > 0 ? track.captions[index - 1].end() : 0;
+    const std::int64_t high = index + 1 < track.captions.size()
+                                  ? track.captions[index + 1].start
+                                  : std::numeric_limits<std::int64_t>::max();
+    return {low, high};
+}
+
+} // namespace
+
+std::int64_t mediaEnd(const Project& project) {
+    std::int64_t end = 0;
+    for (const Track& track : project.tracks) {
+        if (!track.clips.empty()) {
+            end = std::max(end, track.clips.back().end());
+        }
+    }
+    return end;
+}
+
+void limitCaptionsTo(std::vector<Caption>& captions, std::int64_t end) {
+    if (end > 0 && !captions.empty() && captions.back().end() > end &&
+        captions.back().start < end) {
+        Caption& last = captions.back();
+        last.length = end - last.start;
+        for (CaptionWord& w : last.words) {
+            w.end = std::min(w.end, last.length);
+            w.start = std::min(w.start, w.end - 1);
+        }
+    }
+}
+
+CaptionStyle clampCaptionStyle(CaptionStyle style) {
+    auto finite = [](double value, double fallback) {
+        return std::isfinite(value) ? value : fallback;
+    };
+    const CaptionStyle d;
+    if (style.font.empty()) {
+        style.font = d.font;
+    }
+    style.size = std::clamp(finite(style.size, d.size), 8.0, 400.0);
+    style.outline = std::clamp(finite(style.outline, d.outline), 0.0, 40.0);
+    style.shadow = std::clamp(finite(style.shadow, d.shadow), 0.0, 1.0);
+    style.box = std::clamp(finite(style.box, d.box), 0.0, 1.0);
+    style.x = std::clamp(finite(style.x, d.x), 0.0, 1.0);
+    style.y = std::clamp(finite(style.y, d.y), 0.0, 1.0);
+    style.maxWidth = std::clamp(finite(style.maxWidth, d.maxWidth), 0.1, 1.0);
+    style.color &= 0xFFFFFFu;
+    style.outlineColor &= 0xFFFFFFu;
+    style.shadowColor &= 0xFFFFFFu;
+    style.boxColor &= 0xFFFFFFu;
+    return style;
+}
+
+std::size_t addCaptionTrack(Project& project, const CaptionStyle& style) {
+    CaptionTrack track;
+    track.style = clampCaptionStyle(style);
+    project.captionTracks.push_back(std::move(track));
+    return project.captionTracks.size() - 1;
+}
+
+bool removeCaptionTrack(Project& project, std::size_t track) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    project.captionTracks.erase(project.captionTracks.begin() + static_cast<std::ptrdiff_t>(track));
+    return true;
+}
+
+bool setCaptionTrackHidden(Project& project, std::size_t track, bool hidden) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].hidden == hidden) {
+        return false;
+    }
+    project.captionTracks[track].hidden = hidden;
+    return true;
+}
+
+bool setCaptionTrackLocked(Project& project, std::size_t track, bool locked) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked == locked) {
+        return false;
+    }
+    project.captionTracks[track].locked = locked;
+    return true;
+}
+
+bool setCaptions(Project& project, std::size_t track, std::vector<Caption> captions) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    for (Caption& c : captions) {
+        c.id = newId(project);
+        if (c.style) {
+            c.style = clampCaptionStyle(*c.style);
+        }
+    }
+    normalizeCaptions(captions);
+    if (project.captionTracks[track].captions == captions) {
+        return false;
+    }
+    project.captionTracks[track].captions = std::move(captions);
+    return true;
+}
+
+ObjectId addCaption(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                    std::string text) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked || start < 0 ||
+        length <= 0) {
+        return 0;
+    }
+    std::vector<Caption>& list = project.captionTracks[track].captions;
+    if (project.captionAt(track, start)) {
+        return 0; // ya hay uno ahí
+    }
+    const auto next = std::find_if(list.begin(), list.end(),
+                                   [start](const Caption& c) { return c.start > start; });
+    if (next != list.end()) {
+        length = std::min(length, next->start - start);
+    }
+    Caption caption;
+    caption.id = newId(project);
+    caption.start = start;
+    caption.length = length;
+    caption.text = std::move(text);
+    const ObjectId id = caption.id;
+    list.insert(next, std::move(caption));
+    return id;
+}
+
+bool removeCaptions(Project& project, const std::vector<ObjectId>& captions) {
+    bool changed = false;
+    for (CaptionTrack& track : project.captionTracks) {
+        if (track.locked) {
+            continue;
+        }
+        changed =
+            std::erase_if(track.captions,
+                          [&captions](const Caption& c) { return contains(captions, c.id); }) > 0 ||
+            changed;
+    }
+    return changed;
+}
+
+bool setCaptionText(Project& project, ObjectId id, std::string text) {
+    Caption* c = captionLocked(project, id) ? nullptr : findCaptionMutable(project, id);
+    if (!c || c->text == text) {
+        return false;
+    }
+    c->text = std::move(text);
+    c->words.clear();
+    return true;
+}
+
+bool moveCaption(Project& project, ObjectId id, std::int64_t start) {
+    const auto ref = project.findCaption(id);
+    if (!ref || project.captionTracks[ref->track].locked) {
+        return false;
+    }
+    CaptionTrack& track = project.captionTracks[ref->track];
+    const auto [low, high] = captionRoom(track, ref->index);
+    Caption& c = track.captions[ref->index];
+    start = std::max(start, low);
+    if (high != std::numeric_limits<std::int64_t>::max()) {
+        start = std::min(start, high - c.length);
+    }
+    if (start < low || start == c.start) {
+        return false; // no cabe donde está (no debería pasar) o no se mueve
+    }
+    c.start = start;
+    return true;
+}
+
+bool trimCaption(Project& project, ObjectId id, std::int64_t start, std::int64_t end) {
+    const auto ref = project.findCaption(id);
+    if (!ref || project.captionTracks[ref->track].locked) {
+        return false;
+    }
+    CaptionTrack& track = project.captionTracks[ref->track];
+    const auto [low, high] = captionRoom(track, ref->index);
+    Caption& c = track.captions[ref->index];
+    start = std::max(start, low);
+    end = std::min(end, high);
+    if (end - start < 1 || (start == c.start && end == c.end())) {
+        return false;
+    }
+    // Las palabras siguen en su sitio de la línea de tiempo; las que se salen se quitan.
+    const std::int64_t shift = c.start - start;
+    const std::int64_t length = end - start;
+    std::vector<CaptionWord> words;
+    for (CaptionWord w : c.words) {
+        w.start += shift;
+        w.end += shift;
+        if (w.end > 0 && w.start < length) {
+            w.start = std::max<std::int64_t>(w.start, 0);
+            w.end = std::min(w.end, length);
+            words.push_back(std::move(w));
+        }
+    }
+    c.words = std::move(words);
+    c.start = start;
+    c.length = length;
+    return true;
+}
+
+bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
+                     const std::optional<CaptionStyle>& style) {
+    const std::optional<CaptionStyle> clamped =
+        style ? std::optional<CaptionStyle>(clampCaptionStyle(*style)) : std::nullopt;
+    bool changed = false;
+    for (const ObjectId id : captions) {
+        Caption* c = captionLocked(project, id) ? nullptr : findCaptionMutable(project, id);
+        if (c && c->style != clamped) {
+            c->style = clamped;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool setCaptionTrackStyle(Project& project, std::size_t track, const CaptionStyle& style,
+                          bool clearOwn) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    CaptionTrack& t = project.captionTracks[track];
+    bool changed = false;
+    const CaptionStyle clamped = clampCaptionStyle(style);
+    if (t.style != clamped) {
+        t.style = clamped;
+        changed = true;
+    }
+    if (clearOwn) {
+        for (Caption& c : t.captions) {
+            if (c.style) {
+                c.style.reset();
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& layout) {
+    if (track >= project.captionTracks.size() || project.captionTracks[track].locked) {
+        return false;
+    }
+    const FrameRate rate = project.settings.frameRate;
+    const std::vector<TimedWord> words = captionWords(project.captionTracks[track], rate);
+    std::vector<Caption> captions = layoutCaptions(words, layout, rate);
+    limitCaptionsTo(captions, mediaEnd(project));
+    return setCaptions(project, track, std::move(captions));
 }
 
 } // namespace sharkcut

@@ -5,6 +5,7 @@
 #include "media/sequence_audio.h"
 #include "media/timeline_audio.h"
 #include "media/video_decoder.h"
+#include "render/caption_renderer.h"
 #include "render/compositor.h"
 
 #include <QOffscreenSurface>
@@ -138,7 +139,7 @@ private:
 class TimelineFrames : public FrameSource {
 public:
     TimelineFrames(Project project, QSize outputSize)
-        : m_project(std::move(project)),
+        : m_project(std::move(project)), m_outputSize(outputSize),
           m_scale(m_project.settings.width > 0
                       ? static_cast<double>(outputSize.width()) / m_project.settings.width
                       : 1.0) {}
@@ -150,15 +151,23 @@ public:
         CompositorInput input;
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
             CompositorLayer& out = input.layers.emplace_back();
+            if (layer.clip->isEffect()) {
+                // Transición-clip: transforma todo lo de debajo.
+                out.adjust = true;
+                out.transition = layer.clip->effect;
+                out.state = evaluateTransition(*layer.clip->effect, layer.effectFrame);
+                continue;
+            }
             out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
-            out.transform = scaled(layer.clip->transform);
+            out.transform = scaled(transformAt(*layer.clip, frame));
             if (layer.transition) {
                 out.b = reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
-                out.transformB = scaled(layer.clipB->transform);
+                out.transformB = scaled(transformAt(*layer.clipB, frame));
                 out.transition = layer.transition->params;
                 out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);
             }
         }
+        input.overlays = m_captions.overlaysAt(m_project, frame, m_outputSize);
         return input;
     }
 
@@ -174,6 +183,12 @@ private:
     ClipTransform scaled(ClipTransform t) const {
         t.x *= m_scale;
         t.y *= m_scale;
+        // Las medidas de los efectos también van en píxeles del lienzo.
+        ClipEffects& fx = t.effects;
+        for (double* v : {&fx.blur, &fx.corners, &fx.shadowSoftness, &fx.shadowX, &fx.shadowY,
+                          &fx.shadowSpread}) {
+            *v *= m_scale;
+        }
         return t;
     }
 
@@ -210,7 +225,9 @@ private:
     static constexpr std::size_t kMaxOpen = 8;
 
     Project m_project;
+    QSize m_outputSize;
     double m_scale = 1.0;
+    CaptionImageCache m_captions;
     std::vector<Entry> m_readers;
     std::uint64_t m_clock = 0;
 };

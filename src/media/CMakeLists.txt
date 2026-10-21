@@ -27,6 +27,10 @@ add_library(sharkcut_media STATIC
     decode_worker.cpp
     proxy.h
     proxy.cpp
+    chroma_key.h
+    chroma_key.cpp
+    motion_tracker.h
+    motion_tracker.cpp
 )
 
 find_package(Threads REQUIRED)

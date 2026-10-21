@@ -66,6 +66,14 @@ void TimelineClipsModel::scheduleRefresh(bool force) {
         Qt::QueuedConnection);
 }
 
+void TimelineClipsModel::setCaptions(bool captions) {
+    if (captions != m_captions) {
+        m_captions = captions;
+        emit editorChanged();
+        refresh(true);
+    }
+}
+
 void TimelineClipsModel::setPixelsPerFrame(double scale) {
     if (scale > 0.0 && scale != m_scale) {
         m_scale = scale;
@@ -89,17 +97,7 @@ QHash<int, QByteArray> TimelineClipsModel::roleNames() const {
     return {{kClipRole, "datosClip"}};
 }
 
-void TimelineClipsModel::refresh(bool force) {
-    const auto first = static_cast<std::int64_t>(std::floor(std::max(0.0, m_first)));
-    const auto last = static_cast<std::int64_t>(std::ceil(std::max(m_first, m_last)));
-    if (!force && first >= m_windowStart && last <= m_windowEnd) {
-        return; // lo visible sigue dentro de lo cargado
-    }
-    // Media pantalla de margen a cada lado: desplazarse un poco no cambia nada.
-    const std::int64_t margin = std::max<std::int64_t>((last - first) / 2, 1);
-    m_windowStart = std::max<std::int64_t>(0, first - margin);
-    m_windowEnd = last + margin;
-
+std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectClips() const {
     // Clips que tocan la ventana (cada pista está ordenada y sin solapes: búsqueda binaria).
     std::vector<Row> fresh;
     if (m_editor) {
@@ -168,6 +166,87 @@ void TimelineClipsModel::refresh(bool force) {
             closeBlock();
         }
     }
+
+    return fresh;
+}
+
+std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectCaptions() const {
+    std::vector<Row> fresh;
+    if (!m_editor) {
+        return fresh;
+    }
+    const sharkcut::Project& p = m_editor->project();
+    for (std::size_t t = 0; t < p.captionTracks.size(); ++t) {
+        const auto& list = p.captionTracks[t].captions;
+        auto it = std::upper_bound(
+            list.begin(), list.end(), m_windowStart,
+            [](std::int64_t frame, const sharkcut::Caption& c) { return frame < c.end(); });
+        struct Block {
+            qint64 id = 0;
+            std::int64_t start = 0;
+            std::int64_t end = 0;
+            int count = 0;
+        } block;
+        auto closeBlock = [&] {
+            if (block.count == 0) {
+                return;
+            }
+            fresh.push_back(
+                {block.id,
+                 {{QStringLiteral("id"), block.id},
+                  {QStringLiteral("block"), true},
+                  {QStringLiteral("count"), block.count},
+                  {QStringLiteral("track"), static_cast<int>(t)},
+                  {QStringLiteral("start"), static_cast<qint64>(block.start)},
+                  {QStringLiteral("length"), static_cast<qint64>(block.end - block.start)},
+                  {QStringLiteral("text"), QString()}}});
+            block = {};
+        };
+        for (; it != list.end() && it->start <= m_windowEnd; ++it) {
+            const bool tiny = static_cast<double>(it->length) * m_scale < kMinClipPixels;
+            const bool joins =
+                block.count > 0 &&
+                static_cast<double>(it->start - block.end) * m_scale < kMinClipPixels;
+            if (tiny && (block.count == 0 || joins)) {
+                if (block.count == 0) {
+                    block.id = -static_cast<qint64>(it->id);
+                    block.start = it->start;
+                }
+                block.end = it->end();
+                ++block.count;
+                continue;
+            }
+            closeBlock();
+            if (tiny) {
+                block = {-static_cast<qint64>(it->id), it->start, it->end(), 1};
+                continue;
+            }
+            fresh.push_back({static_cast<qint64>(it->id),
+                             {{QStringLiteral("id"), static_cast<qint64>(it->id)},
+                              {QStringLiteral("block"), false},
+                              {QStringLiteral("track"), static_cast<int>(t)},
+                              {QStringLiteral("start"), static_cast<qint64>(it->start)},
+                              {QStringLiteral("length"), static_cast<qint64>(it->length)},
+                              {QStringLiteral("text"), QString::fromStdString(it->text)},
+                              {QStringLiteral("styled"), it->style.has_value()}}});
+        }
+        closeBlock();
+    }
+    return fresh;
+}
+
+void TimelineClipsModel::refresh(bool force) {
+    const auto first = static_cast<std::int64_t>(std::floor(std::max(0.0, m_first)));
+    const auto last = static_cast<std::int64_t>(std::ceil(std::max(m_first, m_last)));
+    if (!force && first >= m_windowStart && last <= m_windowEnd) {
+        return; // lo visible sigue dentro de lo cargado
+    }
+    // Media pantalla de margen a cada lado: desplazarse un poco no cambia nada.
+    const std::int64_t margin = std::max<std::int64_t>((last - first) / 2, 1);
+    m_windowStart = std::max<std::int64_t>(0, first - margin);
+    m_windowEnd = last + margin;
+
+    std::vector<Row> fresh = m_captions ? collectCaptions() : collectClips();
 
     std::unordered_map<qint64, std::size_t> wanted;
     for (std::size_t i = 0; i < fresh.size(); ++i) {

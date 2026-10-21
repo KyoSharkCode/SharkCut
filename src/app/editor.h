@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compositionsource.h"
+#include "core/captions.h"
 #include "core/document.h"
 #include "core/edit.h"
 #include "core/history.h"
@@ -9,6 +10,7 @@
 #include "media/decode_worker.h"
 #include "playbackclock.h"
 #include "proxies.h"
+#include "render/caption_renderer.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -79,7 +81,12 @@ class Editor : public CompositionSource {
     // Catálogos para la interfaz: transiciones, curvas y efectos de sonido ("Ninguno" el 0)
     Q_PROPERTY(QStringList transitionNames READ transitionNames CONSTANT)
     Q_PROPERTY(QStringList easingNames READ easingNames CONSTANT)
+    // Curvas de los keyframes (índices de setKeyframeEasing)
+    Q_PROPERTY(QStringList keyframeEasingNames READ keyframeEasingNames CONSTANT)
     Q_PROPERTY(QStringList soundNames READ soundNames CONSTANT)
+    // Biblioteca de efectos de sonido (pestaña Sonidos), por grupos:
+    // [{id, name, category, seconds}].
+    Q_PROPERTY(QVariantList soundLibrary READ soundLibrary CONSTANT)
     // Sonido que lleva por defecto cada transición ("" = ninguno), en el orden de transitionNames
     Q_PROPERTY(QStringList transitionSounds READ transitionSounds CONSTANT)
     Q_PROPERTY(qint64 frameCount READ frameCount NOTIFY projectChanged)
@@ -103,6 +110,27 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
+    Q_PROPERTY(bool detectingKey READ detectingKey NOTIFY detectingKeyChanged)
+    // Subtítulos. Pistas {index, name ("S1"), hidden, locked, count}; subtítulos
+    // seleccionados (ids); el seleccionado para Propiedades (ver selectedCaption()); y los
+    // ajustes de estilo guardados {name, builtin, style} (los de fábrica primero).
+    Q_PROPERTY(QVariantList captionTracks READ captionTracks NOTIFY projectChanged)
+    Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
+    Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
+    Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    // Punto de anclaje (editor_anchor.cpp).
+    Q_PROPERTY(bool anchorPicking READ anchorPicking NOTIFY anchorChanged)
+    Q_PROPERTY(QVariantMap anchorTargetBox READ anchorTargetBox NOTIFY anchorChanged)
+    Q_PROPERTY(bool anchoring READ anchoring NOTIFY anchorChanged)
+    Q_PROPERTY(double anchorProgress READ anchorProgress NOTIFY anchorChanged)
+    Q_PROPERTY(QString anchorMessage READ anchorMessage NOTIFY anchorChanged)
+    Q_PROPERTY(bool canPaste READ canPaste NOTIFY clipboardChanged)
+    // Ajustes guardados de clips (editor_presets.cpp).
+    Q_PROPERTY(QVariantList clipPresets READ clipPresets NOTIFY clipPresetsChanged)
+    // Transcripción automática en curso (descarga del modelo incluida)
+    Q_PROPERTY(bool transcribing READ transcribing NOTIFY transcriptionChanged)
+    Q_PROPERTY(double transcribeProgress READ transcribeProgress NOTIFY transcriptionChanged)
+    Q_PROPERTY(QString transcribeMessage READ transcribeMessage NOTIFY transcriptionChanged)
     // Lienzo del proyecto: "16:9", "9:16", "1:1"… y si lo fija el primer clip
     Q_PROPERTY(QString canvasLabel READ canvasLabel NOTIFY projectChanged)
     Q_PROPERTY(QSize canvas READ canvasSize NOTIFY projectChanged)
@@ -166,6 +194,7 @@ public:
     QVariantList transitions() const;
     QStringList transitionNames() const;
     QStringList easingNames() const;
+    QStringList keyframeEasingNames() const;
     QStringList soundNames() const;
     QStringList transitionSounds() const;
     QVariantMap selectedTransition() const;
@@ -318,6 +347,14 @@ public:
     Q_INVOKABLE void splitAtPlayhead();                      // divide lo que hay bajo el cabezal
     Q_INVOKABLE void splitClip(qint64 clipId, qint64 frame); // cuchilla
     Q_INVOKABLE void removeSelection();
+    // Copiar, cortar y pegar clips (Ctrl+C, Ctrl+X, Ctrl+V): se copian con su audio,
+    // transformación, efectos y keyframes; se pegan en el cabezal, en las mismas pistas y
+    // sobrescribiendo lo que haya (también en otra secuencia o proyecto), quedan
+    // seleccionados y el cabezal va a su final.
+    Q_INVOKABLE void copySelection();
+    Q_INVOKABLE void cutSelection();
+    Q_INVOKABLE void pasteAtPlayhead();
+    bool canPaste() const { return !m_clipboard.empty(); }
     // Edición con rizo (cierra el hueco desplazando lo posterior en las pistas no
     // bloqueadas): Q quita desde el borde anterior hasta el cabezal, W desde el cabezal
     // hasta el borde siguiente; rippleDeleteSelection quita la selección (Mayús+Supr).
@@ -335,6 +372,9 @@ public:
     Q_INVOKABLE void moveMarker(qint64 markerId, qint64 frame);
     // Lleva el cabezal al marcador siguiente (`direction` > 0) o al anterior.
     Q_INVOKABLE void goToMarker(int direction);
+    // Flechas arriba/abajo: el cabezal al corte (inicio o final de un clip, de cualquier
+    // pista) anterior (`direction` < 0) o siguiente.
+    Q_INVOKABLE void goToEdit(int direction);
     Q_INVOKABLE void trimStart(qint64 clipId, qint64 frame);
     Q_INVOKABLE void trimEnd(qint64 clipId, qint64 frame);
     Q_INVOKABLE qint64 limitTrimStart(qint64 clipId, qint64 frame) const;
@@ -357,6 +397,132 @@ public:
     // bandas, recortando lo que sobre), centrado y respetando su recorte.
     Q_INVOKABLE void fitClip(qint64 clipId, bool fill);
     Q_INVOKABLE void resetTransform(qint64 clipId);
+
+    // --- Keyframes (en el cabezal). `property`: "x", "y", "scale", "opacity", "cropLeft",
+    // "cropTop", "cropRight" o "cropBottom". Con una propiedad animada, cambiar su valor
+    // (setClipTransform, el visor) crea o actualiza el keyframe del cabezal.
+    Q_INVOKABLE void setPropertyAnimated(qint64 clipId, const QString& property, bool animated);
+    // Pone un keyframe en el cabezal (con el valor de ahora) o lo quita si ya hay uno.
+    Q_INVOKABLE void toggleKeyframe(qint64 clipId, const QString& property);
+    // Lleva el cabezal al keyframe anterior (−1) o siguiente (1) de la propiedad (o de
+    // cualquiera, con `property` vacío).
+    Q_INVOKABLE void goToKeyframe(qint64 clipId, const QString& property, int direction);
+    // Curva (índice de keyframeEasingNames) de los keyframes del cabezal.
+    Q_INVOKABLE void setKeyframeEasing(qint64 clipId, int easingIndex);
+    // Mueve los keyframes de un fotograma de la línea de tiempo a otro.
+    Q_INVOKABLE void moveKeyframes(qint64 clipId, qint64 from, qint64 to);
+    // Pantalla verde: las claves keyEnabled, keyColor ("#RRGGBB"), keySimilarity,
+    // keySmoothness, keySpill y keyRemove (quita el efecto) de setClipTransform/previewTransform.
+    // detectKeyColor() busca el color de fondo del clip en el fotograma que se ve (en otro hilo) y,
+    // si lo encuentra, activa la pantalla verde con él; al terminar emite keyColorDetected.
+    // `fallbackToGreen`: si no se encuentra, la activa igualmente con el color que tenga.
+    Q_INVOKABLE void detectKeyColor(qint64 clipId, bool fallbackToGreen = false);
+    // Efecto del panel Efectos aplicado a un clip de video (arrastrándolo o con el clip
+    // seleccionado): "croma", "byn", "desenfoque", "esquinas", "sombra", "resplandor" o un
+    // ajuste guardado, "ajuste:<nombre>".
+    // Los efectos de imagen son las claves grayscaleOn/grayscale, blurOn/blur,
+    // cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
+    // shadowY/shadowSpread de setClipTransform. Selecciona el clip para ajustarlo en Propiedades.
+    // Si el clip está en la selección, se aplica a todos sus clips de video a la vez (un
+    // solo paso de deshacer).
+    Q_INVOKABLE void applyEffect(qint64 clipId, const QString& effect);
+    // Clip de la pista de video `track` (índice en tracks) en `frame`, o 0.
+    Q_INVOKABLE qint64 videoClipAt(int track, qint64 frame) const;
+    bool detectingKey() const { return m_detectingKey; }
+
+    // --- Ajustes guardados de clips (editor_presets.cpp): el aspecto de un clip con nombre,
+    // guardado en la configuración de la app (vale para todos los proyectos).
+    // [{name, parts: {placement, opacity, crop, effects, chroma, animation}, anchor
+    // ("start" | "end"), animated, summary}], por nombre.
+    QVariantList clipPresets() const;
+    // Guarda el aspecto del clip (en el cabezal; con su animación si `options.animation`).
+    // `options`: las partes de `parts` (true/false) y anchor. Si ya hay uno con ese nombre,
+    // lo sustituye. Devuelve si se guardó.
+    Q_INVOKABLE bool saveClipPreset(qint64 clipId, const QString& name, const QVariantMap& options);
+    Q_INVOKABLE bool hasClipPreset(const QString& name) const;
+    // Lo aplica a un clip de video (también applyEffect con "ajuste:<nombre>").
+    Q_INVOKABLE void applyClipPreset(qint64 clipId, const QString& name);
+    Q_INVOKABLE bool renameClipPreset(const QString& name, const QString& newName);
+    Q_INVOKABLE void removeClipPreset(const QString& name);
+
+    // --- Punto de anclaje (editor_anchor.cpp): el clip sigue algo que se mueve en otro
+    // clip de video. Se elige a qué clip se ancla, se marca en el visor un recuadro sobre
+    // la zona a seguir (en el cabezal) y se sigue hacia delante en segundo plano; el
+    // recorrido se convierte en keyframes de posición del clip (un paso de deshacer).
+    // Clips de video a los que se puede anclar `clipId`: los demás que se ven en el
+    // cabezal, de arriba abajo: [{id, name, track}].
+    Q_INVOKABLE QVariantList anchorTargets(qint64 clipId) const;
+    // Empieza a marcar la zona en el visor (anchorPicking) o lo deja.
+    Q_INVOKABLE void beginAnchorPick(qint64 clipId, qint64 targetId);
+    Q_INVOKABLE void cancelAnchorPick();
+    // Recuadro marcado (píxeles del lienzo): empieza el seguimiento.
+    Q_INVOKABLE void startAnchor(double left, double top, double width, double height);
+    Q_INVOKABLE void cancelAnchor();
+    bool anchorPicking() const { return m_anchorPickClip != 0; }
+    // Caja (píxeles del lienzo, como selectedClip.box) del clip a seguir mientras se marca.
+    QVariantMap anchorTargetBox() const;
+    bool anchoring() const { return m_anchor != nullptr; }
+    double anchorProgress() const { return m_anchorProgress; }
+    // Estado o resultado del último anclaje (vacío si no hay nada que contar).
+    QString anchorMessage() const { return m_anchorMessage; }
+
+    // --- Subtítulos (editor_captions.cpp) ---
+    QVariantList captionTracks() const;
+    QVariantList captionSelection() const;
+    // {count, id, track, trackName, locked, start, end, text, words (bool), ownStyle,
+    // style (el que se ve), trackStyle}; vacío ({count: 0}) sin selección.
+    QVariantMap selectedCaption() const;
+    QVariantList captionPresets() const;
+    // Pista nueva encima de las demás; devuelve su índice.
+    Q_INVOKABLE int addCaptionTrack();
+    Q_INVOKABLE void removeCaptionTrack(int track);
+    Q_INVOKABLE void setCaptionTrackHidden(int track, bool hidden);
+    Q_INVOKABLE void setCaptionTrackLocked(int track, bool locked);
+    // Subtítulo nuevo de 3 s en el cabezal, en la pista (−1: la primera; se crea si no
+    // hay ninguna). Queda seleccionado.
+    Q_INVOKABLE void addCaptionAtPlayhead(int track = -1);
+    Q_INVOKABLE void selectCaption(qint64 id, bool add);
+    // Mueve el subtítulo (y los demás seleccionados, si lo está) `delta` fotogramas.
+    Q_INVOKABLE void moveCaptions(qint64 id, qint64 delta);
+    // `delta` limitado para que ninguno de los que se mueven pise a otro.
+    Q_INVOKABLE qint64 limitCaptionMove(qint64 id, qint64 delta) const;
+    // Dónde puede empezar y acabar: {low, high} (high = −1 si no hay límite).
+    Q_INVOKABLE QVariantMap captionRoom(qint64 id) const;
+    Q_INVOKABLE void trimCaption(qint64 id, qint64 start, qint64 end);
+    Q_INVOKABLE void setCaptionText(qint64 id, const QString& text);
+    // Estilo de los seleccionados (`wholeTrack`: de sus pistas enteras). `values` puede
+    // traer solo algunas claves: font, size, bold, italic, uppercase, color, outlineColor,
+    // outline, shadowColor, shadow, boxColor, box, x, y, maxWidth. previewCaptionStyle()
+    // solo lo muestra en el visor (mientras se arrastra un valor).
+    Q_INVOKABLE void previewCaptionStyle(const QVariantMap& values, bool wholeTrack);
+    Q_INVOKABLE void endCaptionPreview();
+    Q_INVOKABLE void setCaptionStyle(const QVariantMap& values, bool wholeTrack,
+                                     const QString& label = {});
+    Q_INVOKABLE void applyCaptionPreset(const QString& name, bool wholeTrack);
+    // Los seleccionados vuelven al estilo de su pista.
+    Q_INVOKABLE void resetCaptionStyle();
+    // Guarda el estilo del subtítulo seleccionado como ajuste (reemplaza uno con ese nombre).
+    Q_INVOKABLE void saveCaptionPreset(const QString& name);
+    Q_INVOKABLE void removeCaptionPreset(const QString& name);
+    // Vuelve a dividir la pista: {lines: "single"|"double"|"word", maxChars, minSeconds,
+    // gapFrames, removePunctuation}.
+    Q_INVOKABLE void relayoutCaptionTrack(int track, const QVariantMap& layout);
+    Q_INVOKABLE void importSrt(const QUrl& file);
+    Q_INVOKABLE void exportSrt(int track, const QUrl& file);
+
+    // --- Transcripción (editor_transcription.cpp) ---
+    bool transcribing() const { return m_transcription != nullptr; }
+    double transcribeProgress() const { return m_transcribeProgress; }
+    QString transcribeMessage() const { return m_transcribeMessage; }
+    // Transcribe el audio de la secuencia activa y crea con lo dicho una pista de
+    // subtítulos nueva (un paso de deshacer). Las opciones son las del diálogo de
+    // relayoutCaptionTrack más {language ("es", "en", "auto"), audioTrack (−1 = toda la
+    // mezcla), preset (nombre del ajuste de estilo), quality (0 alta, 1 rápida)}. Si el
+    // modelo no está, se descarga antes (una sola vez).
+    Q_INVOKABLE void createCaptions(const QVariantMap& options);
+    // Abre la carpeta de los registros de las sesiones (para enviar un fallo).
+    Q_INVOKABLE void openLogFolder();
+    Q_INVOKABLE void cancelTranscription();
     // Clip de video visible más alto bajo un punto del lienzo (píxeles), o 0.
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;
     // Volumen de un clip de audio, en dB.
@@ -367,8 +533,9 @@ public:
     // --- Ayudas para la línea de tiempo (sin recorrer los clips desde QML) ---
     // Imán: el borde de clip, marcador, inicio o cabezal más cercano a `frame` a menos de
     // `maxDistance` fotogramas (sin contar los clips `exclude`); si no hay, `frame`.
-    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude,
-                                 double maxDistance) const;
+    // `withPlayhead` = false al mover el propio cabezal.
+    Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance,
+                                 bool withPlayhead = true) const;
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
     // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
     Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;
@@ -382,6 +549,20 @@ public:
     // Pone la transición `typeIndex` (de transitionNames) en el corte `cut` de la pista
     // de video `track`, con su duración y su efecto de sonido por defecto.
     Q_INVOKABLE void addTransition(int track, qint64 cut, int typeIndex);
+    // Transición como clip (como en Premiere Composer): la transición `typeIndex` soltada
+    // en la pista de video `track` en `frame`. Se centra en el corte más cercano (a menos
+    // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
+    // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.
+    Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex);
+    QVariantList soundLibrary() const;
+    // Efecto de sonido de la biblioteca soltado en la pista `track` en `frame` (empieza
+    // ahí; si no es una pista de audio, en la primera libre). Queda seleccionado.
+    Q_INVOKABLE void addSound(const QString& id, int track, qint64 frame);
+    // Con su golpe (lo más fuerte del whoosh, el chasquido del clic…) en el cabezal.
+    Q_INVOKABLE void addSoundAtPlayhead(const QString& id);
+    // Valores de una transición-clip: typeIndex (de transitionNames), intensity y blur
+    // (0–1), easingIndex (de easingNames), length (fotogramas). Solo las claves que vengan.
+    Q_INVOKABLE void setEffectClip(qint64 clipId, const QVariantMap& values);
     Q_INVOKABLE void removeTransition(qint64 id);
     Q_INVOKABLE void selectTransition(qint64 id);
     // Cambia el tipo (con sus valores y su sonido por defecto).
@@ -396,6 +577,11 @@ public:
 
     Q_INVOKABLE void select(qint64 clipId, bool add);
     Q_INVOKABLE void clearSelection();
+    // Cuadro de selección de la línea de tiempo: los clips de las pistas `tracks` (índices
+    // de tracks) que tocan [from, to); si no hay ninguna de esas, los subtítulos de las
+    // pistas `captionTracks`. `add`: se suman a lo seleccionado (Mayús o Ctrl).
+    Q_INVOKABLE void selectArea(const QVariantList& tracks, const QVariantList& captionTracks,
+                                qint64 from, qint64 to, bool add);
     Q_INVOKABLE bool isSelected(qint64 clipId) const;
 
     // Código de tiempo de un fotograma de la línea de tiempo (para la regla).
@@ -421,6 +607,18 @@ signals:
     void fileChanged();
     void modifiedChanged();
     void fileBusyChanged();
+    void detectingKeyChanged();
+    void captionPresetsChanged();
+    void clipPresetsChanged();
+    void anchorChanged();
+    void clipboardChanged();
+    void transcriptionChanged();
+    void captionsCreated(int count);
+    void captionsExported(const QString& path);
+    void keyColorDetected(bool found);
+    // Se aplicó un efecto desde la pestaña Efectos ("byn", "desenfoque", "esquinas",
+    // "sombra", "resplandor"): Propiedades lo lleva a la vista.
+    void effectApplied(const QString& effect);
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
@@ -620,6 +818,60 @@ private:
     QVariantList m_recentProjects;
     QVariantList m_recoverable;
     QTimer m_autosaveTimer;
+    // Propiedades de un clip animado durante la reproducción: unas pocas veces por
+    // segundo, no en cada fotograma (rehacer el panel 60 veces por segundo atascaba).
+    QTimer m_selectedClipTimer;
+    sharkcut::Clipboard m_clipboard; // clips copiados (para todos los proyectos abiertos)
+    bool m_detectingKey = false;
+    // Clips a los que va la pantalla verde que se está detectando (vacío: solo ese clip).
+    std::vector<sharkcut::ObjectId> m_keyTargets;
+    // Clips de video a los que va un efecto soltado sobre `clip`: los seleccionados si él
+    // lo está (sin pistas bloqueadas), si no solo él.
+    std::vector<sharkcut::ObjectId> effectTargets(sharkcut::ObjectId clip) const;
+    // Los mismos valores (claves de setClipTransform) a varios clips, en un paso.
+    void setClipsTransform(const std::vector<sharkcut::ObjectId>& clips, const QVariantMap& values,
+                           const QString& label);
+    mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
+    std::vector<sharkcut::ObjectId> m_selectedCaptions;
+    // Para Propiedades: por propiedad, {animated, key (hay keyframe en el cabezal), prev,
+    // next}; y keyEasing: índice de la curva del keyframe del cabezal (−1 si no hay).
+    QVariantMap animationInfo(const sharkcut::Clip& clip) const;
+    // Medidas de división del diálogo de subtítulos y estilo de un ajuste por su nombre
+    // (el de fábrica «Clásico» si no existe).
+    static sharkcut::CaptionLayout captionLayoutFrom(const QVariantMap& values);
+    sharkcut::CaptionStyle presetStyle(const QString& name) const;
+    // Estilo provisional mientras se arrastra un valor en Propiedades.
+    struct CaptionPreview {
+        std::vector<sharkcut::ObjectId> captions;
+        std::vector<std::size_t> tracks; // pistas enteras
+        sharkcut::CaptionStyle style;
+    };
+    std::optional<CaptionPreview> m_captionPreview;
+    // Transcripción en curso: lo que hace falta para terminarla (ver createCaptions).
+    struct AnchorJob;
+    std::shared_ptr<AnchorJob> m_anchor;
+    sharkcut::ObjectId m_anchorPickClip = 0;
+    sharkcut::ObjectId m_anchorPickTarget = 0;
+    double m_anchorProgress = 0.0;
+    QString m_anchorMessage;
+    void finishAnchor(const std::shared_ptr<AnchorJob>& job);
+
+    struct Transcription;
+    std::shared_ptr<Transcription> m_transcription;
+    double m_transcribeProgress = 0.0;
+    QString m_transcribeMessage;
+    void setTranscribeState(double progress, const QString& message);
+    // Al cerrar: cancela la transcripción y espera a que pare la descarga.
+    void shutdownTranscription();
+    void startDownload(const std::shared_ptr<Transcription>& job);
+    void startTranscription(const std::shared_ptr<Transcription>& job);
+    void finishTranscription(const std::shared_ptr<Transcription>& job,
+                             std::vector<sharkcut::TimedWord> words, const QString& error);
+    // Estilo resultante de aplicar `values` al del primer subtítulo seleccionado.
+    std::optional<sharkcut::CaptionStyle> captionStyleWith(const QVariantMap& values,
+                                                           bool wholeTrack) const;
+    std::vector<std::size_t> selectedCaptionTracks() const;
+    void pruneCaptionSelection();
     QThreadPool m_recoveryPool; // un hilo: escrituras y borrados en orden
     quint64 m_exportSession = 0;
     double m_exportProgress = 0.0;

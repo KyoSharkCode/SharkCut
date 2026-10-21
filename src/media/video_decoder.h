@@ -51,6 +51,11 @@ public:
     // volver al fotograma clave en cada paso.
     void seekToFrame(std::int64_t index, std::int64_t keepBefore = 0);
 
+    // Como seekToFrame, pero nextFrame() devuelve el primer fotograma tras el salto (el
+    // fotograma clave anterior a `index`) sin decodificar hasta `index`: mucho más rápido
+    // y suficiente para miniaturas (puede quedarse unos segundos antes).
+    void seekNear(std::int64_t index);
+
     // Los fotogramas guardados por seekToFrame(…, keepBefore), en orden.
     std::vector<VideoFrame> takeKeptFrames();
 

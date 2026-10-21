@@ -1,5 +1,7 @@
 #include "core/project.h"
 
+#include "core/edit.h" // clampTransform
+
 #include <algorithm>
 #include <cmath>
 
@@ -17,6 +19,11 @@ std::int64_t Project::length() const {
     for (const Track& track : tracks) {
         if (!track.clips.empty()) {
             result = std::max(result, track.clips.back().end());
+        }
+    }
+    for (const CaptionTrack& track : captionTracks) {
+        if (!track.captions.empty()) {
+            result = std::max(result, track.captions.back().end());
         }
     }
     return result;
@@ -213,6 +220,14 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
             }
         }
         const Clip* c = clipAt(t, frame);
+        if (c && c->isEffect()) {
+            Layer layer;
+            layer.track = t;
+            layer.clip = c;
+            layer.effectFrame = c->mediaFrameAt(frame);
+            layers.push_back(layer);
+            continue;
+        }
         const MediaItem* item = c ? findMedia(c->media) : nullptr;
         if (item) {
             Layer layer;
@@ -224,6 +239,139 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
         }
     }
     return layers;
+}
+
+// --- Subtítulos -------------------------------------------------------------------
+
+std::optional<Project::CaptionRef> Project::findCaption(ObjectId id) const {
+    if (id == 0) {
+        return std::nullopt;
+    }
+    for (std::size_t t = 0; t < captionTracks.size(); ++t) {
+        const auto& list = captionTracks[t].captions;
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            if (list[i].id == id) {
+                return CaptionRef{t, i};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+const Caption* Project::caption(ObjectId id) const {
+    const auto ref = findCaption(id);
+    return ref ? &captionTracks[ref->track].captions[ref->index] : nullptr;
+}
+
+const Caption* Project::captionAt(std::size_t track, std::int64_t frame) const {
+    if (track >= captionTracks.size()) {
+        return nullptr;
+    }
+    const auto& list = captionTracks[track].captions;
+    // El primero que termina después de `frame` (están ordenados y sin solaparse).
+    const auto it = std::upper_bound(list.begin(), list.end(), frame,
+                                     [](std::int64_t f, const Caption& c) { return f < c.end(); });
+    return it != list.end() && it->start <= frame ? &*it : nullptr;
+}
+
+const CaptionStyle& Project::styleOf(std::size_t track, const Caption& caption) const {
+    return caption.style ? *caption.style : captionTracks[track].style;
+}
+
+// --- Animación ---------------------------------------------------------------------
+
+std::optional<AnimProperty> animPropertyFromId(std::string_view id) {
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        if (kAnimPropertyIds[i] == id) {
+            return static_cast<AnimProperty>(i);
+        }
+    }
+    return std::nullopt;
+}
+
+double& transformField(ClipTransform& t, AnimProperty p) {
+    switch (p) {
+    case AnimProperty::X:
+        return t.x;
+    case AnimProperty::Y:
+        return t.y;
+    case AnimProperty::Scale:
+        return t.scale;
+    case AnimProperty::Opacity:
+        return t.opacity;
+    case AnimProperty::CropLeft:
+        return t.cropLeft;
+    case AnimProperty::CropTop:
+        return t.cropTop;
+    case AnimProperty::CropRight:
+        return t.cropRight;
+    case AnimProperty::CropBottom:
+        return t.cropBottom;
+    case AnimProperty::Rotation:
+        return t.rotation;
+    case AnimProperty::Grayscale:
+        return t.effects.grayscale;
+    case AnimProperty::Blur:
+        return t.effects.blur;
+    case AnimProperty::Corners:
+        return t.effects.corners;
+    case AnimProperty::ShadowOpacity:
+        return t.effects.shadowOpacity;
+    case AnimProperty::ShadowSoftness:
+        return t.effects.shadowSoftness;
+    case AnimProperty::ShadowSpread:
+        return t.effects.shadowSpread;
+    case AnimProperty::ShadowX:
+        return t.effects.shadowX;
+    case AnimProperty::ShadowY:
+        return t.effects.shadowY;
+    }
+    return t.x;
+}
+
+double transformField(const ClipTransform& t, AnimProperty p) {
+    return transformField(const_cast<ClipTransform&>(t), p);
+}
+
+bool ClipAnimation::empty() const {
+    return std::all_of(keys.begin(), keys.end(), [](const auto& k) { return k.empty(); });
+}
+
+double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame) {
+    if (keys.empty()) {
+        return 0.0;
+    }
+    if (mediaFrame <= static_cast<double>(keys.front().frame)) {
+        return keys.front().value;
+    }
+    if (mediaFrame >= static_cast<double>(keys.back().frame)) {
+        return keys.back().value;
+    }
+    // El último keyframe en o antes de `mediaFrame` (están ordenados).
+    const auto next =
+        std::upper_bound(keys.begin(), keys.end(), mediaFrame, [](double f, const Keyframe& k) {
+            return f < static_cast<double>(k.frame);
+        });
+    const Keyframe& a = *(next - 1);
+    const Keyframe& b = *next;
+    const double t =
+        (mediaFrame - static_cast<double>(a.frame)) / static_cast<double>(b.frame - a.frame);
+    return a.value + (b.value - a.value) * applyEasing(a.easing, t);
+}
+
+ClipTransform transformAt(const Clip& clip, std::int64_t frame) {
+    if (clip.animation.empty()) {
+        return clip.transform;
+    }
+    ClipTransform t = clip.transform;
+    const auto mediaFrame = static_cast<double>(clip.mediaFrameAt(frame));
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto p = static_cast<AnimProperty>(i);
+        if (clip.animation.animated(p)) {
+            transformField(t, p) = keyframeValue(clip.animation.of(p), mediaFrame);
+        }
+    }
+    return clampTransform(t);
 }
 
 } // namespace sharkcut

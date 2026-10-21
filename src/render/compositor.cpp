@@ -7,6 +7,8 @@
 #include <rhi/qrhi.h>
 
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 namespace sharkcut {
 
@@ -46,8 +48,25 @@ struct LayerUniforms {
     float posRect[4];
     float uvRect[4];
     float params[4];
+    float key[4];
+    float keyParams[4];
+    float box[4];
+    float cropUv[4];
+    float shadowColor[4];
+    float shadow[4];
+    float extra[4];
 };
-static_assert(sizeof(LayerUniforms) == 176);
+static_assert(sizeof(LayerUniforms) == 288);
+
+// Tono de un color 0xRRGGBB relativo a su brillo (Cb, Cr de BT.709 entre luma + 0,1),
+// como lo calcula layer.frag.
+std::pair<double, double> hueOf(std::uint32_t color) {
+    const double r = ((color >> 16) & 0xFF) / 255.0;
+    const double g = ((color >> 8) & 0xFF) / 255.0;
+    const double b = (color & 0xFF) / 255.0;
+    const double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return {(b - luma) / 1.8556 / (luma + 0.1), (r - luma) / 1.5748 / (luma + 0.1)};
+}
 
 // Escala para que un contenido de `content` quepa en `frame` sin deformarse.
 QSizeF fitScale(QSize content, QSize frame) {
@@ -83,13 +102,20 @@ QRhiGraphicsPipeline::TargetBlend premultipliedBlend() {
 
 } // namespace
 
-// Un fotograma NV12 en la GPU, listo para dibujarse con su transformación.
+// Un fotograma NV12 en la GPU, listo para dibujarse con su transformación. `a` es su
+// transparencia (R8); en los videos opacos, un único píxel blanco.
 struct Compositor::Source {
     std::unique_ptr<QRhiTexture> y;
     std::unique_ptr<QRhiTexture> uv;
+    std::unique_ptr<QRhiTexture> a;
+    bool opaqueAlpha = false; // `a` es el píxel blanco y ya se subió
     std::shared_ptr<const VideoFrame> uploaded;
     std::unique_ptr<QRhiBuffer> uniforms;
     std::unique_ptr<QRhiShaderResourceBindings> bindings;
+    // Sombra o resplandor: las mismas texturas con otros uniformes (se dibuja antes).
+    bool shadow = false;
+    std::unique_ptr<QRhiBuffer> shadowUniforms;
+    std::unique_ptr<QRhiShaderResourceBindings> shadowBindings;
 };
 
 // Las dos texturas (clip saliente y entrante) de una capa con transición.
@@ -97,6 +123,14 @@ struct Compositor::TransitionTargets {
     std::unique_ptr<QRhiTexture> rgb[2];
     std::unique_ptr<QRhiTextureRenderTarget> target[2];
     std::unique_ptr<QRhiRenderPassDescriptor> pass[2];
+    std::unique_ptr<QRhiBuffer> uniforms;
+    std::unique_ptr<QRhiShaderResourceBindings> bindings;
+};
+
+// Una imagen superpuesta (subtítulo) en la GPU.
+struct Compositor::Overlay {
+    std::unique_ptr<QRhiTexture> texture;
+    std::shared_ptr<const QImage> uploaded;
     std::unique_ptr<QRhiBuffer> uniforms;
     std::unique_ptr<QRhiShaderResourceBindings> bindings;
 };
@@ -113,6 +147,8 @@ void Compositor::releaseAll() {
     m_presentUniforms.reset();
     m_presentPass = nullptr;
     m_compositePipeline.reset();
+    m_overlayPipeline.reset();
+    m_overlays.clear();
     m_blendPipeline.reset();
     m_layerPipeline.reset();
     m_transitions.clear();
@@ -169,8 +205,11 @@ QRhiTexture* Compositor::canvas() const {
 
 void Compositor::createCanvas() {
     m_canvasTarget.reset();
+    // Se copia (UsedAsTransferSource) para las transiciones-clip, que transforman lo que
+    // ya está dibujado.
     m_canvas.reset(
-        m_rhi->newTexture(QRhiTexture::RGBA8, m_canvasSize, 1, QRhiTexture::RenderTarget));
+        m_rhi->newTexture(QRhiTexture::RGBA8, m_canvasSize, 1,
+                          QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     m_canvas->create();
     m_canvasTarget.reset(m_rhi->newTextureRenderTarget({m_canvas.get()}));
     if (!m_canvasPass) {
@@ -231,25 +270,71 @@ Compositor::Source& Compositor::source(std::size_t index) {
         created->uniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
                                                  sizeof(LayerUniforms)));
         created->uniforms->create();
-        // Texturas NV12 provisionales hasta el primer fotograma.
+        created->shadowUniforms.reset(m_rhi->newBuffer(
+            QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(LayerUniforms)));
+        created->shadowUniforms->create();
+        created->shadowBindings.reset(m_rhi->newShaderResourceBindings());
+        // Texturas NV12 (y de alfa) provisionales hasta el primer fotograma.
         created->y.reset(m_rhi->newTexture(QRhiTexture::R8, QSize(16, 16)));
         created->y->create();
         created->uv.reset(m_rhi->newTexture(QRhiTexture::RG8, QSize(8, 8)));
         created->uv->create();
+        created->a.reset(m_rhi->newTexture(QRhiTexture::R8, QSize(1, 1)));
+        created->a->create();
+        created->bindings.reset(m_rhi->newShaderResourceBindings());
+        bindSource(*created);
+        m_sources.push_back(std::move(created));
+    }
+    return *m_sources[index];
+}
+
+Compositor::Overlay& Compositor::overlay(std::size_t index) {
+    while (m_overlays.size() <= index) {
+        auto created = std::make_unique<Overlay>();
+        created->uniforms.reset(
+            m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(QuadUniforms)));
+        created->uniforms->create();
+        created->texture.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        created->texture->create();
         created->bindings.reset(m_rhi->newShaderResourceBindings());
         const auto stage =
             QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
         created->bindings->setBindings({
             QRhiShaderResourceBinding::uniformBuffer(0, stage, created->uniforms.get()),
             QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                      created->y.get(), m_sampler.get()),
-            QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
-                                                      created->uv.get(), m_sampler.get()),
+                                                      created->texture.get(), m_sampler.get()),
         });
         created->bindings->create();
-        m_sources.push_back(std::move(created));
+        m_overlays.push_back(std::move(created));
     }
-    return *m_sources[index];
+    return *m_overlays[index];
+}
+
+void Compositor::prepareOverlay(Overlay& o, const CompositorOverlay& input,
+                                QRhiResourceUpdateBatch* updates) {
+    const QImage& image = *input.image;
+    if (o.uploaded != input.image) {
+        if (o.texture->pixelSize() != image.size()) {
+            o.texture->setPixelSize(image.size());
+            o.texture->create(); // los enlaces siguen valiendo con la textura recreada
+            o.bindings->create();
+        }
+        updates->uploadTexture(o.texture.get(), image);
+        o.uploaded = input.image;
+    }
+    // El cuadro (−1…1) ocupa `rect` del lienzo (y hacia abajo).
+    const double w = m_canvasSize.width();
+    const double h = m_canvasSize.height();
+    const QPointF center = input.rect.center();
+    QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
+    mvp.translate(static_cast<float>(center.x() / w * 2.0 - 1.0),
+                  static_cast<float>(1.0 - center.y() / h * 2.0));
+    mvp.scale(static_cast<float>(input.rect.width() / w),
+              static_cast<float>(input.rect.height() / h));
+    QuadUniforms u{};
+    std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
+    u.p0[0] = 1.0f;
+    updates->updateDynamicBuffer(o.uniforms.get(), 0, sizeof(u), &u);
 }
 
 Compositor::TransitionTargets& Compositor::transitionTargets(std::size_t index) {
@@ -302,28 +387,69 @@ void Compositor::ensurePipelines() {
         m_compositePipeline->setTargetBlends({premultipliedBlend()});
         m_compositePipeline->create();
     }
+    if (!m_overlayPipeline) {
+        Overlay& any = overlay(0);
+        m_overlayPipeline.reset(m_rhi->newGraphicsPipeline());
+        m_overlayPipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        m_overlayPipeline->setShaderStages({
+            {QRhiShaderStage::Vertex, loadShader("quad.vert")},
+            {QRhiShaderStage::Fragment, loadShader("overlay.frag")},
+        });
+        m_overlayPipeline->setVertexInputLayout(quadLayout());
+        m_overlayPipeline->setShaderResourceBindings(any.bindings.get());
+        m_overlayPipeline->setRenderPassDescriptor(m_canvasPass.get());
+        m_overlayPipeline->setTargetBlends({premultipliedBlend()});
+        m_overlayPipeline->create();
+    }
+}
+
+void Compositor::bindSource(Source& s) {
+    const auto stage =
+        QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
+    const auto fragment = QRhiShaderResourceBinding::FragmentStage;
+    s.bindings->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, stage, s.uniforms.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, fragment, s.y.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(2, fragment, s.uv.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(3, fragment, s.a.get(), m_sampler.get()),
+    });
+    s.bindings->create();
+    s.shadowBindings->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, stage, s.shadowUniforms.get()),
+        QRhiShaderResourceBinding::sampledTexture(1, fragment, s.y.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(2, fragment, s.uv.get(), m_sampler.get()),
+        QRhiShaderResourceBinding::sampledTexture(3, fragment, s.a.get(), m_sampler.get()),
+    });
+    s.shadowBindings->create();
 }
 
 void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTransform& t,
                                double opacity, QRhiResourceUpdateBatch* updates) {
     const QSize sizeY(frame.width, frame.height);
-    if (s.y->pixelSize() != sizeY) {
-        s.y.reset(m_rhi->newTexture(QRhiTexture::R8, sizeY));
-        s.y->create();
-        s.uv.reset(m_rhi->newTexture(QRhiTexture::RG8, QSize(frame.uvWidth(), frame.uvHeight())));
-        s.uv->create();
-        // Nuevas texturas: se actualizan las asociaciones (mismo diseño).
-        const auto stage =
-            QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
-        s.bindings->setBindings({
-            QRhiShaderResourceBinding::uniformBuffer(0, stage, s.uniforms.get()),
-            QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                      s.y.get(), m_sampler.get()),
-            QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
-                                                      s.uv.get(), m_sampler.get()),
-        });
-        s.bindings->create();
+    const QSize sizeA = frame.hasAlpha() ? sizeY : QSize(1, 1);
+    if (s.y->pixelSize() != sizeY || s.a->pixelSize() != sizeA) {
+        if (s.y->pixelSize() != sizeY) {
+            s.y.reset(m_rhi->newTexture(QRhiTexture::R8, sizeY));
+            s.y->create();
+            s.uv.reset(
+                m_rhi->newTexture(QRhiTexture::RG8, QSize(frame.uvWidth(), frame.uvHeight())));
+            s.uv->create();
+        }
+        if (s.a->pixelSize() != sizeA) {
+            s.a.reset(m_rhi->newTexture(QRhiTexture::R8, sizeA));
+            s.a->create();
+            s.opaqueAlpha = false;
+        }
+        bindSource(s); // nuevas texturas: se actualizan las asociaciones (mismo diseño)
         s.uploaded.reset();
+    }
+    if (!frame.hasAlpha() && !s.opaqueAlpha) {
+        // Video opaco: alfa 1 en todo el clip.
+        static const char kWhite[4] = {'\xff', '\xff', '\xff', '\xff'};
+        QRhiTextureSubresourceUploadDescription white(QByteArray::fromRawData(kWhite, 1));
+        white.setDataStride(1);
+        updates->uploadTexture(s.a.get(), QRhiTextureUploadEntry(0, 0, white));
+        s.opaqueAlpha = true;
     }
 
     if (s.uploaded.get() != &frame) {
@@ -337,16 +463,28 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
                                     static_cast<qsizetype>(frame.uv.size())));
         uv.setDataStride(static_cast<quint32>(frame.uvWidth() * 2));
         updates->uploadTexture(s.uv.get(), QRhiTextureUploadEntry(0, 0, uv));
+        if (frame.hasAlpha()) {
+            QRhiTextureSubresourceUploadDescription a(
+                QByteArray::fromRawData(reinterpret_cast<const char*>(frame.a.data()),
+                                        static_cast<qsizetype>(frame.a.size())));
+            a.setDataStride(static_cast<quint32>(frame.width));
+            updates->uploadTexture(s.a.get(), QRhiTextureUploadEntry(0, 0, a));
+        }
     }
 
     // Ajuste al lienzo sin deformar, escala y posición (píxeles del lienzo, +y abajo).
     LayerUniforms u{};
     const QSizeF fit = fitScale(sizeY, m_canvasSize);
     QMatrix4x4 transform = m_rhi->clipSpaceCorrMatrix();
-    transform.translate(static_cast<float>(2.0 * t.x / m_canvasSize.width()),
-                        static_cast<float>(-2.0 * t.y / m_canvasSize.height()));
-    transform.scale(static_cast<float>(fit.width() * t.scale),
-                    static_cast<float>(fit.height() * t.scale));
+    // Se gira en píxeles (si no, en un lienzo no cuadrado el giro deformaría la imagen):
+    // del cuadro (−1…1) a píxeles, giro, y de vuelta a coordenadas del lienzo.
+    const double halfW = m_canvasSize.width() / 2.0;
+    const double halfH = m_canvasSize.height() / 2.0;
+    transform.translate(static_cast<float>(t.x / halfW), static_cast<float>(-t.y / halfH));
+    transform.scale(static_cast<float>(1.0 / halfW), static_cast<float>(1.0 / halfH));
+    transform.rotate(static_cast<float>(-t.rotation), 0.0f, 0.0f, 1.0f); // +: horario
+    transform.scale(static_cast<float>(fit.width() * t.scale * halfW),
+                    static_cast<float>(fit.height() * t.scale * halfH));
     std::copy(transform.constData(), transform.constData() + 16, u.transform);
     const auto colors = yuvToRgbMatrix(frame.matrix, frame.fullRange);
     const QMatrix4x4 yuvToRgb(colors.data()); // por filas → se guarda por columnas, como GLSL
@@ -362,15 +500,75 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
     u.uvRect[2] = f(1.0 - t.cropRight);
     u.uvRect[3] = f(1.0 - t.cropBottom);
     u.params[0] = f(std::clamp(opacity, 0.0, 1.0));
+    const ChromaKey& key = t.chromaKey;
+    if (key.enabled) {
+        const auto [cb, cr] = hueOf(key.color);
+        if (std::hypot(cb, cr) >= 0.05) { // un gris no tiene tono que quitar
+            u.key[0] = f(cb);
+            u.key[1] = f(cr);
+            u.key[2] = 1.0f;
+            u.keyParams[0] = f(key.similarity);
+            u.keyParams[1] = f(key.smoothness);
+            u.keyParams[2] = f(key.spill);
+        }
+    }
+    // Efectos. Medidas del video entero y de su parte visible, en píxeles del lienzo.
+    const ClipEffects& fx = t.effects;
+    const double fullW = std::max(1e-6, fit.width() * t.scale * m_canvasSize.width());
+    const double fullH = std::max(1e-6, fit.height() * t.scale * m_canvasSize.height());
+    u.box[0] = f(fullW * (1.0 - t.cropLeft - t.cropRight));
+    u.box[1] = f(fullH * (1.0 - t.cropTop - t.cropBottom));
+    if (fx.blurOn && fx.blur > 0.0) {
+        u.box[2] = f(fx.blur / fullW); // en coordenadas de textura (el video entero es 0…1)
+        u.box[3] = f(fx.blur / fullH);
+    }
+    std::copy(u.uvRect, u.uvRect + 4, u.cropUv);
+    u.params[1] = fx.grayscaleOn ? f(fx.grayscale) : 0.0f;
+    u.params[2] = fx.cornersOn ? f(fx.corners) : 0.0f;
     updates->updateDynamicBuffer(s.uniforms.get(), 0, sizeof(u), &u);
+
+    s.shadow = fx.shadowOn && fx.shadowOpacity > 0.0;
+    if (s.shadow) {
+        // La misma capa, ampliada lo que ocupen el difuminado, el crecimiento y el
+        // desplazamiento (la sombra puede salirse del clip).
+        LayerUniforms sh = u;
+        const double margin = fx.shadowSoftness + fx.shadowSpread +
+                              std::max(std::abs(fx.shadowX), std::abs(fx.shadowY)) + 2.0;
+        const double mx = margin / fullW; // en fracción del video entero
+        const double my = margin / fullH;
+        sh.posRect[0] -= f(2.0 * mx);
+        sh.posRect[1] -= f(2.0 * my);
+        sh.posRect[2] += f(2.0 * mx);
+        sh.posRect[3] += f(2.0 * my);
+        sh.uvRect[0] -= f(mx);
+        sh.uvRect[1] -= f(my);
+        sh.uvRect[2] += f(mx);
+        sh.uvRect[3] += f(my);
+        sh.params[3] = 1.0f; // modo sombra
+        sh.shadowColor[0] = f(((fx.shadowColor >> 16) & 0xFF) / 255.0);
+        sh.shadowColor[1] = f(((fx.shadowColor >> 8) & 0xFF) / 255.0);
+        sh.shadowColor[2] = f((fx.shadowColor & 0xFF) / 255.0);
+        sh.shadowColor[3] = f(fx.shadowOpacity);
+        sh.shadow[0] = f(fx.shadowSoftness / fullW);
+        sh.shadow[1] = f(fx.shadowSoftness / fullH);
+        sh.shadow[2] = f(fx.shadowX / fullW);
+        sh.shadow[3] = f(fx.shadowY / fullH);
+        sh.extra[0] = f(fx.shadowSpread);
+        updates->updateDynamicBuffer(s.shadowUniforms.get(), 0, sizeof(sh), &sh);
+    }
 }
 
 void Compositor::drawSource(QRhiCommandBuffer* cb, Source& s, QRhiGraphicsPipeline* pipeline) {
     cb->setGraphicsPipeline(pipeline);
     cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
                      static_cast<float>(m_canvasSize.height())});
-    cb->setShaderResources(s.bindings.get());
     const QRhiCommandBuffer::VertexInput input(m_quad.get(), 0);
+    if (s.shadow) { // detrás del clip
+        cb->setShaderResources(s.shadowBindings.get());
+        cb->setVertexInput(0, 1, &input);
+        cb->draw(4);
+    }
+    cb->setShaderResources(s.bindings.get());
     cb->setVertexInput(0, 1, &input);
     cb->draw(4);
 }
@@ -391,12 +589,38 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
     struct Draw {
         Source* source = nullptr;
         TransitionTargets* transition = nullptr;
+        bool adjust = false; // la transición se aplica a lo ya dibujado en el lienzo
     };
     std::vector<Draw> draws;
     std::size_t sourceCount = 0;
     std::size_t transitionCount = 0;
 
+    // Uniformes de una transición sobre el lienzo (para las dos clases de transición).
+    const auto transitionUniforms = [&](const CompositorLayer& layer, TransitionTargets& targets) {
+        QuadUniforms u{};
+        const QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
+        std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
+        u.p0[0] = static_cast<float>(static_cast<int>(layer.transition->type) + 1);
+        u.p0[1] = static_cast<float>(layer.state.eased);
+        u.p0[2] = static_cast<float>(layer.state.velocity);
+        u.p0[3] = static_cast<float>(layer.transition->intensity);
+        u.p1[0] = static_cast<float>(layer.transition->blur);
+        u.p1[1] =
+            static_cast<float>(m_canvasSize.width()) / static_cast<float>(m_canvasSize.height());
+        u.p1[2] = m_rhi->isYUpInFramebuffer() ? 1.0f : 0.0f;
+        u.p1[3] = static_cast<float>(layer.state.progress);
+        canvasUpdates->updateDynamicBuffer(targets.uniforms.get(), 0, sizeof(u), &u);
+    };
+
     for (const CompositorLayer& layer : input.layers) {
+        if (layer.adjust && layer.transition) {
+            // Transición-clip: lo dibujado hasta aquí se copia en las dos texturas de la
+            // transición (A y B son lo mismo) y la transición lo vuelve a poner en el lienzo.
+            TransitionTargets& targets = transitionTargets(transitionCount++);
+            transitionUniforms(layer, targets);
+            draws.push_back({nullptr, &targets, true});
+            continue;
+        }
         if (layer.transition && layer.a && layer.b) {
             // Los dos clips, cada uno en su textura (sobre negro), antes de la pasada
             // del lienzo; la transición los mezcla ahí.
@@ -411,23 +635,12 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
                 prepareSource(s, *frames[i], *transforms[i], transforms[i]->opacity, updates);
                 s.uploaded = frames[i];
                 cb->beginPass(targets.target[i].get(), Qt::transparent, {1.0f, 0}, updates);
-                drawSource(cb, s, m_layerPipeline.get());
+                // Con mezcla (sobre transparente): la sombra queda debajo del clip.
+                drawSource(cb, s, m_blendPipeline.get());
                 cb->endPass();
             }
 
-            QuadUniforms u{};
-            const QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix();
-            std::copy(mvp.constData(), mvp.constData() + 16, u.mvp);
-            u.p0[0] = static_cast<float>(static_cast<int>(layer.transition->type) + 1);
-            u.p0[1] = static_cast<float>(layer.state.eased);
-            u.p0[2] = static_cast<float>(layer.state.velocity);
-            u.p0[3] = static_cast<float>(layer.transition->intensity);
-            u.p1[0] = static_cast<float>(layer.transition->blur);
-            u.p1[1] = static_cast<float>(m_canvasSize.width()) /
-                      static_cast<float>(m_canvasSize.height());
-            u.p1[2] = m_rhi->isYUpInFramebuffer() ? 1.0f : 0.0f;
-            u.p1[3] = static_cast<float>(layer.state.progress);
-            canvasUpdates->updateDynamicBuffer(targets.uniforms.get(), 0, sizeof(u), &u);
+            transitionUniforms(layer, targets);
             draws.push_back({nullptr, &targets});
             continue;
         }
@@ -442,16 +655,40 @@ void Compositor::render(QRhiCommandBuffer* cb, const CompositorInput& input) {
         draws.push_back({&s, nullptr});
     }
 
+    std::size_t overlayCount = 0;
+    for (const CompositorOverlay& o : input.overlays) {
+        if (o.image && !o.image->isNull() && o.rect.width() > 0 && o.rect.height() > 0) {
+            prepareOverlay(overlay(overlayCount++), o, canvasUpdates);
+        }
+    }
+
     cb->beginPass(m_canvasTarget.get(), Qt::black, {1.0f, 0}, canvasUpdates);
     for (const Draw& draw : draws) {
         if (draw.source) {
             drawSource(cb, *draw.source, m_blendPipeline.get());
             continue;
         }
+        if (draw.adjust) {
+            // Se cierra la pasada, se copia el lienzo y se empieza otra sobre negro.
+            cb->endPass();
+            QRhiResourceUpdateBatch* copy = m_rhi->nextResourceUpdateBatch();
+            copy->copyTexture(draw.transition->rgb[0].get(), m_canvas.get());
+            copy->copyTexture(draw.transition->rgb[1].get(), m_canvas.get());
+            cb->beginPass(m_canvasTarget.get(), Qt::black, {1.0f, 0}, copy);
+        }
         cb->setGraphicsPipeline(m_compositePipeline.get());
         cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
                          static_cast<float>(m_canvasSize.height())});
         cb->setShaderResources(draw.transition->bindings.get());
+        const QRhiCommandBuffer::VertexInput vertices(m_quad.get(), 0);
+        cb->setVertexInput(0, 1, &vertices);
+        cb->draw(4);
+    }
+    for (std::size_t i = 0; i < overlayCount; ++i) {
+        cb->setGraphicsPipeline(m_overlayPipeline.get());
+        cb->setViewport({0, 0, static_cast<float>(m_canvasSize.width()),
+                         static_cast<float>(m_canvasSize.height())});
+        cb->setShaderResources(m_overlays[i]->bindings.get());
         const QRhiCommandBuffer::VertexInput vertices(m_quad.get(), 0);
         cb->setVertexInput(0, 1, &vertices);
         cb->draw(4);

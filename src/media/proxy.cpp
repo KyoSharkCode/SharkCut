@@ -84,6 +84,12 @@ void writeProxy(const std::string& source, const std::string& target,
                 const std::atomic<bool>* cancel) {
     VideoDecoder decoder(source, HwAccel::Auto);
     const VideoStreamInfo& info = decoder.info();
+    // H.264 no guarda transparencia: un proxy perdería el alfa (y el original ya suele
+    // ser ligero, p. ej. una intro animada).
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(av_get_pix_fmt(info.pixelFormat.c_str()));
+    if (desc && (desc->flags & AV_PIX_FMT_FLAG_ALPHA)) {
+        throw MediaError("Los videos con transparencia no usan proxy");
+    }
     const int height = std::min(kProxyHeight, info.height) & ~1;
     const int width = std::max(2, static_cast<int>(static_cast<std::int64_t>(info.width) * height /
                                                    std::max(1, info.height)) &

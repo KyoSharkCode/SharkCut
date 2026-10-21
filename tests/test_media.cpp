@@ -1,3 +1,4 @@
+#include "media/chroma_key.h"
 #include "media/decode_worker.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
@@ -5,11 +6,19 @@
 #include "media/video_decoder.h"
 #include "test_clip.h"
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+}
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <thread>
 
@@ -124,6 +133,51 @@ TEST_CASE("VideoDecoder entrega todos los fotogramas en orden", "[media]") {
     CHECK_FALSE(decoder.nextFrame().has_value());
 }
 
+TEST_CASE("Los videos AV1 se decodifican y saltan al fotograma exacto", "[media][av1]") {
+    // Como graba OBS con AV1: MP4 fragmentado o MKV.
+    const std::string container = GENERATE("mp4", "matroska");
+    CAPTURE(container);
+    std::string encoder;
+    for (const char* name : {"libsvtav1", "libaom-av1"}) {
+        if (avcodec_find_encoder_by_name(name)) {
+            encoder = name;
+            break;
+        }
+    }
+    if (encoder.empty()) {
+        SKIP("FFmpeg sin codificador AV1");
+    }
+    TempClip clip({.frames = 90,
+                   .fragmented = container == "mp4",
+                   .container = container,
+                   .videoEncoder = encoder},
+                  container == "mp4" ? "av1.mp4" : "av1.mkv");
+    REQUIRE(clip.codec == encoder);
+
+    const MediaInfo info = probeMedia(clip.path.string());
+    REQUIRE(info.video.has_value());
+    CHECK(info.video->codec == "av1");
+
+    // Auto: sin GPU compatible (como aquí) se usa dav1d por software.
+    for (const HwAccel accel : {HwAccel::None, HwAccel::Auto}) {
+        VideoDecoder decoder(clip.path.string(), accel);
+        for (int i = 0; i < 90; ++i) {
+            const auto frame = decoder.nextFrame();
+            REQUIRE(frame.has_value());
+            REQUIRE(frame->index == i);
+            REQUIRE(contentIndex(*frame) == i);
+        }
+        CHECK_FALSE(decoder.nextFrame().has_value());
+        for (const int target : {57, 3, 89, 30}) {
+            decoder.seekToFrame(target);
+            const auto frame = decoder.nextFrame();
+            REQUIRE(frame.has_value());
+            CHECK(frame->index == target);
+            CHECK(contentIndex(*frame) == target);
+        }
+    }
+}
+
 TEST_CASE("VideoDecoder salta al fotograma exacto", "[media]") {
     const bool fragmented = GENERATE(false, true);
     CAPTURE(fragmented);
@@ -144,6 +198,20 @@ TEST_CASE("VideoDecoder salta al fotograma exacto", "[media]") {
             REQUIRE(after->index == target + 1);
             REQUIRE(contentIndex(*after) == target + 1);
         }
+    }
+}
+
+TEST_CASE("VideoDecoder seekNear entrega el fotograma clave anterior", "[media]") {
+    TempClip clip({.frames = 120, .gopSize = 30});
+    VideoDecoder decoder(clip.path.string(), HwAccel::None);
+    for (const std::int64_t target : {57, 0, 119, 30, 89}) {
+        CAPTURE(target);
+        decoder.seekNear(target);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index <= target);
+        CHECK(frame->index > target - 30);
+        CHECK(contentIndex(*frame) == frame->index);
     }
 }
 
@@ -333,4 +401,193 @@ TEST_CASE("Cancelar un proxy no deja archivos", "[media][proxy]") {
     CHECK_FALSE(std::filesystem::exists(proxy.string() + ".tmp"));
     CHECK(proxyFileName(clip.path.string()).ends_with(".mp4"));
     CHECK(proxyFileName("/no/existe.mp4").empty());
+}
+
+namespace {
+
+// .mov con transparencia: mitad izquierda transparente, mitad derecha opaca y gris.
+// `codec`: "qtrle" (Animación, ARGB) o "prores_ks" (ProRes 4444, YUVA 10 bits).
+std::filesystem::path writeAlphaClip(const char* codecName, int frames = 10) {
+    const std::filesystem::path path = tempClipPath(std::string("alfa-") + codecName + ".mov");
+    const AVCodec* codec = avcodec_find_encoder_by_name(codecName);
+    if (!codec) {
+        return {};
+    }
+    AVFormatContext* out = nullptr;
+    avformat_alloc_output_context2(&out, nullptr, "mov", path.string().c_str());
+    AVStream* stream = avformat_new_stream(out, nullptr);
+    AVCodecContext* enc = avcodec_alloc_context3(codec);
+    const bool prores = std::string(codecName) == "prores_ks";
+    enc->width = 64;
+    enc->height = 32;
+    enc->time_base = {1, 30};
+    enc->framerate = {30, 1};
+    enc->pix_fmt = prores ? AV_PIX_FMT_YUVA444P10LE : AV_PIX_FMT_ARGB;
+    if (prores) {
+        enc->profile = 4; // 4444
+    }
+    if (out->oformat->flags & AVFMT_GLOBALHEADER) {
+        enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+    REQUIRE(avcodec_open2(enc, codec, nullptr) >= 0);
+    avcodec_parameters_from_context(stream->codecpar, enc);
+    stream->time_base = enc->time_base;
+    REQUIRE(avio_open(&out->pb, path.string().c_str(), AVIO_FLAG_WRITE) >= 0);
+    REQUIRE(avformat_write_header(out, nullptr) >= 0);
+    AVFrame* frame = av_frame_alloc();
+    frame->format = enc->pix_fmt;
+    frame->width = 64;
+    frame->height = 32;
+    av_frame_get_buffer(frame, 0);
+    AVPacket* packet = av_packet_alloc();
+    auto drain = [&] {
+        while (avcodec_receive_packet(enc, packet) == 0) {
+            av_packet_rescale_ts(packet, enc->time_base, stream->time_base);
+            packet->stream_index = stream->index;
+            av_interleaved_write_frame(out, packet);
+        }
+    };
+    for (int i = 0; i < frames; ++i) {
+        av_frame_make_writable(frame);
+        for (int y = 0; y < 32; ++y) {
+            for (int x = 0; x < 64; ++x) {
+                const bool opaque = x >= 32;
+                if (prores) {
+                    auto plane = [&](int p) {
+                        return reinterpret_cast<std::uint16_t*>(frame->data[p] +
+                                                                y * frame->linesize[p]);
+                    };
+                    plane(0)[x] = static_cast<std::uint16_t>(4 * 160); // Y (limitado)
+                    plane(1)[x] = 512;
+                    plane(2)[x] = 512;
+                    plane(3)[x] = opaque ? 1023 : 0;
+                } else {
+                    std::uint8_t* px = frame->data[0] + y * frame->linesize[0] + x * 4;
+                    px[0] = opaque ? 255 : 0; // A
+                    px[1] = px[2] = px[3] = 180;
+                }
+            }
+        }
+        frame->pts = i;
+        avcodec_send_frame(enc, frame);
+        drain();
+    }
+    avcodec_send_frame(enc, nullptr);
+    drain();
+    av_write_trailer(out);
+    avio_closep(&out->pb);
+    av_packet_free(&packet);
+    av_frame_free(&frame);
+    avcodec_free_context(&enc);
+    avformat_free_context(out);
+    return path;
+}
+
+} // namespace
+
+TEST_CASE("Los mov con transparencia conservan su alfa", "[media][alfa]") {
+    const char* codec = GENERATE("qtrle", "prores_ks");
+    CAPTURE(codec);
+    const std::filesystem::path path = writeAlphaClip(codec);
+    if (path.empty()) {
+        SKIP("FFmpeg sin ese codificador");
+    }
+    {
+        VideoDecoder decoder(path.string(), HwAccel::None);
+        const auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        REQUIRE(frame->hasAlpha());
+        REQUIRE(frame->a.size() == static_cast<std::size_t>(64 * 32));
+        const auto at = [&](int x, int y) {
+            return frame->a[static_cast<std::size_t>(y * 64 + x)];
+        };
+        CHECK(at(4, 16) <= 2);    // transparente
+        CHECK(at(60, 16) >= 253); // opaco
+        // Gris → luma de rango limitado (Animación: 180 en RGB ≈ 170; ProRes: 160).
+        const int luma = frame->y[static_cast<std::size_t>(16 * 64 + 60)];
+        CHECK(std::abs(luma - (std::string(codec) == "qtrle" ? 170 : 160)) <= 3);
+        CHECK_FALSE(frame->fullRange);
+
+        // Sin proxy: perdería la transparencia.
+        const std::filesystem::path proxy = tempClipPath("proxy-alfa.mp4");
+        CHECK_THROWS_AS(writeProxy(path.string(), proxy.string()), MediaError);
+        CHECK_FALSE(std::filesystem::exists(proxy));
+    }
+    // Un video normal no lleva plano de alfa.
+    TempClip opaque({.frames = 5});
+    VideoDecoder plain(opaque.path.string(), HwAccel::None);
+    const auto frame = plain.nextFrame();
+    REQUIRE(frame.has_value());
+    CHECK_FALSE(frame->hasAlpha());
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+}
+
+namespace {
+
+// Fotograma NV12 (BT.709, rango limitado) con el color RGB (0–255) que da `paint`.
+template <typename Paint> VideoFrame paintFrame(int width, int height, Paint paint) {
+    VideoFrame f;
+    f.width = width;
+    f.height = height;
+    f.y.resize(static_cast<std::size_t>(width) * height);
+    f.uv.resize(static_cast<std::size_t>(f.uvWidth()) * 2 * f.uvHeight());
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const auto [r8, g8, b8] = paint(x, y);
+            const double r = r8 / 255.0, g = g8 / 255.0, b = b8 / 255.0;
+            const double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            f.y[static_cast<std::size_t>(y) * width + x] =
+                static_cast<std::uint8_t>(std::lround(16 + 219 * luma));
+            if (x % 2 == 0 && y % 2 == 0) {
+                const std::size_t i = (static_cast<std::size_t>(y / 2) * f.uvWidth() + x / 2) * 2;
+                f.uv[i] = static_cast<std::uint8_t>(std::lround(128 + 224 * (b - luma) / 1.8556));
+                f.uv[i + 1] =
+                    static_cast<std::uint8_t>(std::lround(128 + 224 * (r - luma) / 1.5748));
+            }
+        }
+    }
+    return f;
+}
+
+struct Rgb8 {
+    int r, g, b;
+};
+
+Rgb8 split(std::uint32_t color) {
+    return {static_cast<int>(color >> 16), static_cast<int>((color >> 8) & 0xFF),
+            static_cast<int>(color & 0xFF)};
+}
+
+} // namespace
+
+TEST_CASE("detectKeyColor finds the background of a green screen", "[media][croma]") {
+    // Fondo verde con una sombra abajo y una persona (tono piel) en el centro que llega
+    // hasta el borde inferior, como un busto.
+    const VideoFrame frame = paintFrame(320, 180, [](int x, int y) {
+        if (x > 110 && x < 210 && y > 40) {
+            return std::array<int, 3>{220, 170, 140};
+        }
+        if (y > 150) {
+            return std::array<int, 3>{30, 120, 50}; // sombra
+        }
+        return std::array<int, 3>{40, 180, 70};
+    });
+    const auto key = detectKeyColor(frame);
+    REQUIRE(key.has_value());
+    const Rgb8 c = split(*key);
+    CHECK(c.g > c.r + 80);
+    CHECK(c.g > c.b + 60);
+
+    // Pantalla azul.
+    const auto blue = detectKeyColor(
+        paintFrame(160, 90, [](int, int) { return std::array<int, 3>{20, 60, 200}; }));
+    REQUIRE(blue.has_value());
+    CHECK(split(*blue).b > 150);
+
+    // Bordes grises: no hay fondo de color que quitar.
+    CHECK_FALSE(detectKeyColor(paintFrame(160, 90, [](int x, int) {
+                    const int v = 40 + x;
+                    return std::array<int, 3>{v, v, v};
+                })).has_value());
 }

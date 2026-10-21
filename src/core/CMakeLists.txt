@@ -12,6 +12,12 @@ add_library(sharkcut_core STATIC
     sequence.cpp
     project.h
     project.cpp
+    captions.h
+    captions.cpp
+    clip_preset.h
+    clip_preset.cpp
+    motion_anchor.h
+    motion_anchor.cpp
     edit.h
     edit.cpp
     history.h

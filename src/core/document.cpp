@@ -33,6 +33,7 @@ Project Document::view(ObjectId id) const {
         project.settings = s->settings;
         project.tracks = s->tracks;
         project.markers = s->markers;
+        project.captionTracks = s->captionTracks;
     }
     return project;
 }
@@ -45,6 +46,7 @@ void Document::store(ObjectId id, const Project& view) {
             s.settings = view.settings;
             s.tracks = view.tracks;
             s.markers = view.markers;
+            s.captionTracks = view.captionTracks;
         }
     }
 }
@@ -64,6 +66,7 @@ Document documentFromProject(Project project, std::string sequenceName) {
     sequence.settings = project.settings;
     sequence.tracks = std::move(project.tracks);
     sequence.markers = std::move(project.markers);
+    sequence.captionTracks = std::move(project.captionTracks);
     document.sequences.push_back(std::move(sequence));
     return document;
 }
@@ -149,6 +152,11 @@ ObjectId duplicateSequence(Document& document, ObjectId id, std::string name,
     }
     for (Marker& marker : copy.markers) {
         marker.id = document.nextId++;
+    }
+    for (CaptionTrack& track : copy.captionTracks) {
+        for (Caption& caption : track.captions) {
+            caption.id = document.nextId++;
+        }
     }
     document.sequences.push_back(std::move(copy));
     return document.sequences.back().id;

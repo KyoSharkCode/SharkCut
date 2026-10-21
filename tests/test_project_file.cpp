@@ -82,7 +82,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 4") != std::string::npos);
+    CHECK(json.find("\"version\": 9") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 4"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 9"), 12, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -337,4 +337,62 @@ TEST_CASE("Markers survive a round trip and broken ones are fixed", "[project][m
     text.replace(pos, 11, "\"frame\": -5");
     const LoadedDocument fixed = documentFromJson(text, {});
     CHECK(fixed.document.sequence(seq)->markers.front().frame == 0);
+}
+
+TEST_CASE("Chroma key survives a round trip and bad values are clamped", "[project][croma]") {
+    Project p = sampleProject("/medios/croma.mp4");
+    const ObjectId clip = p.tracks[kVideoTrack].clips.front().id;
+    ClipTransform t;
+    t.scale = 0.5;
+    t.chromaKey.enabled = true;
+    t.chromaKey.color = 0x12A34F;
+    t.chromaKey.similarity = 0.25;
+    t.chromaKey.smoothness = 0.12;
+    t.chromaKey.spill = 0.2;
+    REQUIRE(setClipTransform(p, clip, t));
+
+    const std::string json = projectToJson(p, {});
+    CHECK(json.find("#12A34F") != std::string::npos);
+    const Project loaded = projectFromJson(json, {});
+    CHECK(loaded.clip(clip)->transform == t);
+
+    // Sin croma, el clip no guarda nada de él.
+    Project plain = sampleProject("/medios/croma.mp4");
+    CHECK(projectToJson(plain, {}).find("chromaKey") == std::string::npos);
+
+    // Valores fuera de rango (archivo editado a mano): se ajustan al abrir.
+    ClipTransform bad = t;
+    bad.chromaKey.similarity = 7.0;
+    bad.chromaKey.spill = -1.0;
+    bad.chromaKey.color = 0xFF123456u;
+    const ClipTransform fixed = clampTransform(bad);
+    CHECK(fixed.chromaKey.similarity == kMaxChromaDistance);
+    CHECK(fixed.chromaKey.spill == 0.0);
+    CHECK(fixed.chromaKey.color == 0x123456u);
+}
+
+TEST_CASE("Clip effects survive a round trip and are clamped", "[project][efectos]") {
+    Project p = sampleProject("/medios/fx.mp4");
+    const ObjectId clip = p.tracks[kVideoTrack].clips.front().id;
+    ClipTransform t;
+    t.effects.grayscaleOn = true;
+    t.effects.grayscale = 0.5;
+    t.effects.blurOn = true;
+    t.effects.blur = 8;
+    t.effects.cornersOn = true;
+    t.effects.corners = 32;
+    t.effects.shadowOn = true;
+    t.effects.shadowColor = 0x3AA8FF;
+    t.effects.shadowSpread = 10;
+    REQUIRE(setClipTransform(p, clip, t));
+    CHECK(projectFromJson(projectToJson(p, {}), {}).clip(clip)->transform == t);
+
+    ClipTransform bad = t;
+    bad.effects.blur = 1e6;
+    bad.effects.shadowOpacity = -3;
+    bad.effects.grayscale = 7;
+    const ClipTransform fixed = clampTransform(bad);
+    CHECK(fixed.effects.blur == kMaxBlur);
+    CHECK(fixed.effects.shadowOpacity == 0.0);
+    CHECK(fixed.effects.grayscale == 1.0);
 }

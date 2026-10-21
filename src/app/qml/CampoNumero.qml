@@ -10,6 +10,7 @@ RowLayout {
     id: raiz
 
     property string etiqueta
+    property int anchoEtiqueta: 86
     property real valor
     property real desde: -1e9
     property real hasta: 1e9
@@ -29,7 +30,7 @@ RowLayout {
     }
 
     Text {
-        Layout.preferredWidth: 86
+        Layout.preferredWidth: raiz.anchoEtiqueta
         text: raiz.etiqueta
         color: Theme.textoSecundario
         font.pixelSize: Theme.tamTexto

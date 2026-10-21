@@ -8,10 +8,12 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRunnable>
+#include <QThread>
 #include <QThreadPool>
 #include <QUrl>
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 
 namespace {
@@ -50,6 +52,72 @@ QImage toImage(const sharkcut::VideoFrame& frame, int width) {
     return image;
 }
 
+// Hilos para las miniaturas: pocos y de baja prioridad, para que nunca le quiten la CPU
+// a la reproducción (con VODs de una hora, un zoom pedía decenas a la vez y la app se
+// atascaba).
+QThreadPool& thumbnailPool() {
+    static QThreadPool* pool = [] {
+        auto* p = new QThreadPool;
+        p->setMaxThreadCount(2);
+        p->setThreadPriority(QThread::LowPriority);
+        return p;
+    }();
+    return *pool;
+}
+
+// Caché de los fotogramas de la línea de tiempo (≈ 25 MB de imágenes de 160 px).
+QMutex frameCacheMutex;
+QCache<QString, QImage> frameCache(400);
+constexpr int kFrameThumbnailWidth = 160;
+
+class FrameResponse : public QQuickImageResponse, public QRunnable {
+public:
+    FrameResponse(QString key, QString path, qint64 us)
+        : m_key(std::move(key)), m_path(std::move(path)), m_us(us) {
+        setAutoDelete(false);
+    }
+
+    QQuickTextureFactory* textureFactory() const override {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
+
+    // El clip dejó de verse (desplazamiento, zoom): si aún no empezó, no se decodifica.
+    void cancel() override { m_cancelled = true; }
+
+    void run() override {
+        {
+            QMutexLocker lock(&frameCacheMutex);
+            if (const QImage* cached = frameCache.object(m_key)) {
+                m_image = *cached;
+            }
+        }
+        if (m_image.isNull() && !m_cancelled) {
+            try {
+                sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
+                // El primer fotograma del clip, exacto (cada clip pide solo esta imagen
+                // y queda en la caché).
+                decoder.seekToFrame(sharkcut::microsecondsToFrame(std::max<qint64>(0, m_us),
+                                                               decoder.info().frameRate));
+                if (auto frame = decoder.nextFrame()) {
+                    m_image = toImage(*frame, kFrameThumbnailWidth);
+                    QMutexLocker lock(&frameCacheMutex);
+                    frameCache.insert(m_key, new QImage(m_image));
+                }
+            } catch (const std::exception&) {
+                // archivo que falta: el clip se ve sin miniaturas
+            }
+        }
+        emit finished();
+    }
+
+private:
+    QString m_key;
+    QString m_path;
+    qint64 m_us = 0;
+    QImage m_image;
+    std::atomic<bool> m_cancelled{false};
+};
+
 class ThumbnailResponse : public QQuickImageResponse, public QRunnable {
 public:
     explicit ThumbnailResponse(QString path) : m_path(std::move(path)) { setAutoDelete(false); }
@@ -68,7 +136,7 @@ public:
         if (m_image.isNull()) {
             try {
                 sharkcut::VideoDecoder decoder(m_path.toStdString(), sharkcut::HwAccel::None);
-                decoder.seekToFrame(decoder.info().frameCount / 10);
+                decoder.seekNear(decoder.info().frameCount / 10);
                 if (auto frame = decoder.nextFrame()) {
                     m_image = toImage(*frame, kThumbnailWidth);
                     QMutexLocker lock(&cacheMutex);
@@ -88,8 +156,20 @@ private:
 
 } // namespace
 
+QQuickImageResponse* FrameThumbnailProvider::requestImageResponse(const QString& id, const QSize&) {
+    // "<ruta codificada>@<microsegundos>" (la ruta va codificada: no lleva '@' suelta).
+    const qsizetype at = id.lastIndexOf(QLatin1Char('@'));
+    const QString path = QUrl::fromPercentEncoding(id.left(at).toUtf8());
+    const qint64 us = at >= 0 ? id.mid(at + 1).toLongLong() : 0;
+    auto* response = new FrameResponse(id, path, us);
+    // Las más recientes primero: son las de lo que se ve ahora.
+    static std::atomic<int> order{0};
+    thumbnailPool().start(response, order.fetch_add(1) & 0x3fffffff);
+    return response;
+}
+
 QQuickImageResponse* ThumbnailProvider::requestImageResponse(const QString& id, const QSize&) {
     auto* response = new ThumbnailResponse(QUrl::fromPercentEncoding(id.toUtf8()));
-    QThreadPool::globalInstance()->start(response);
+    thumbnailPool().start(response);
     return response;
 }

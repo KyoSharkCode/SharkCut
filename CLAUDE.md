@@ -16,8 +16,12 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 4, que abre la 1, la 2
-  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4).
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 6, que abre la 1, la 2
+  y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
+  la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
+  subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
+  `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
+  transiciones como clips, `effect` del clip, con la 9).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -25,10 +29,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 ## Arquitectura
 - src/core y src/media no dependen de Qt; deben poder probarse sin ventanas.
   src/media: análisis (probeMedia), VideoDecoder, DecodeWorker (hilo + cola), color.
+  Los fotogramas son NV12 más un plano de alfa opcional (videos con transparencia, como
+  .mov ProRes 4444 o Animación); el compositor lo usa en layer.frag.
   src/audio: AudioOutput (miniaudio + reloj maestro), AudioRingBuffer, AudioWorker.
   src/core también: easing, catálogo de transiciones (transition.h), la secuencia
   A → transición → B del laboratorio (sequence.h) y el catálogo de efectos de sonido
-  (sfx.h, archivos en presets/sfx/ generados por tools/sfx/generar_sfx.py).
+  (sfx.h, con su grupo: Clic, Pop, Swoosh, Whoosh, Impactos; archivos en presets/sfx/
+  generados por tools/sfx/generar_sfx.py). Pestaña Sonidos de PanelMedios: se arrastran a
+  una pista de audio (Editor::addSound) o se ponen con su golpe en el cabezal
+  (addSoundAtPlayhead).
   src/core también: proyecto y línea de tiempo (project.h: pistas en número variable,
   primero las de video de V1 hacia arriba y después las de audio; transformación y
   volumen por clip; transiciones en los cortes de las pistas de video, que usan el
@@ -49,6 +58,65 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Compositor).
   src/core también: export_settings.h (tramo y fps de la exportación, resoluciones y
   tasas recomendadas) y parseTimecode en time.h.
+  AV1 (grabaciones de OBS): por la GPU con el decodificador "av1" de FFmpeg (NVDEC en las
+  RTX 30+), comprobado con el primer fotograma; si no, dav1d por software.
+  Keyframes: ClipAnimation en Clip (project.h), por propiedad de ClipTransform
+  (AnimProperty: colocación, rotación, opacidad, recorte y los valores de los efectos),
+  con su curva (easing.h, kKeyframeEasings). Cada keyframe va en la
+  posición del medio (Clip::mediaFrameAt), así sigue al contenido al recortar o dividir.
+  transformAt(clip, frame) da la transformación animada (la usan el visor, Propiedades y
+  la exportación); setClipTransformAt (edit.h) convierte un cambio en un keyframe si la
+  propiedad está animada. Editor: editor_keyframes.cpp; interfaz: ⏱ ◀ ◆ ▶ junto a cada
+  valor en PanelPropiedades y ◆ sobre los clips en LineaTiempo.
+  Efectos de imagen: ClipEffects dentro de ClipTransform (blanco y negro, desenfoque,
+  esquinas redondeadas, sombra/resplandor; medidas en px del lienzo, que la exportación
+  escala). Todo en layer.frag: desenfoque con 32 muestras (disco de Vogel), esquinas con
+  una distancia a un rectángulo redondeado, y la sombra es la misma capa dibujada antes en
+  "modo sombra" (geometría ampliada, forma del clip con su alfa y su croma, difuminada).
+  Se aplican desde la pestaña Efectos (Editor::applyEffect; a todos los clips de video
+  seleccionados si el clip es uno de ellos) y se ajustan en Propiedades. Selección por
+  cuadro en LineaTiempo (marcoSeleccion → Editor::selectArea).
+  Transiciones como clips (como Premiere Composer): Clip::effect (TransitionParams, sin
+  medio, media = 0) en una pista de video; afecta a todo lo de debajo en su tramo. El
+  compositor (CompositorLayer::adjust) copia el lienzo dibujado hasta ahí y le aplica la
+  transición con A = B = esa copia. Su efecto avanza con `in` (dura durationFrames, como
+  un medio): al cortarla o recortarla cada trozo sigue donde iba. placeEffect/setClipEffect
+  (edit.h); Editor::addEffectClip (se centra en el corte más cercano, va a una pista libre y
+  lleva su sonido con placeSoundHit) y setEffectClip. Archivo .sharkp versión 9
+  (clip.effect). Las transiciones antiguas en los cortes (Track::transitions) se siguen
+  abriendo y dibujando.
+  Copiar y pegar clips: copyClips/pasteClips (edit.h, Clipboard con sus medios) y
+  Editor::copySelection/cutSelection/pasteAtPlayhead (Ctrl+C/X/V).
+  Un clic fuera de un campo de texto le quita el teclado (FocusRelease en main.cpp): si
+  no, los atajos de una tecla dejaban de funcionar.
+  Ajustes guardados (presets de clips): src/core/clip_preset.h (presetFromClip,
+  applyPreset; partes que lleva y animación en µs desde el inicio o el final del clip;
+  JSON en project_file.cpp). Se guardan en QSettings "efectos/ajustes" (todos los
+  proyectos). Editor: editor_presets.cpp; interfaz: «Guardar como ajuste…» en
+  PanelPropiedades (qml/DialogoAjusteClip.qml) y lista en la pestaña Efectos de
+  PanelMedios (se arrastran como un efecto, "ajuste:<nombre>" en applyEffect).
+  Punto de anclaje (seguimiento de movimiento): src/media/motion_tracker.h (MotionTracker
+  y trackVideo: correlación cruzada normalizada de la luminancia, de grueso a fino) y
+  src/core/motion_anchor.h (mediaPointOnCanvas/canvasPointOnMedia, como el compositor;
+  anchorClip convierte el recorrido en keyframes de posición, simplificados). Editor:
+  editor_anchor.cpp (en segundo plano, con el proxy si lo hay); interfaz: «Punto de
+  anclaje» en PanelPropiedades y MarcoAnclaje en Main.qml (recuadro en el visor).
+  Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
+  src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
+  Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de
+  pista y propio; src/core/captions.h divide palabras en subtítulos (caracteres, líneas,
+  duración mínima…) y lee/escribe .srt; las operaciones están en edit.h (las de rizo
+  también los mueven). src/render/caption_renderer.h los dibuja (QPainter) y el
+  compositor los pone encima como superposiciones (overlay.frag). src/speech (sin Qt):
+  transcripción local con whisper.cpp (cmake/whisper.cmake, siempre optimizado y con base
+  AVX2 fija: nada de GGML_NATIVE ni AVX-512, que con MSVC rompía en procesadores sin él;
+  GPU con -DSHARKCUT_WHISPER_CUDA=ON o _VULKAN=ON); el modelo se descarga una vez a
+  <datos de la app>/modelos (ModelDownload, con su SHA-256). En el editor:
+  editor_captions.cpp (pistas, selección, estilo, ajustes guardados en QSettings, .srt) y
+  editor_transcription.cpp; interfaz: pestaña Subtítulos de PanelMedios, pistas S1… en
+  LineaTiempo (TimelineClipsModel con captions: true), sección en PanelPropiedades y
+  qml/DialogoSubtitulos.qml. Test [speech]: necesita SHARKCUT_WHISPER_MODEL y
+  SHARKCUT_WHISPER_SAMPLE (si no, se salta).
   src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
   proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
@@ -60,12 +128,18 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   (qml/PaginaProyectos.qml), Editor (qml/PanelMedios.qml con qml/PanelBiblioteca.qml ·
   qml/PanelPropiedades.qml · Programa, y qml/LineaTiempo.qml) y Exportar
   (qml/PaginaExportar.qml); diálogos qml/Dialogo*.qml. Menús: qml/MenuTema.qml. Miniaturas: ThumbnailProvider ("image://miniaturas/…", en hilos).
+  Fotogramas de los clips en la línea de tiempo: FrameThumbnailProvider
+  ("image://fotogramas/<ruta>@<µs>", thumbnails.h; 2 hilos de baja prioridad): solo el
+  primer fotograma de cada clip, a su inicio (con muchos cortes y VODs de una hora, una
+  tira de miniaturas atascaba el zoom).
   Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
   Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
   (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.
   tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
   edición de una línea de tiempo grande (sin Qt).
-  Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir).
+  Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir). Listas
+  desplegables: qml/Selector.qml (con desplazamiento); fuentes: qml/SelectorFuente.qml
+  (búsqueda y favoritas, guardadas en QSettings "fuentes/favoritas").
   Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
   añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
@@ -87,6 +161,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   de interfaces, con un camino por software que compila en Linux.
 - Toda modificación del proyecto pasa por un comando (deshacer/rehacer).
 - Nada de decodificar ni acceder a disco en el hilo de interfaz.
+- Registro de cada sesión (src/app/logging.h): stderr y los mensajes de Qt van a
+  <datos de la app>/registros/sharkcut-<fecha>.log (se guardan las últimas 8); en Windows,
+  un cierre por fallo apunta el código y deja ultimo-cierre.dmp. Botón «Abrir la carpeta
+  de registros» en Proyectos. SHARKCUT_LOG=consola: todo por la consola, sin archivo.
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.

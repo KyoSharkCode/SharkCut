@@ -26,6 +26,12 @@ double applyEasing(Easing easing, double t) {
         }
         return t < 0.5 ? std::pow(2.0, 20.0 * t - 10.0) / 2.0
                        : (2.0 - std::pow(2.0, -20.0 * t + 10.0)) / 2.0;
+    case Easing::EaseInCubic:
+        return t * t * t;
+    case Easing::EaseOutCubic:
+        return 1.0 - std::pow(1.0 - t, 3.0);
+    case Easing::Hold:
+        return t >= 1.0 ? 1.0 : 0.0;
     case Easing::EaseOutBack: {
         constexpr double c1 = 1.70158;
         constexpr double c3 = c1 + 1.0;
@@ -34,6 +40,15 @@ double applyEasing(Easing easing, double t) {
     }
     }
     return t;
+}
+
+std::optional<Easing> easingFromId(std::string_view id) {
+    for (const EasingInfo& e : kEasings) {
+        if (e.id == id) {
+            return e.easing;
+        }
+    }
+    return std::nullopt;
 }
 
 double easingVelocity(Easing easing, double t) {

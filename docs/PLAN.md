@@ -49,7 +49,7 @@ una base sólida sobre la rapidez.
 | Decodificación | **FFmpeg 9 (libavformat/libavcodec)** enlazado como biblioteca (build precompilada de Gyan), con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
 | Codificación | **FFmpeg + NVENC** (`h264_nvenc` / `hevc_nvenc`) recibiendo texturas D3D11; fallback a `libx264` | Exportación sin pasar los píxeles por la CPU |
 | Audio | **miniaudio** (WASAPI) + mezclador propio | Biblioteca ligera, baja latencia; el audio marca el reloj de reproducción |
-| GPU de referencia | NVIDIA **RTX 3060 12 GB** | PC de trabajo de Kyo; NVENC/NVDEC por defecto |
+| GPU de referencia | NVIDIA **RTX 5070 12 GB** (antes RTX 3060 12 GB) | PC de trabajo de Kyo; NVENC/NVDEC por defecto |
 | Proyecto por defecto | **1080p a 60 fps**, audio estéreo 48 kHz | Formato habitual de grabación |
 | Edición | **No destructiva** | Los archivos originales nunca se modifican |
 | Archivo de proyecto | **`.sharkp`** (JSON con campo `version`) | Legible, versionable, migrable |
@@ -413,7 +413,10 @@ echar de menos Premiere.
 
 ### Fase 5 — Entrega
 - Instalador, icono de los archivos .sharkp y asociación con SharkCut.
-- Carpeta de licencias (FFmpeg, Qt) y código disponible, para compartir SharkCut gratis.
+- Carpeta de licencias (FFmpeg, Qt, whisper.cpp/ggml —MIT—) y código disponible, para
+  compartir SharkCut gratis. Los modelos de whisper se descargan aparte (no van en el
+  instalador). ggml ya se compila sin GGML_NATIVE (base AVX2): lo compilado sirve en
+  otros PC.
 - Mejora de los efectos de sonido (generador o sonidos CC0 registrados).
 - 0.1.0 Early Access para Kyo y sus amigos (.zip o instalador, y si se quiere una web
   sencilla de descarga).
@@ -421,7 +424,7 @@ echar de menos Premiere.
 
 ### Fase 6 — Lo pro
 - Lo que quede de efectos y transiciones tras la fase 4 (glitch, spin…).
-- Subtítulos automáticos en local con **whisper.cpp** (C++, usa la GPU).
+- ~~Subtítulos automáticos en local con whisper.cpp~~: adelantados a la fase 4, etapa 5.
 - Herramientas para VODs: detección de silencios y marcadores automáticos.
 - Herramienta de texto genérica (sin plantillas de marca), si hace falta.
 
@@ -712,6 +715,17 @@ ctest --preset windows-debug
        proxy», «Crear proxies de todos los videos»); botón «Proxies» en Programa. Solo
        para la vista previa: la exportación usa siempre los originales. Con proxy, un
        salto al azar baja de ~47 a ~6 ms.
+     - Arreglo pedido por Kyo al probarla: los videos con transparencia (.mov ProRes
+       4444, Animación/qtrle, PNG…) conservan su alfa en la vista previa y al exportar
+       (plano de alfa en VideoFrame y en el compositor). No tienen proxy (H.264 no
+       guarda transparencia). Los .webm VP9 con alfa necesitarían el decodificador
+       libvpx: quedan pendientes.
+     - Arreglos tras el primer video editado por Kyo: flechas arriba/abajo saltan al
+       corte anterior/siguiente de cualquier pista; clic o arrastre en la zona de pistas
+       mueve el cabezal (con imán a cortes y marcadores) y una línea tenue con su tiempo
+       sigue al ratón; los clips de video muestran fotogramas en miniatura
+       (FrameThumbnailProvider, del proxy si existe); el zoom con la rueda ya no deja la
+       vista atascada pasado el final.
      - Pendiente: visor sin copias (textura D3D11 de NVDEC directa al compositor). Es
        código solo de Windows que no se puede compilar ni probar en la nube: se hará en
        una sesión de prueba con Kyo en su PC.
@@ -724,9 +738,115 @@ ctest --preset windows-debug
      - Blanco y negro, desenfoque (Blur), esquinas redondeadas (Edges, Chat Edges),
        recorte (Crop, ya existe; Crop Description Disk como preset), croma (GreenScreen)
        y sombra paralela / resplandor azul detrás de un clip.
+     - [x] Adelantado a petición de Kyo: pantalla verde (croma) por clip. Es un efecto de
+       la pestaña Efectos: se arrastra sobre un clip de video (o «Aplicar» al seleccionado),
+       busca solo el color del fondo y aparece en Propiedades, donde se ajusta o se quita:
+       color (escrito, «Verde», «Azul» o «Detectar el color del fondo», que lo busca en
+       los bordes del fotograma que se ve), similitud, suavidad y quitar reflejo. Compara
+       el tono relativo al brillo, así quita también el fondo mal iluminado. Archivo
+       .sharkp versión 5. Y lectura de videos AV1 (OBS): NVDEC si la tarjeta lo admite,
+       si no dav1d por software.
+     - [x] Adelantado a petición de Kyo (lo necesitaba para los shorts): subtítulos.
+       «Crear subtítulos a partir de la transcripción» (pestaña Subtítulos), como en
+       Premiere: transcribe en local con whisper.cpp (modelo grande «turbo» o pequeño,
+       descargado una sola vez; sin internet después) y divide en subtítulos con una
+       línea, dos o una sola palabra, caracteres por línea, duración mínima, separación y
+       quitar puntuación; se puede volver a dividir sin transcribir otra vez (cada
+       subtítulo guarda el momento de sus palabras). Pistas de subtítulos S1, S2… encima
+       de las de video: mover, recortar, editar el texto y el estilo (fuente, tamaño,
+       negrita, cursiva, mayúsculas, color, contorno, sombra, caja de fondo, posición y
+       ancho) de uno, de varios o de toda la pista; ajustes de estilo de fábrica y
+       guardados con nombre; importar y exportar .srt. Sirven también como texto suelto
+       («Añadir un subtítulo o texto en el cabezal»). Archivo .sharkp versión 6.
+     - [x] Fallo arreglado (17–20 oct 2026, volcado ultimo-cierre.dmp del PC de Kyo): la
+       app se cerraba al transcribir con 0xC000001D (instrucción no válida), en una
+       instrucción AVX-512 de ggml; el procesador de Kyo (AMD Zen 3) no tiene AVX-512. Con
+       MSVC y GGML_NATIVE=ON, la detección de ggml (FindSIMD.cmake) daba AVX-512 por bueno.
+       Ahora cmake/whisper.cmake fija una base AVX2 (SSE4.2, AVX, AVX2, BMI2, FMA, F16C;
+       sin AVX-512 ni GGML_NATIVE), que además sirve para repartirlo en la fase 5, y
+       transcribe() comprueba AVX2 antes de empezar (mensaje claro en un PC sin él).
+       Alternativa futura, más rápida en cada PC: GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS.
+     - [x] 5.1 Keyframes (orden acordado con Kyo: keyframes → efectos → ajustes guardados →
+       anclaje → .webm con transparencia → mover subtítulos en el visor). Posición, escala,
+       opacidad y recorte se animan con ⏱ en Propiedades; con la propiedad animada, cada
+       cambio (en Propiedades o arrastrando en el visor) crea o actualiza el keyframe del
+       cabezal (también la rotación, añadida tras la prueba de Kyo: en Propiedades y con un
+       tirador en el visor, Mayús de 15° en 15°); ◀ ◆ ▶ para ir al anterior, poner o quitar
+       uno, ir al siguiente; curva por
+       keyframe (lineal, suave, entrada suave, salida suave, explosiva, con rebote, cúbica
+       y mantener). Los keyframes se ven (◆) sobre el clip en la línea de tiempo: clic para
+       ir, arrastrar para moverlos. Siguen al contenido al recortar o dividir el clip.
+       Archivo .sharkp versión 7.
+     - [x] 5.2 Efectos: blanco y negro (intensidad), desenfoque (cantidad), esquinas
+       redondeadas (radio) y sombra o resplandor (color, opacidad, difuminado, tamaño y
+       distancia), que sigue la forma del clip: su transparencia y su pantalla verde (el
+       resplandor azul detrás del modelo VTuber). Se arrastran desde Efectos a un clip (o
+       «Aplicar» al seleccionado), aparecen en Propiedades y se quitan con 🗑️. En el mismo
+       shader de la capa: vista previa y exportación iguales. Archivo .sharkp versión 8.
+       Los valores de los efectos también se animan con keyframes (⏱ en cada uno), como
+       la posición o la escala.
+     - [x] 5.3 Ajustes guardados (presets de clips): «Guardar como ajuste…» en
+       Propiedades guarda el aspecto del clip de video con nombre, eligiendo qué lleva
+       (posición, escala y rotación; opacidad; recorte; efectos; pantalla verde; animación).
+       Sin animación se guardan los valores que se ven en el cabezal; con ella, los
+       keyframes cuentan desde el inicio del clip (entradas) o desde el final (salidas),
+       en microsegundos: valen para clips de cualquier duración y fps. Aparecen en la
+       pestaña Efectos, debajo de los efectos: se arrastran a un clip (o «Aplicar» al
+       seleccionado), se renombran y se borran. Las partes que lleva sustituyen a las del
+       clip (con deshacer); lo demás no cambia. Se guardan en la configuración de la app
+       (QSettings «efectos/ajustes», JSON): sirven en todos los proyectos. Núcleo sin Qt:
+       src/core/clip_preset.h.
+     - [x] Petición de Kyo: cuadro de selección en la línea de tiempo (arrastrar desde una
+       zona vacía; Mayús o Ctrl suman a lo seleccionado; un clic suelto sigue quitando la
+       selección y llevando el cabezal ahí). Los efectos y los ajustes guardados que se
+       sueltan sobre uno de los clips seleccionados (o con «Aplicar») van a todos sus clips
+       de video en un paso de deshacer (la pantalla verde busca el color en ese clip y lo
+       pone en todos), y «Desvincular audio y video de todos» separa los de la selección.
+     - [x] Tras la prueba de Kyo con 3 VODs de una hora en vertical: los atajos (Espacio, C,
+       V, Supr) ya no se pierden si un campo de texto se quedó con el teclado; franja
+       amarilla en la regla (ahí se lleva el cabezal) y un clic para llevar el cabezal
+       pausa; miniaturas de la línea de tiempo con el fotograma clave cercano (12 veces
+       menos CPU), en 2 hilos de baja prioridad y cancelables; Propiedades no se rehace en
+       cada fotograma al reproducir; la vista deja de seguir al cabezal si se mueve con la
+       rueda. Copiar, cortar y pegar clips (Ctrl+C/X/V, también entre secuencias y
+       proyectos): en el cabezal, en las mismas pistas, sobrescribiendo.
+       Después, a petición de Kyo (seguía el lag al hacer zoom): cada clip de video muestra
+       solo su primer fotograma, al inicio, en vez de una tira de miniaturas.
+     - [x] Transiciones como clips (petición de Kyo, como en Premiere Composer): se
+       arrastran a la línea de tiempo y quedan como un clip en una pista libre, centradas en
+       el corte más cercano, con su efecto de sonido en una pista de audio. Afectan a todo
+       lo que hay debajo (también varias pistas: gameplay, facecam y textos), y se pueden
+       poner al principio o al final de un clip, mover, cortar y recortar. En Propiedades:
+       tipo, duración, intensidad, desenfoque y curva. Archivo .sharkp versión 9.
+     - [x] Biblioteca de efectos de sonido (pestaña Sonidos), con los que Kyo usa en
+       Premiere como guía (sin copiarlos: sintetizados, CC0): clic de ratón, clic suave,
+       pop hueco, pop de burbuja y más swooshes, además de los whoosh, impactos, glitch y
+       riser de las transiciones. Se arrastran a una pista de audio o se ponen con su golpe
+       en el cabezal (+).
+     - [ ] Idea de Kyo (sin decidir, para más adelante): efectos animados de fábrica, como
+       los ajustes de estilo del texto; p. ej. un desenfoque que aparece en barrido
+       diagonal de izquierda a derecha. Encaja con los ajustes guardados (5.3: serían
+       ajustes de fábrica en la misma lista); un barrido
+       necesitaría una máscara de desenfoque con dirección, que hoy no existe.
      Hace falta: keyframes de las propiedades del clip, efectos con parámetros en el
      compositor (mismo motor para vista previa y exportación) y presets de usuario con
      nombre (guardar, aplicar arrastrando, renombrar, quitar).
+     - [x] 5.4 Punto de anclaje (idea de Kyo, seguimiento de movimiento): un clip (texto,
+       imagen, video pequeño) se pega a algo que se mueve en otro clip, por ejemplo una
+       mano, y lo sigue. En Propiedades, «Punto de anclaje»: se elige el clip que se sigue
+       (los que se ven en el cabezal) y se dibuja en el visor un recuadro sobre la zona.
+       SharkCut la busca fotograma a fotograma desde el cabezal hacia delante, en segundo
+       plano y con el proxy si lo hay (src/media/motion_tracker.h: correlación cruzada
+       normalizada sobre la luminancia, de baja resolución a fina, con ajuste por debajo
+       del píxel y un patrón que se adapta poco a poco sin derivar; si la zona se tapa unos
+       fotogramas, rellena entre la posición de antes y la de después). El recorrido pasa
+       al lienzo con la colocación del clip seguido en cada momento (escala, giro,
+       posición, también animadas) y se convierte en keyframes de posición del clip
+       anclado (src/core/motion_anchor.h), sin los que sobran (a menos de 1 px de la
+       línea entre sus vecinos), que se pueden corregir a mano. Si la zona se pierde, el
+       clip la sigue hasta ahí y se avisa para marcarla otra vez desde ese punto. Un paso
+       de deshacer.
+       Pendiente (opcional): dos puntos para seguir también escala y giro.
 9. Fase 5: entrega (instalador, licencias, sonidos, 0.1.0 Early Access).
 
 ### Decisiones tomadas
@@ -734,7 +854,8 @@ ctest --preset windows-debug
 - [x] Arquitectura: **nativa en C++20 + Qt 6** (revisión 2; antes Electron).
 - [x] Transiciones prioritarias: Fade to Black, Pan (Left), Rotate,
       Shake & Distort, Zoom In, Zoom Out, Zoom & Rotate Out.
-- [x] Tarjeta gráfica: NVIDIA RTX 3060 12 GB → NVDEC/NVENC por defecto.
+- [x] Tarjeta gráfica: NVIDIA RTX 5070 12 GB (desde octubre de 2026; antes RTX 3060) →
+      NVDEC/NVENC por defecto.
 - [x] Proyecto por defecto: 1080p60.
 - [x] Grabación de OBS: MP4 fragmentado, una sola pista de audio.
 - [x] Extensión del proyecto: `.sharkp`.
@@ -787,6 +908,7 @@ y neutralidad de color. Por eso la interfaz usa una variante sobria.
 | Texto desactivado | `#5F6778` |
 | Acento (foco, selección) | `#4FC3D1` (Bioluz suavizado) |
 | Cabezal de reproducción | `#6FE3F0` (Bioluz) |
+| Franja de la regla (donde se mueve el cabezal) | `#E0B440` (petición de Kyo) |
 | Acento secundario | `#3A7BD5` (Aleta) |
 | Clip de video / audio / transición / texto | `#3D5A8A` / `#2F6F6A` / `#7D74A8` / `#9C8340` |
 | Fila de pista de video / audio | `#161C29` / `#14201F` |

@@ -16,6 +16,7 @@
 // - Las pistas bloqueadas no cambian: sus clips no se mueven, recortan, dividen ni
 //   quitan, y no se puede colocar nada en ellas.
 
+#include "core/captions.h"
 #include "core/project.h"
 
 #include <cstddef>
@@ -64,6 +65,44 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::in
 // Coloca el medio entero a partir de `start`.
 ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, PlaceTarget target = {});
 
+// --- Copiar y pegar ---
+
+// Clips copiados, con su pista (tipo y número dentro del tipo: 0 = V1 o A1) y su inicio
+// relativo al del primero. Lleva también los medios que usan (para pegar en otro
+// proyecto o secuencia).
+struct ClipboardClip {
+    TrackKind kind = TrackKind::Video;
+    std::size_t trackNumber = 0;
+    Clip clip; // clip.start: desde el inicio de lo copiado
+};
+struct Clipboard {
+    std::vector<ClipboardClip> clips;
+    std::vector<MediaItem> media;
+    std::int64_t length = 0; // de lo copiado, en fotogramas
+    bool empty() const { return clips.empty(); }
+};
+
+// Copia los clips (y sus enlazados), con su transformación, efectos, keyframes y volumen.
+Clipboard copyClips(const Project& project, const std::vector<ObjectId>& clips);
+
+// Pega lo copiado a partir del fotograma `at`, en las mismas pistas (se crean las que
+// falten), sobrescribiendo lo que haya. Los medios que el proyecto no tenga (por su ruta)
+// se añaden. No se pega nada en pistas bloqueadas. Devuelve los clips nuevos.
+std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, std::int64_t at);
+
+// --- Transiciones como clips ---
+
+// Pone una transición-clip (ver Clip::effect) de params.durationFrames fotogramas a partir
+// de `start`, en la pista de video `track` o, si ahí hay clips en ese tramo, en la
+// primera de encima que esté libre (o en una nueva). Nunca tapa clips. Devuelve su id.
+ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
+                     TransitionParams params);
+
+// Cambia la transición del clip (tipo, intensidad, desenfoque, curva, duración). Con
+// otra duración, el clip vuelve a mostrar el efecto entero desde su inicio (hasta donde
+// quepa antes del clip siguiente).
+bool setClipEffect(Project& project, ObjectId clip, TransitionParams params);
+
 // Parte en dos los clips que contienen el fotograma `frame` (sin contar su primer
 // fotograma). Con `clips` vacío parte todas las pistas; si no, solo esos clips (y
 // sus enlazados).
@@ -100,6 +139,32 @@ bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_
 // se ajustan con clampTransform).
 ClipTransform clampTransform(ClipTransform transform);
 bool setClipTransform(Project& project, ObjectId clip, const ClipTransform& transform);
+
+// --- Keyframes (clips de video de pistas sin bloquear) -------------------------------
+// `frame` es siempre un fotograma de la línea de tiempo; el keyframe se guarda en la
+// posición del medio que se ve ahí (Clip::mediaFrameAt).
+
+// Aplica la transformación que se quiere ver en `frame`: las propiedades animadas que
+// cambian reciben (o actualizan) un keyframe ahí; las demás cambian su valor fijo. Es lo
+// que hace cualquier cambio desde Propiedades o el visor.
+bool setClipTransformAt(Project& project, ObjectId clip, const ClipTransform& transform,
+                        std::int64_t frame);
+// Empezar a animar la propiedad (un keyframe en `frame` con el valor que tiene ahí) o dejar
+// de animarla (se queda fija con el valor que tenía en `frame`).
+bool setPropertyAnimated(Project& project, ObjectId clip, AnimProperty property, bool animated,
+                         std::int64_t frame);
+// Crea o cambia el keyframe de la propiedad en `frame` (la propiedad pasa a estar animada).
+bool setKeyframe(Project& project, ObjectId clip, AnimProperty property, std::int64_t frame,
+                 double value);
+// Quita el keyframe en `frame`; si era el último, la propiedad se queda fija con su valor.
+bool removeKeyframe(Project& project, ObjectId clip, AnimProperty property, std::int64_t frame);
+// Curva (hasta el siguiente) de los keyframes que hay en `frame`, de todas las propiedades.
+bool setKeyframeEasing(Project& project, ObjectId clip, std::int64_t frame, Easing easing);
+// Mueve los keyframes de `from` a `to` (todas las propiedades). Los que chocarían con
+// otro que ya está en `to` no se mueven.
+bool moveKeyframes(Project& project, ObjectId clip, std::int64_t from, std::int64_t to);
+// Sustituye toda la animación del clip (p. ej. quitarla al restablecer, o un ajuste guardado).
+bool setClipAnimation(Project& project, ObjectId clip, const ClipAnimation& animation);
 
 // Volumen de un clip de audio, en dB (entre kMinVolumeDb y kMaxVolumeDb).
 bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
@@ -192,6 +257,12 @@ bool setTransitionParams(Project& project, ObjectId transition, const Transition
 bool setTransitionLength(Project& project, ObjectId transition, std::int64_t before,
                          std::int64_t after);
 
+// Coloca un efecto de sonido (medio de audio) con su golpe (`hitFrames` desde su inicio)
+// en el fotograma `hit`, en la primera pista de audio libre en ese tramo (o en una nueva
+// debajo), con `volumeDb`. Devuelve el clip de audio, o 0.
+ObjectId placeSoundHit(Project& project, ObjectId soundMedia, std::int64_t hit,
+                       std::int64_t hitFrames, double volumeDb);
+
 // Coloca el sonido `soundMedia` con su golpe (`hitFrames` desde su inicio) en el corte
 // de la transición, en la primera pista de audio libre en ese tramo (o en una nueva), y
 // lo empareja con la transición (quitando el anterior). Devuelve el clip, o 0.
@@ -208,5 +279,46 @@ void repairLinks(Project& project);
 // Formato antiguo (versión 1 del .sharkp, sin enlaces fiables): enlaza el clip de V1
 // con el de A1 que comparte medio, posición y tramo.
 void linkMatchingClips(Project& project);
+
+// --- Subtítulos ---------------------------------------------------------------------
+// Las pistas de subtítulos bloqueadas no se pueden editar. Las ediciones con rizo
+// (extractRange y las que la usan) también mueven y recortan los subtítulos.
+
+// Medidas válidas (tamaño, grosores, opacidades y posición dentro de sus límites).
+CaptionStyle clampCaptionStyle(CaptionStyle style);
+
+// Pista nueva al final (encima de las demás). Devuelve su índice.
+std::size_t addCaptionTrack(Project& project, const CaptionStyle& style = {});
+bool removeCaptionTrack(Project& project, std::size_t track);
+bool setCaptionTrackHidden(Project& project, std::size_t track, bool hidden);
+bool setCaptionTrackLocked(Project& project, std::size_t track, bool locked);
+
+// Reemplaza los subtítulos de la pista (ids nuevos; se ordenan y los que se solapan se
+// recortan).
+bool setCaptions(Project& project, std::size_t track, std::vector<Caption> captions);
+// Subtítulo nuevo en `start`, recortado al hueco libre de la pista. 0 si no cabe.
+ObjectId addCaption(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                    std::string text);
+bool removeCaptions(Project& project, const std::vector<ObjectId>& captions);
+// Cambiar el texto descarta los tiempos de sus palabras.
+bool setCaptionText(Project& project, ObjectId caption, std::string text);
+// Mueve el subtítulo a `start`, sin pisar a sus vecinos (se queda lo más cerca posible).
+bool moveCaption(Project& project, ObjectId caption, std::int64_t start);
+// Nuevo tramo [start, end), limitado por los vecinos (al menos un fotograma).
+bool trimCaption(Project& project, ObjectId caption, std::int64_t start, std::int64_t end);
+// Estilo propio de unos subtítulos (std::nullopt: vuelven al de su pista).
+bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
+                     const std::optional<CaptionStyle>& style);
+// Estilo de la pista; con `clearOwn`, sus subtítulos dejan su estilo propio.
+bool setCaptionTrackStyle(Project& project, std::size_t track, const CaptionStyle& style,
+                          bool clearOwn);
+// Final del último clip de video o audio (sin contar los subtítulos).
+std::int64_t mediaEnd(const Project& project);
+// La duración mínima no debe alargar la secuencia: el último subtítulo acaba, como
+// tarde, en `end` (si empieza antes).
+void limitCaptionsTo(std::vector<Caption>& captions, std::int64_t end);
+// Vuelve a dividir la pista con otras medidas, a partir de sus palabras (el último
+// subtítulo no pasa del final de los clips).
+bool relayoutCaptions(Project& project, std::size_t track, const CaptionLayout& layout);
 
 } // namespace sharkcut

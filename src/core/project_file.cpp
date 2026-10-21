@@ -1,11 +1,14 @@
 #include "core/project_file.h"
 
+#include "core/clip_preset.h"
+
 #include "core/edit.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <set>
@@ -84,7 +87,7 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
             claim(ids, clip.id);
-            if (!project.findMedia(clip.media)) {
+            if (!clip.isEffect() && !project.findMedia(clip.media)) {
                 throw ProjectError("Un clip hace referencia a un medio que no existe");
             }
             if (clip.length <= 0 || clip.start < 0 || clip.in < 0) {
@@ -121,6 +124,28 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     }
     std::stable_sort(project.markers.begin(), project.markers.end(),
                      [](const Marker& a, const Marker& b) { return a.frame < b.frame; });
+    for (CaptionTrack& track : project.captionTracks) {
+        track.style = clampCaptionStyle(track.style);
+        for (Caption& c : track.captions) {
+            claim(ids, c.id);
+            if (c.length <= 0 || c.start < 0) {
+                throw ProjectError("Subtítulo con posición o duración no válida en el proyecto");
+            }
+            if (c.style) {
+                c.style = clampCaptionStyle(*c.style);
+            }
+            std::erase_if(c.words, [&c](const CaptionWord& w) {
+                return w.start < 0 || w.end <= w.start || w.end > c.length;
+            });
+        }
+        std::stable_sort(track.captions.begin(), track.captions.end(),
+                         [](const Caption& a, const Caption& b) { return a.start < b.start; });
+        for (std::size_t i = 1; i < track.captions.size(); ++i) {
+            if (track.captions[i].start < track.captions[i - 1].end()) {
+                throw ProjectError("Hay subtítulos solapados en una pista del proyecto");
+            }
+        }
+    }
     if (version < 2) {
         linkMatchingClips(project); // los enlaces de la versión 1 se deducían así
     } else {
@@ -153,6 +178,7 @@ void validate(Document& document, int version) {
         sequence.settings = view.settings;
         sequence.tracks = view.tracks;
         sequence.markers = view.markers;
+        sequence.captionTracks = view.captionTracks;
     }
     for (MediaItem& item : document.media) {
         if (item.folder != 0 && !document.folder(item.folder)) {
@@ -209,14 +235,101 @@ Transition transitionFromJson(const json& value) {
     return t;
 }
 
-json transformToJson(const ClipTransform& t) {
+// Transición-clip: {type, duration, intensity, blur, easing}.
+json effectToJson(const TransitionParams& p) {
     return {
+        {"type", toString(transitionInfo(p.type).id)},
+        {"duration", p.durationFrames},
+        {"intensity", p.intensity},
+        {"blur", p.blur},
+        {"easing", toString(kEasings[static_cast<std::size_t>(p.easing)].id)},
+    };
+}
+
+TransitionParams effectFromJson(const json& value) {
+    const std::string type = value.at("type").get<std::string>();
+    const auto info = std::find_if(kTransitions.begin(), kTransitions.end(),
+                                   [&type](const TransitionInfo& i) { return i.id == type; });
+    if (info == kTransitions.end()) {
+        throw ProjectError("Transición desconocida en el proyecto: " + type);
+    }
+    TransitionParams p = info->defaults;
+    p.durationFrames = std::max<std::int64_t>(2, value.value("duration", p.durationFrames));
+    p.intensity = std::clamp(value.value("intensity", p.intensity), 0.0, 1.0);
+    p.blur = std::clamp(value.value("blur", p.blur), 0.0, 1.0);
+    const std::string easing = value.value("easing", std::string());
+    for (const EasingInfo& e : kEasings) {
+        if (e.id == easing) {
+            p.easing = e.easing;
+        }
+    }
+    return p;
+}
+
+std::string colorToHex(std::uint32_t color) {
+    char text[8];
+    std::snprintf(text, sizeof text, "#%06X", static_cast<unsigned>(color & 0xFFFFFFu));
+    return text;
+}
+
+std::uint32_t colorFromHex(const std::string& text, std::uint32_t fallback) {
+    if (text.size() != 7 || text[0] != '#') {
+        return fallback;
+    }
+    std::uint32_t color = 0;
+    for (std::size_t i = 1; i < text.size(); ++i) {
+        const char c = text[i];
+        int digit = 0;
+        if (c >= '0' && c <= '9') {
+            digit = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            digit = c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            digit = c - 'A' + 10;
+        } else {
+            return fallback;
+        }
+        color = color * 16 + static_cast<std::uint32_t>(digit);
+    }
+    return color;
+}
+
+json transformToJson(const ClipTransform& t) {
+    json result = {
         {"x", t.x},
         {"y", t.y},
         {"scale", t.scale},
+        {"rotation", t.rotation},
         {"opacity", t.opacity},
         {"crop", json::array({t.cropLeft, t.cropTop, t.cropRight, t.cropBottom})},
     };
+    if (t.effects != ClipEffects{}) {
+        const ClipEffects& e = t.effects;
+        result["effects"] = {
+            {"grayscaleOn", e.grayscaleOn},
+            {"grayscale", e.grayscale},
+            {"blurOn", e.blurOn},
+            {"blur", e.blur},
+            {"cornersOn", e.cornersOn},
+            {"corners", e.corners},
+            {"shadowOn", e.shadowOn},
+            {"shadowColor", colorToHex(e.shadowColor)},
+            {"shadowOpacity", e.shadowOpacity},
+            {"shadowSoftness", e.shadowSoftness},
+            {"shadowX", e.shadowX},
+            {"shadowY", e.shadowY},
+            {"shadowSpread", e.shadowSpread},
+        };
+    }
+    if (t.chromaKey != ChromaKey{}) {
+        const ChromaKey& k = t.chromaKey;
+        result["chromaKey"] = {
+            {"enabled", k.enabled},       {"color", colorToHex(k.color)},
+            {"similarity", k.similarity}, {"smoothness", k.smoothness},
+            {"spill", k.spill},
+        };
+    }
+    return result;
 }
 
 ClipTransform transformFromJson(const json& value) {
@@ -224,6 +337,7 @@ ClipTransform transformFromJson(const json& value) {
     t.x = value.value("x", 0.0);
     t.y = value.value("y", 0.0);
     t.scale = value.value("scale", 1.0);
+    t.rotation = value.value("rotation", 0.0);
     t.opacity = value.value("opacity", 1.0);
     if (const auto crop = value.find("crop"); crop != value.end()) {
         t.cropLeft = crop->at(0).get<double>();
@@ -231,7 +345,181 @@ ClipTransform transformFromJson(const json& value) {
         t.cropRight = crop->at(2).get<double>();
         t.cropBottom = crop->at(3).get<double>();
     }
+    if (const auto fx = value.find("effects"); fx != value.end()) {
+        const ClipEffects d;
+        ClipEffects& e = t.effects;
+        e.grayscaleOn = fx->value("grayscaleOn", false);
+        e.grayscale = fx->value("grayscale", d.grayscale);
+        e.blurOn = fx->value("blurOn", false);
+        e.blur = fx->value("blur", d.blur);
+        e.cornersOn = fx->value("cornersOn", false);
+        e.corners = fx->value("corners", d.corners);
+        e.shadowOn = fx->value("shadowOn", false);
+        e.shadowColor = colorFromHex(fx->value("shadowColor", std::string()), d.shadowColor);
+        e.shadowOpacity = fx->value("shadowOpacity", d.shadowOpacity);
+        e.shadowSoftness = fx->value("shadowSoftness", d.shadowSoftness);
+        e.shadowX = fx->value("shadowX", d.shadowX);
+        e.shadowY = fx->value("shadowY", d.shadowY);
+        e.shadowSpread = fx->value("shadowSpread", d.shadowSpread);
+    }
+    if (const auto key = value.find("chromaKey"); key != value.end()) {
+        const ChromaKey defaults;
+        ChromaKey& k = t.chromaKey;
+        k.enabled = key->value("enabled", false);
+        k.color = colorFromHex(key->value("color", std::string()), defaults.color);
+        k.similarity = key->value("similarity", defaults.similarity);
+        k.smoothness = key->value("smoothness", defaults.smoothness);
+        k.spill = key->value("spill", defaults.spill);
+    }
     return t;
+}
+
+// Animación: {"x": [[fotograma, valor, "curva"], …], …}, solo las propiedades animadas.
+json animationToJson(const ClipAnimation& animation) {
+    json result = json::object();
+    for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+        const auto& keys = animation.keys[i];
+        if (keys.empty()) {
+            continue;
+        }
+        json list = json::array();
+        for (const Keyframe& k : keys) {
+            list.push_back(json::array(
+                {k.frame, k.value, std::string(kEasings[static_cast<std::size_t>(k.easing)].id)}));
+        }
+        result[std::string(kAnimPropertyIds[i])] = std::move(list);
+    }
+    return result;
+}
+
+ClipAnimation animationFromJson(const json& value) {
+    ClipAnimation animation;
+    for (auto it = value.begin(); it != value.end(); ++it) {
+        const auto property = animPropertyFromId(it.key());
+        if (!property) {
+            continue; // propiedad de una versión más nueva: se ignora
+        }
+        auto& keys = animation.of(*property);
+        for (const json& k : it.value()) {
+            Keyframe key;
+            key.frame = k.at(0).get<std::int64_t>();
+            key.value = k.at(1).get<double>();
+            if (k.size() > 2) {
+                key.easing = easingFromId(k.at(2).get<std::string>()).value_or(Easing::Linear);
+            }
+            if (std::isfinite(key.value)) {
+                keys.push_back(key);
+            }
+        }
+        // Ordenados y sin dos en el mismo fotograma.
+        std::stable_sort(keys.begin(), keys.end(),
+                         [](const Keyframe& a, const Keyframe& b) { return a.frame < b.frame; });
+        keys.erase(
+            std::unique(keys.begin(), keys.end(),
+                        [](const Keyframe& a, const Keyframe& b) { return a.frame == b.frame; }),
+            keys.end());
+    }
+    return animation;
+}
+
+json captionStyleToJson(const CaptionStyle& st) {
+    return {
+        {"font", st.font},
+        {"size", st.size},
+        {"bold", st.bold},
+        {"italic", st.italic},
+        {"uppercase", st.uppercase},
+        {"color", colorToHex(st.color)},
+        {"outlineColor", colorToHex(st.outlineColor)},
+        {"outline", st.outline},
+        {"shadowColor", colorToHex(st.shadowColor)},
+        {"shadow", st.shadow},
+        {"boxColor", colorToHex(st.boxColor)},
+        {"box", st.box},
+        {"x", st.x},
+        {"y", st.y},
+        {"maxWidth", st.maxWidth},
+    };
+}
+
+CaptionStyle captionStyleFromJson(const json& v) {
+    const CaptionStyle d;
+    CaptionStyle st;
+    st.font = v.value("font", d.font);
+    st.size = v.value("size", d.size);
+    st.bold = v.value("bold", d.bold);
+    st.italic = v.value("italic", d.italic);
+    st.uppercase = v.value("uppercase", d.uppercase);
+    st.color = colorFromHex(v.value("color", std::string()), d.color);
+    st.outlineColor = colorFromHex(v.value("outlineColor", std::string()), d.outlineColor);
+    st.outline = v.value("outline", d.outline);
+    st.shadowColor = colorFromHex(v.value("shadowColor", std::string()), d.shadowColor);
+    st.shadow = v.value("shadow", d.shadow);
+    st.boxColor = colorFromHex(v.value("boxColor", std::string()), d.boxColor);
+    st.box = v.value("box", d.box);
+    st.x = v.value("x", d.x);
+    st.y = v.value("y", d.y);
+    st.maxWidth = v.value("maxWidth", d.maxWidth);
+    return st;
+}
+
+json captionTracksToJson(const std::vector<CaptionTrack>& tracks) {
+    json result = json::array();
+    for (const CaptionTrack& track : tracks) {
+        json captions = json::array();
+        for (const Caption& c : track.captions) {
+            json entry = {{"id", c.id}, {"start", c.start}, {"length", c.length}, {"text", c.text}};
+            if (c.style) {
+                entry["style"] = captionStyleToJson(*c.style);
+            }
+            if (!c.words.empty()) {
+                // [inicio, fin, texto] por palabra: compacto (miles de subtítulos).
+                json words = json::array();
+                for (const CaptionWord& w : c.words) {
+                    words.push_back(json::array({w.start, w.end, w.text}));
+                }
+                entry["words"] = std::move(words);
+            }
+            captions.push_back(std::move(entry));
+        }
+        json entry = {{"style", captionStyleToJson(track.style)},
+                      {"captions", std::move(captions)}};
+        if (track.hidden) {
+            entry["hidden"] = true;
+        }
+        if (track.locked) {
+            entry["locked"] = true;
+        }
+        result.push_back(std::move(entry));
+    }
+    return result;
+}
+
+std::vector<CaptionTrack> captionTracksFromJson(const json& value) {
+    std::vector<CaptionTrack> tracks;
+    for (const json& entry : value) {
+        CaptionTrack track;
+        track.style = captionStyleFromJson(entry.value("style", json::object()));
+        track.hidden = entry.value("hidden", false);
+        track.locked = entry.value("locked", false);
+        for (const json& c : entry.at("captions")) {
+            Caption caption;
+            caption.id = c.at("id").get<ObjectId>();
+            caption.start = c.at("start").get<std::int64_t>();
+            caption.length = c.at("length").get<std::int64_t>();
+            caption.text = c.value("text", std::string());
+            if (const auto st = c.find("style"); st != c.end()) {
+                caption.style = captionStyleFromJson(*st);
+            }
+            for (const json& w : c.value("words", json::array())) {
+                caption.words.push_back({w.at(0).get<std::int64_t>(), w.at(1).get<std::int64_t>(),
+                                         w.at(2).get<std::string>()});
+            }
+            track.captions.push_back(std::move(caption));
+        }
+        tracks.push_back(std::move(track));
+    }
+    return tracks;
 }
 
 } // namespace
@@ -281,8 +569,14 @@ json tracksToJson(const std::vector<Track>& tracks) {
             if (video && clip.transform != ClipTransform{}) {
                 entry["transform"] = transformToJson(clip.transform);
             }
+            if (video && !clip.animation.empty()) {
+                entry["animation"] = animationToJson(clip.animation);
+            }
             if (!video && clip.volumeDb != 0.0) {
                 entry["volumeDb"] = clip.volumeDb;
+            }
+            if (video && clip.effect) {
+                entry["effect"] = effectToJson(*clip.effect);
             }
             clips.push_back(std::move(entry));
         }
@@ -334,7 +628,14 @@ std::vector<Track> tracksFromJson(const json& value) {
             if (const auto t = c.find("transform"); t != c.end()) {
                 clip.transform = transformFromJson(*t);
             }
+            if (const auto a = c.find("animation"); a != c.end()) {
+                clip.animation = animationFromJson(*a);
+            }
             clip.volumeDb = c.value("volumeDb", 0.0);
+            if (const auto e = c.find("effect"); e != c.end() && track.kind == TrackKind::Video) {
+                clip.effect = effectFromJson(*e);
+                clip.media = 0;
+            }
             track.clips.push_back(clip);
         }
         if (const auto list = entry.find("transitions"); list != entry.end()) {
@@ -403,6 +704,9 @@ std::string documentToJson(const Document& document, const std::filesystem::path
                     {{"id", marker.id}, {"frame", marker.frame}, {"name", marker.name}});
             }
             entry["markers"] = std::move(markers);
+        }
+        if (!sequence.captionTracks.empty()) {
+            entry["captionTracks"] = captionTracksToJson(sequence.captionTracks);
         }
         sequences.push_back(std::move(entry));
     }
@@ -482,6 +786,10 @@ LoadedDocument documentFromJson(std::string_view text, const std::filesystem::pa
                     sequence.markers.push_back({m.at("id").get<ObjectId>(),
                                                 m.at("frame").get<std::int64_t>(),
                                                 m.value("name", std::string())});
+                }
+                // Subtítulos: desde la versión 6.
+                if (const auto c = entry.find("captionTracks"); c != entry.end()) {
+                    sequence.captionTracks = captionTracksFromJson(*c);
                 }
                 document.sequences.push_back(std::move(sequence));
             }
@@ -589,6 +897,100 @@ void saveProject(const Project& project, const std::filesystem::path& file) {
 
 Project loadProject(const std::filesystem::path& file) {
     return projectFromJson(readFile(file), file);
+}
+
+// --- Ajustes guardados de clips (clip_preset.h) -------------------------------------
+
+std::string presetsToJson(const std::vector<ClipPreset>& presets) {
+    json list = json::array();
+    for (const ClipPreset& p : presets) {
+        json keys = json::object();
+        for (std::size_t i = 0; i < kAnimPropertyCount; ++i) {
+            if (p.keys[i].empty()) {
+                continue;
+            }
+            json k = json::array();
+            for (const PresetKeyframe& key : p.keys[i]) {
+                k.push_back(
+                    json::array({key.offsetUs, key.value,
+                                 std::string(kEasings[static_cast<std::size_t>(key.easing)].id)}));
+            }
+            keys[std::string(kAnimPropertyIds[i])] = std::move(k);
+        }
+        list.push_back({
+            {"name", p.name},
+            {"parts",
+             {{"placement", p.parts.placement},
+              {"opacity", p.parts.opacity},
+              {"crop", p.parts.crop},
+              {"effects", p.parts.effects},
+              {"chroma", p.parts.chroma},
+              {"animation", p.parts.animation}}},
+            {"anchor", p.anchor == PresetAnchor::End ? "end" : "start"},
+            {"transform", transformToJson(p.transform)},
+            {"keys", std::move(keys)},
+        });
+    }
+    try {
+        return list.dump();
+    } catch (const json::exception&) {
+        return "[]";
+    }
+}
+
+std::vector<ClipPreset> presetsFromJson(std::string_view text) {
+    std::vector<ClipPreset> presets;
+    json list;
+    try {
+        list = json::parse(text.begin(), text.end());
+    } catch (const json::exception&) {
+        return presets;
+    }
+    if (!list.is_array()) {
+        return presets;
+    }
+    for (const json& entry : list) {
+        try {
+            ClipPreset p;
+            p.name = entry.at("name").get<std::string>();
+            const json parts = entry.value("parts", json::object());
+            p.parts.placement = parts.value("placement", true);
+            p.parts.opacity = parts.value("opacity", true);
+            p.parts.crop = parts.value("crop", true);
+            p.parts.effects = parts.value("effects", true);
+            p.parts.chroma = parts.value("chroma", true);
+            p.parts.animation = parts.value("animation", true);
+            p.anchor = entry.value("anchor", std::string()) == "end" ? PresetAnchor::End
+                                                                     : PresetAnchor::Start;
+            p.transform =
+                clampTransform(transformFromJson(entry.value("transform", json::object())));
+            const json keys = entry.value("keys", json::object());
+            for (auto it = keys.begin(); it != keys.end(); ++it) {
+                const auto property = animPropertyFromId(it.key());
+                if (!property) {
+                    continue;
+                }
+                for (const json& k : it.value()) {
+                    PresetKeyframe key;
+                    key.offsetUs = k.at(0).get<std::int64_t>();
+                    key.value = k.at(1).get<double>();
+                    if (k.size() > 2) {
+                        key.easing =
+                            easingFromId(k.at(2).get<std::string>()).value_or(Easing::Linear);
+                    }
+                    if (std::isfinite(key.value)) {
+                        p.keys[static_cast<std::size_t>(*property)].push_back(key);
+                    }
+                }
+            }
+            if (!p.name.empty()) {
+                presets.push_back(std::move(p));
+            }
+        } catch (const json::exception&) {
+            // ajuste dañado: se ignora
+        }
+    }
+    return presets;
 }
 
 } // namespace sharkcut

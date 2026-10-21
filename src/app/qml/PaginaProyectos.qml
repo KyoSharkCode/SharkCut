@@ -163,6 +163,13 @@ Item {
                     Dato { texto: "Compilación" }
                     Dato { texto: AppInfo.buildType; valor: true }
                 }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "carpeta"
+                    texto: "Abrir la carpeta de registros"
+                    ayuda: "Lo que pasó en cada sesión (y si se cerró por un fallo), para enviarlo"
+                    onPulsado: pagina.editor.openLogFolder()
+                }
             }
         }
 

@@ -134,7 +134,9 @@ struct VideoDecoder::Impl {
         }
     }
 
-    void open(const std::string& path, HwAccel hwAccel) {
+    // Abre el archivo y elige su flujo de video. Devuelve el decodificador que propone
+    // FFmpeg para él.
+    const AVCodec* openStream(const std::string& path) {
         format = ff::openInput(path);
 
         const AVCodec* decoder = nullptr;
@@ -153,7 +155,10 @@ struct VideoDecoder::Impl {
                 format->streams[i]->discard = AVDISCARD_ALL;
             }
         }
+        return decoder;
+    }
 
+    void openCodec(const AVCodec* decoder, bool hardware) {
         codec.reset(avcodec_alloc_context3(decoder));
         if (!codec) {
             throw MediaError("No se pudo crear el decodificador");
@@ -165,11 +170,93 @@ struct VideoDecoder::Impl {
         codec->get_format = &Impl::chooseFormat;
         codec->thread_count = 0; // automático
 
-        if (hwAccel == HwAccel::Auto) {
+        if (hardware) {
             setupHardware(decoder);
         }
         ff::check(avcodec_open2(codec.get(), decoder, nullptr),
                   "No se pudo abrir el decodificador");
+    }
+
+    // Vuelve al estado de recién creado (tras un intento fallido de abrir).
+    void resetDecoder() {
+        codec.reset();
+        hwDevice.reset();
+        hwPixelFormat = AV_PIX_FMT_NONE;
+        hwName.clear();
+        format.reset();
+        stream = nullptr;
+        av_packet_unref(packet.get());
+        av_frame_unref(frame.get());
+        demuxFinished = false;
+        havePending = false;
+    }
+
+    // AV1 por la GPU: el decodificador propio de FFmpeg solo funciona con aceleración
+    // por hardware (NVDEC en las NVIDIA RTX 30 y posteriores). Que la tarjeta lo admita
+    // solo se sabe al decodificar, así que se prueba con el primer fotograma (que queda
+    // pendiente para nextFrame()). Devuelve false si no se puede.
+    bool openAv1Hardware() {
+        const AVCodec* native = avcodec_find_decoder_by_name("av1");
+        if (!native) {
+            return false;
+        }
+        try {
+            openCodec(native, true);
+        } catch (const MediaError&) {
+            return false;
+        }
+        if (!hwDevice) {
+            return false;
+        }
+        // Como en receiveRaw(), pero un error corta la prueba (sin seguir leyendo) y
+        // con un límite de paquetes.
+        for (int packets = 0; packets < 120;) {
+            const int received = avcodec_receive_frame(codec.get(), frame.get());
+            if (received == 0) {
+                havePending = true;
+                return true;
+            }
+            if (received != AVERROR(EAGAIN) || av_read_frame(format.get(), packet.get()) < 0) {
+                return false;
+            }
+            if (packet->stream_index == stream->index) {
+                ++packets;
+                const int sent = avcodec_send_packet(codec.get(), packet.get());
+                if (sent < 0) {
+                    av_packet_unref(packet.get());
+                    return false;
+                }
+            }
+            av_packet_unref(packet.get());
+        }
+        return false;
+    }
+
+    // AV1 por software: dav1d (rápido) o, si no está, libaom.
+    static const AVCodec* av1SoftwareDecoder() {
+        for (const char* name : {"libdav1d", "libaom-av1"}) {
+            if (const AVCodec* decoder = avcodec_find_decoder_by_name(name)) {
+                return decoder;
+            }
+        }
+        throw MediaError("Esta compilación de FFmpeg no puede decodificar AV1 por software "
+                         "(falta dav1d)");
+    }
+
+    void open(const std::string& path, HwAccel hwAccel) {
+        const AVCodec* decoder = openStream(path);
+        if (stream->codecpar->codec_id == AV_CODEC_ID_AV1) {
+            if (hwAccel == HwAccel::Auto) {
+                if (openAv1Hardware()) {
+                    return;
+                }
+                resetDecoder();
+                openStream(path); // de vuelta al principio del archivo
+            }
+            openCodec(av1SoftwareDecoder(), false);
+            return;
+        }
+        openCodec(decoder, hwAccel == HwAccel::Auto);
     }
 
     // Deja en `frame` el siguiente fotograma decodificado (en orden de presentación).
@@ -241,6 +328,18 @@ struct VideoDecoder::Impl {
         out.matrix = colorMatrixOf(src);
         out.fullRange = isFullRange(src);
         const int uvRowBytes = out.uvWidth() * 2;
+        const auto format = static_cast<AVPixelFormat>(src->format);
+        const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+        const bool rgb = desc && (desc->flags & AV_PIX_FMT_FLAG_RGB);
+        if (rgb) {
+            // RGB (Animación, PNG…): se pasa a YUV BT.709 de rango limitado.
+            out.matrix = ColorMatrix::Bt709;
+            out.fullRange = false;
+        }
+
+        if (desc && (desc->flags & AV_PIX_FMT_FLAG_ALPHA)) {
+            return convertWithAlpha(src, std::move(out), rgb);
+        }
 
         if (src->format == AV_PIX_FMT_NV12) {
             copyPlane(out.y, src->data[0], src->linesize[0], out.width, out.height);
@@ -249,19 +348,49 @@ struct VideoDecoder::Impl {
         }
 
         // Cualquier otro formato (yuv420p, 10 bits…) se convierte a NV12.
-        sws.reset(sws_getCachedContext(
-            sws.release(), src->width, src->height, static_cast<AVPixelFormat>(src->format),
-            out.width, out.height, AV_PIX_FMT_NV12, SWS_BILINEAR, nullptr, nullptr, nullptr));
-        if (!sws) {
-            throw MediaError(
-                "Formato de píxel no compatible: " +
-                std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(src->format))));
-        }
+        prepareSws(src, AV_PIX_FMT_NV12, rgb);
         out.y.resize(static_cast<std::size_t>(out.width) * out.height);
         out.uv.resize(static_cast<std::size_t>(uvRowBytes) * out.uvHeight());
         std::uint8_t* dst[4] = {out.y.data(), out.uv.data(), nullptr, nullptr};
         const int dstStride[4] = {out.width, uvRowBytes, 0, 0};
         sws_scale(sws.get(), src->data, src->linesize, 0, src->height, dst, dstStride);
+        return out;
+    }
+
+    // Conversión de `src` a `target` (8 bits). De RGB a YUV, con BT.709 de rango limitado.
+    void prepareSws(const AVFrame* src, AVPixelFormat target, bool rgb) {
+        sws.reset(sws_getCachedContext(
+            sws.release(), src->width, src->height, static_cast<AVPixelFormat>(src->format),
+            src->width, src->height, target, SWS_BILINEAR, nullptr, nullptr, nullptr));
+        if (!sws) {
+            throw MediaError(
+                "Formato de píxel no compatible: " +
+                std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(src->format))));
+        }
+        if (rgb) {
+            const int* bt709 = sws_getCoefficients(SWS_CS_ITU709);
+            sws_setColorspaceDetails(sws.get(), bt709, 1, bt709, 0, 0, 1 << 16, 1 << 16);
+        }
+    }
+
+    // Video con transparencia: YUVA 4:2:0 de 8 bits; el UV se entrelaza (NV12) y el
+    // alfa se guarda aparte.
+    VideoFrame convertWithAlpha(const AVFrame* src, VideoFrame out, bool rgb) {
+        prepareSws(src, AV_PIX_FMT_YUVA420P, rgb);
+        const int uvw = out.uvWidth();
+        const int uvh = out.uvHeight();
+        out.y.resize(static_cast<std::size_t>(out.width) * out.height);
+        out.a.resize(out.y.size());
+        std::vector<std::uint8_t> u(static_cast<std::size_t>(uvw) * uvh);
+        std::vector<std::uint8_t> v(u.size());
+        std::uint8_t* dst[4] = {out.y.data(), u.data(), v.data(), out.a.data()};
+        const int dstStride[4] = {out.width, uvw, uvw, out.width};
+        sws_scale(sws.get(), src->data, src->linesize, 0, src->height, dst, dstStride);
+        out.uv.resize(static_cast<std::size_t>(uvw) * 2 * uvh);
+        for (std::size_t i = 0; i < u.size(); ++i) {
+            out.uv[i * 2] = u[i];
+            out.uv[i * 2 + 1] = v[i];
+        }
         return out;
     }
 
@@ -378,6 +507,12 @@ std::optional<VideoFrame> VideoDecoder::nextFrame() {
 
 void VideoDecoder::seekToFrame(std::int64_t index, std::int64_t keepBefore) {
     d->seek(index, std::max<std::int64_t>(0, keepBefore));
+}
+
+void VideoDecoder::seekNear(std::int64_t index) {
+    d->lastIndex = -1; // siempre al fotograma clave (nada de seguir decodificando)
+    d->seek(index, 0);
+    d->skipUntil = 0; // el primero que salga, sin descartar hasta el destino
 }
 
 std::vector<VideoFrame> VideoDecoder::takeKeptFrames() {

@@ -311,4 +311,11 @@ Formato y estados: ver [README.md](README.md).
   recomienda ~12) y «Máxima» a 40 Mbps. Idea para el futuro: un preset «YouTube» en
   Exportar con una explicación corta, y quizá la opción de exportar a 1440p (YouTube
   usa entonces un códec mejor, VP9/AV1, y se ve mejor incluso a 1080p).
+- **Seguimiento (Kyo):** ¿1080p a 40 Mbps se ve mejor en YouTube? Solo un poco: YouTube
+  recomprime a su propia tasa, y por encima de lo recomendado apenas se nota (el archivo
+  pesa más y tarda más en subir). Lo que más cambia el resultado es la resolución subida:
+  en 1080p se suele quedar en H.264 (VP9/AV1 suele llegar solo si el video tiene muchas
+  visitas); desde 1440p suele usar VP9/AV1 con más tasa. YouTube no lo documenta, es lo
+  que se observa. En SharkCut ya se puede: Exportar → resolución 133 % (2560×1440 desde un
+  lienzo 1080p), calidad «Alta» (~28 Mbps).
 - **Estado:** Registrado

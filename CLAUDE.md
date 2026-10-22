@@ -16,12 +16,13 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 6, que abre la 1, la 2
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 10, que abre la 1, la 2
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
   subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
   `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
-  transiciones como clips, `effect` del clip, con la 9).
+  transiciones como clips, `effect` del clip, con la 9 y las imágenes fijas, `still` del
+  medio, con la 10).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -85,6 +86,14 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   lleva su sonido con placeSoundHit) y setEffectClip. Archivo .sharkp versión 9
   (clip.effect). Las transiciones antiguas en los cortes (Track::transitions) se siguen
   abriendo y dibujando.
+  Su sonido va enlazado con ella (Clip::link, linkEffectSound): los enlaces unen el video
+  y el audio de un medio (mismo tramo) o una transición-clip y un clip de audio (cada uno
+  con su tramo: se mueven, copian y quitan juntos, pero se recortan por separado).
+  Imágenes fijas (PNG, JPG…): MediaItem::still (VideoStreamInfo::still al analizarlas:
+  demuxers image2/*_pipe). VideoDecoder las lee al abrirlas y las da como fotograma 0;
+  mediaFrameIndex es siempre 0 y sus clips se alargan sin límite (`in` puede ser < 0).
+  Duración al importarlas: Editor::stillSeconds (QSettings "medios/duracionImagen").
+  No adoptan lienzo ni fps y no tienen proxy.
   Copiar y pegar clips: copyClips/pasteClips (edit.h, Clipboard con sus medios) y
   Editor::copySelection/cutSelection/pasteAtPlayhead (Ctrl+C/X/V).
   Un clic fuera de un campo de texto le quita el teclado (FocusRelease en main.cpp): si
@@ -118,7 +127,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   qml/DialogoSubtitulos.qml. Test [speech]: necesita SHARKCUT_WHISPER_MODEL y
   SHARKCUT_WHISPER_SAMPLE (si no, se salta).
   src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
-  proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás).
+  proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás). Con
+  «Proxies» activado, ProxyManager::setAutoCreate crea solos los que falten.
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
   TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
   caché en disco).

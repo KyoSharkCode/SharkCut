@@ -89,6 +89,10 @@ struct VideoDecoder::Impl {
     std::vector<VideoFrame> kept;
     std::int64_t lastIndex = -1;
 
+    // Imagen fija: se decodifica al abrirla y se entrega como fotograma 0 tras cada salto.
+    std::optional<VideoFrame> stillFrame;
+    bool stillPending = false;
+
     // Hasta cuántos fotogramas por delante se sigue decodificando en vez de volver al
     // fotograma clave (en un VOD de OBS hay uno cada 2 s, 120 fotogramas a 60 fps).
     static constexpr std::int64_t kForwardSkip = 90;
@@ -256,7 +260,28 @@ struct VideoDecoder::Impl {
             openCodec(av1SoftwareDecoder(), false);
             return;
         }
+        if (info.still) {
+            openStill(decoder);
+            return;
+        }
         openCodec(decoder, hwAccel == HwAccel::Auto);
+    }
+
+    // Una imagen se lee entera al abrirla: sus demuxers no permiten saltar (ni volver al
+    // principio), así que después no se toca el archivo.
+    void openStill(const AVCodec* decoder) {
+        openCodec(decoder, false);
+        if (!receiveRaw()) {
+            throw MediaError("No se pudo leer la imagen");
+        }
+        stillFrame = convert(frame.get());
+        stillFrame->index = 0;
+        av_frame_unref(frame.get());
+        stillPending = true;
+        // Ya no hace falta nada más del archivo.
+        codec.reset();
+        format.reset();
+        stream = nullptr;
     }
 
     // Deja en `frame` el siguiente fotograma decodificado (en orden de presentación).
@@ -330,9 +355,11 @@ struct VideoDecoder::Impl {
         const int uvRowBytes = out.uvWidth() * 2;
         const auto format = static_cast<AVPixelFormat>(src->format);
         const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
-        const bool rgb = desc && (desc->flags & AV_PIX_FMT_FLAG_RGB);
+        // RGB, con paleta o en escala de grises (sin crominancia): Animación, PNG…
+        const bool rgb = desc && ((desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL)) ||
+                                  desc->nb_components <= 2);
         if (rgb) {
-            // RGB (Animación, PNG…): se pasa a YUV BT.709 de rango limitado.
+            // Se pasa a YUV BT.709 de rango limitado.
             out.matrix = ColorMatrix::Bt709;
             out.fullRange = false;
         }
@@ -395,6 +422,14 @@ struct VideoDecoder::Impl {
     }
 
     std::optional<VideoFrame> next() {
+        if (info.still) {
+            if (!stillPending) {
+                return std::nullopt; // como un video de un fotograma: ya se entregó
+            }
+            stillPending = false;
+            lastIndex = 0;
+            return *stillFrame;
+        }
         while (receiveRaw()) {
             const std::int64_t index = indexOf(frame.get());
             lastIndex = index;
@@ -434,6 +469,11 @@ struct VideoDecoder::Impl {
     }
 
     void seek(std::int64_t index, std::int64_t keepBefore) {
+        if (info.still) {
+            kept.clear();
+            stillPending = true; // cualquier destino es el único fotograma
+            return;
+        }
         const std::int64_t last = std::max<std::int64_t>(info.frameCount - 1, 0);
         index = std::clamp<std::int64_t>(index, 0, last);
         const Rational frameDuration = info.frameRate.frameDuration();

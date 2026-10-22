@@ -85,6 +85,18 @@ bool sameRange(const Clip& a, const Clip& b) {
     return a.media == b.media && a.start == b.start && a.in == b.in && a.length == b.length;
 }
 
+// Transición-clip (en una pista de video) y su sonido: enlazados sin compartir tramo.
+bool effectSoundPair(const Clip& a, TrackKind kindA, const Clip& b, TrackKind kindB) {
+    return (a.isEffect() && kindB == TrackKind::Audio && !b.isEffect()) ||
+           (b.isEffect() && kindA == TrackKind::Audio && !a.isEffect());
+}
+
+// ¿Pueden estar enlazados? Video y audio de un medio con el mismo tramo, o una
+// transición-clip y un clip de audio.
+bool linkable(const Clip& a, TrackKind kindA, const Clip& b, TrackKind kindB) {
+    return kindA != kindB && (sameRange(a, b) || effectSoundPair(a, kindA, b, kindB));
+}
+
 const Clip* clipInTrack(const Track& track, ObjectId id) {
     for (const Clip& clip : track.clips) {
         if (clip.id == id) {
@@ -203,9 +215,9 @@ void fixLinks(Project& project, const Splits& splits) {
             continue;
         }
         const auto partner = all.find(link);
-        const bool valid = partner != all.end() && partner->second.kind != entry.kind &&
-                           partner->second.clip->link == id &&
-                           sameRange(*partner->second.clip, *entry.clip);
+        const bool valid =
+            partner != all.end() && partner->second.clip->link == id &&
+            linkable(*entry.clip, entry.kind, *partner->second.clip, partner->second.kind);
         if (!valid) {
             broken.push_back(id);
         }
@@ -224,6 +236,27 @@ Transition* findTransitionMutable(Project& project, ObjectId id) {
 bool transitionLocked(const Project& project, ObjectId id) {
     const auto ref = project.findTransition(id);
     return !ref || project.tracks[ref->track].locked;
+}
+
+// Clip de una imagen fija: se alarga sin límite, también hacia la izquierda (`in` < 0).
+bool isStill(const Project& project, const Clip& clip) {
+    const MediaItem* item = clip.isEffect() ? nullptr : project.findMedia(clip.media);
+    return item && item->still;
+}
+
+// Los clips que se recortan con `clip`: él y su enlazado si comparten tramo (una
+// transición-clip y su sonido conservan cada uno el suyo).
+std::vector<ObjectId> trimGroup(const Project& project, ObjectId clip) {
+    const Clip* c = project.clip(clip);
+    if (!c) {
+        return {};
+    }
+    std::vector<ObjectId> group{clip};
+    const Clip* partner = c->link != 0 ? project.clip(c->link) : nullptr;
+    if (partner && sameRange(*c, *partner)) {
+        group.push_back(partner->id);
+    }
+    return group;
 }
 
 } // namespace
@@ -303,7 +336,9 @@ ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::in
     if (!item || start < 0 || in < 0) {
         return 0;
     }
-    length = std::min(length, project.mediaFrames(*item) - in);
+    if (!item->still) { // una imagen fija no tiene final
+        length = std::min(length, project.mediaFrames(*item) - in);
+    }
     if (length <= 0) {
         return 0;
     }
@@ -558,13 +593,15 @@ std::int64_t limitTrimStart(const Project& project, ObjectId clip, std::int64_t 
     std::int64_t lo = 0;
     std::int64_t hi = std::numeric_limits<std::int64_t>::max();
     std::int64_t current = start;
-    const std::vector<ObjectId> group = withLinked(project, {clip});
+    const std::vector<ObjectId> group = trimGroup(project, clip);
     for (ObjectId id : group) {
         const auto ref = project.findClip(id);
         const Track& track = project.tracks[ref->track];
         const Clip& c = track.clips[ref->index];
         current = c.start;
-        lo = std::max(lo, c.start - c.in); // no antes del inicio del medio
+        if (!isStill(project, c)) {
+            lo = std::max(lo, c.start - c.in); // no antes del inicio del medio
+        }
         if (ref->index > 0) {
             lo = std::max(lo, track.clips[ref->index - 1].end()); // ni sobre el anterior
         }
@@ -585,7 +622,7 @@ bool trimStart(Project& project, ObjectId clip, std::int64_t start) {
     if (delta == 0) {
         return false;
     }
-    for (ObjectId id : withLinked(project, {clip})) {
+    for (ObjectId id : trimGroup(project, clip)) {
         Clip& c = *findMutable(project, id);
         c.start += delta;
         c.in += delta;
@@ -599,7 +636,7 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
     std::int64_t lo = 0;
     std::int64_t hi = std::numeric_limits<std::int64_t>::max();
     std::int64_t current = end;
-    const std::vector<ObjectId> group = withLinked(project, {clip});
+    const std::vector<ObjectId> group = trimGroup(project, clip);
     for (ObjectId id : group) {
         const auto ref = project.findClip(id);
         const Track& track = project.tracks[ref->track];
@@ -608,7 +645,7 @@ std::int64_t limitTrimEnd(const Project& project, ObjectId clip, std::int64_t en
         lo = std::max(lo, c.start + 1); // al menos un fotograma
         if (c.isEffect()) {
             hi = std::min(hi, c.start + c.effect->durationFrames - c.in); // fin del efecto
-        } else if (const MediaItem* item = project.findMedia(c.media)) {
+        } else if (const MediaItem* item = project.findMedia(c.media); item && !item->still) {
             hi = std::min(hi, c.start + project.mediaFrames(*item) - c.in); // fin del medio
         }
         if (ref->index + 1 < track.clips.size()) {
@@ -630,7 +667,7 @@ bool trimEnd(Project& project, ObjectId clip, std::int64_t end) {
     if (delta == 0) {
         return false;
     }
-    for (ObjectId id : withLinked(project, {clip})) {
+    for (ObjectId id : trimGroup(project, clip)) {
         findMutable(project, id)->length += delta;
     }
     fixLinks(project, {});
@@ -978,6 +1015,24 @@ bool unlinkClips(Project& project, const std::vector<ObjectId>& clips) {
         changed = true;
     }
     return changed;
+}
+
+bool linkEffectSound(Project& project, ObjectId effect, ObjectId sound) {
+    const auto e = project.findClip(effect);
+    const auto a = project.findClip(sound);
+    if (!e || !a || inLockedTrack(project, effect) || inLockedTrack(project, sound)) {
+        return false;
+    }
+    const Track& effectTrack = project.tracks[e->track];
+    const Track& soundTrack = project.tracks[a->track];
+    if (!effectSoundPair(effectTrack.clips[e->index], effectTrack.kind, soundTrack.clips[a->index],
+                         soundTrack.kind)) {
+        return false;
+    }
+    unlinkClips(project, {effect, sound});
+    findMutable(project, effect)->link = sound;
+    findMutable(project, sound)->link = effect;
+    return true;
 }
 
 // --- Transiciones -------------------------------------------------------------------

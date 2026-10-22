@@ -4,6 +4,8 @@
 #include "media/media_info_internal.h"
 
 #include <cmath>
+#include <string>
+#include <string_view>
 
 namespace sharkcut {
 
@@ -43,6 +45,15 @@ FrameRate chooseFrameRate(const AVStream* stream) {
     return {num, den};
 }
 
+bool isStillImage(const AVFormatContext* format) {
+    // Las imágenes sueltas las abren los demuxers de imágenes: "image2" o uno por formato
+    // ("png_pipe", "jpeg_pipe", "webp_pipe"…).
+    const std::string name = format->iformat && format->iformat->name ? format->iformat->name : "";
+    constexpr std::string_view kPipe = "_pipe";
+    return name == "image2" || (name.size() > kPipe.size() &&
+                                name.compare(name.size() - kPipe.size(), kPipe.size(), kPipe) == 0);
+}
+
 } // namespace
 
 VideoStreamInfo describeVideoStream(const AVFormatContext* format, const AVStream* stream) {
@@ -65,7 +76,11 @@ VideoStreamInfo describeVideoStream(const AVFormatContext* format, const AVStrea
 
     // Número de fotogramas: el que declara el contenedor o, si no lo hay (MP4
     // fragmentado de OBS), el que resulta de la duración y los fps.
-    if (stream->nb_frames > 0) {
+    if (isStillImage(format)) {
+        info.still = true;
+        info.frameCount = 1;
+        info.variableFrameRate = false;
+    } else if (stream->nb_frames > 0) {
         info.frameCount = stream->nb_frames;
     } else {
         std::int64_t durationUs = 0;

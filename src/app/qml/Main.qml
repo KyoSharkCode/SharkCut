@@ -61,7 +61,8 @@ Window {
         id: dialogoImportar
         title: "Importar medios"
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["Videos y audio (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts *.mp3 *.wav *.m4a *.aac *.flac *.ogg)",
+        nameFilters: ["Videos, audio e imágenes (*.mp4 *.mkv *.mov *.m4v *.webm *.avi *.flv *.ts *.mp3 *.wav *.m4a *.aac *.flac *.ogg *.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)",
+                      "Imágenes (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)",
                       "Todos los archivos (*)"]
         onAccepted: editor.importFiles(selectedFiles, -1, -1, panelMedios.carpeta)
     }
@@ -525,7 +526,9 @@ Window {
                                 Item { Layout.fillWidth: true }
                                 Chip {
                                     visible: editor.useProxies && editor.proxiesAvailable
-                                    texto: "PROXIES"
+                                    texto: editor.proxiesTotal > 0
+                                           ? "PROXIES " + editor.proxiesReady + "/" + editor.proxiesTotal
+                                           : "PROXIES"
                                     colorTexto: Theme.acento
                                 }
                                 Chip {
@@ -606,17 +609,38 @@ Window {
                                     ayuda: editor.muted ? "Activar el sonido" : "Silenciar"
                                     onPulsado: editor.muted = !editor.muted
                                 }
+                                // Sin proyecto guardado no hay dónde crear los proxies: no se
+                                // desactiva (así su ayuda explica por qué) y un clic lo guarda.
                                 BotonIcono {
                                     icono: "proxy"
-                                    texto: "Proxies"
-                                    activo: editor.useProxies
-                                    enabled: editor.proxiesAvailable
-                                    ayuda: !editor.proxiesAvailable
-                                           ? "Guarda el proyecto para poder crear proxies"
-                                           : editor.useProxies
-                                             ? "Usando proxies en la vista previa (la exportación usa siempre los originales)"
-                                             : "Usar proxies: vista previa más fluida con VODs largos (créalos desde Medios)"
-                                    onPulsado: editor.useProxies = !editor.useProxies
+                                    texto: editor.useProxies && editor.proxiesAvailable && editor.proxiesTotal > 0
+                                           ? "Proxies " + editor.proxiesReady + "/" + editor.proxiesTotal
+                                           : "Proxies"
+                                    activo: editor.useProxies && editor.proxiesAvailable
+                                    opacity: editor.proxiesAvailable ? 1 : 0.5
+                                    ayuda: {
+                                        if (!editor.proxiesAvailable)
+                                            return "Los proxies se guardan junto al archivo del proyecto: "
+                                                   + "guárdalo para poder usarlos (clic para guardar)"
+                                        if (editor.proxiesTotal === 0)
+                                            return "Proxies: copias ligeras de los videos para que la vista "
+                                                   + "previa vaya fluida. Aún no hay videos en el proyecto"
+                                        const cuenta = editor.proxiesReady + " de " + editor.proxiesTotal
+                                                       + (editor.proxiesTotal === 1 ? " video tiene" : " videos tienen")
+                                                       + " proxy"
+                                        if (editor.useProxies)
+                                            return "Usando proxies en la vista previa (" + cuenta + "; "
+                                                   + "los que faltan se están creando o usan el original). "
+                                                   + "La exportación usa siempre los originales"
+                                        return "Usar proxies: vista previa más fluida con VODs largos. "
+                                               + cuenta + "; al activarlos se crean los que falten"
+                                    }
+                                    onPulsado: {
+                                        if (!editor.proxiesAvailable)
+                                            ventana.guardar()
+                                        else
+                                            editor.useProxies = !editor.useProxies
+                                    }
                                 }
                                 Item { Layout.fillWidth: true }
                                 // Velocidad con J/L (a 1× no se muestra)

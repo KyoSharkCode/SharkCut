@@ -82,7 +82,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 9") != std::string::npos);
+    CHECK(json.find("\"version\": 10") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 9"), 12, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 10"), 13, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -395,4 +395,30 @@ TEST_CASE("Clip effects survive a round trip and are clamped", "[project][efecto
     CHECK(fixed.effects.blur == kMaxBlur);
     CHECK(fixed.effects.shadowOpacity == 0.0);
     CHECK(fixed.effects.grayscale == 1.0);
+}
+
+TEST_CASE("Still images keep their flag and stretched clips", "[project][imagen]") {
+    Project p;
+    MediaItem image;
+    image.path = "/medios/logo.png";
+    image.durationUs = 5'000'000;
+    image.width = 512;
+    image.height = 512;
+    image.hasVideo = true;
+    image.still = true;
+    const ObjectId still = addMedia(p, image);
+    const ObjectId clip = placeClip(p, still, 600);
+    REQUIRE(trimStart(p, clip, 300)); // in = -300
+    REQUIRE(p.clip(clip)->in < 0);
+    const std::string json = projectToJson(p, {});
+    const Project back = projectFromJson(json, {});
+    CHECK(sameContent(back, p));
+    CHECK(back.media.front().still);
+
+    // Solo las imágenes pueden empezar antes del inicio de su medio.
+    std::string notStill = json;
+    const auto pos = notStill.find("\"still\": true");
+    REQUIRE(pos != std::string::npos);
+    notStill.replace(pos, 14, "\"still\": false");
+    CHECK_THROWS_AS(projectFromJson(notStill, {}), ProjectError);
 }

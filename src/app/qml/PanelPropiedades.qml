@@ -180,9 +180,21 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: "Se aplica a todo lo que hay debajo en su tramo. Muévela, córtala (C) o "
                           + "recorta sus bordes en la línea de tiempo como un clip; al cambiar la "
-                          + "duración vuelve a verse entera. Su sonido es un clip de audio aparte."
+                          + "duración vuelve a verse entera. "
+                          + (propiedades.sel.linked
+                             ? "Su sonido va enlazado: se mueve y se quita con ella, y al "
+                               + "recortarla cada uno conserva su duración."
+                             : "No tiene un sonido enlazado.")
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
+                }
+                BotonIcono {
+                    visible: propiedades.sel.linked === true
+                    Layout.fillWidth: true
+                    icono: "desvincular"
+                    texto: "Desvincular la transición y su sonido"
+                    ayuda: "Para mover o quitar la transición y su sonido por separado"
+                    onPulsado: panel.editor.unlinkSelection()
                 }
             }
 
@@ -666,6 +678,36 @@ Rectangle {
                     visible: propiedades.hayVideo && propiedades.sel.videoLocked
                     texto: "BLOQUEADA"
                     colorTexto: Theme.aviso
+                }
+            }
+            // Imagen fija: dura lo que se quiera (también se alarga desde sus bordes).
+            ColumnLayout {
+                id: duracionImagen
+                readonly property real fps: Math.max(1, panel.editor.fps)
+                readonly property real segundos: ((propiedades.sel.end || 0) - (propiedades.sel.start || 0)) / fps
+                visible: propiedades.hayVideo && propiedades.sel.still === true
+                enabled: propiedades.videoEditable
+                Layout.fillWidth: true
+                spacing: 6
+                CampoNumero {
+                    etiqueta: "Duración"
+                    unidad: "s"
+                    decimales: 2
+                    paso: 0.05
+                    desde: 1 / duracionImagen.fps
+                    hasta: 36000
+                    valor: duracionImagen.segundos
+                    onCambiado: (v) => panel.editor.trimEnd(propiedades.sel.video,
+                        propiedades.sel.start + Math.max(1, Math.round(v * duracionImagen.fps)))
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "reloj"
+                    texto: "Usar para las imágenes nuevas"
+                    ayuda: "Las imágenes que importes durarán " + duracionImagen.segundos.toFixed(2)
+                           + " s (ahora: " + panel.editor.stillSeconds.toFixed(2) + " s)"
+                    enabled: Math.abs(duracionImagen.segundos - panel.editor.stillSeconds) > 0.005
+                    onPulsado: panel.editor.stillSeconds = duracionImagen.segundos
                 }
             }
             ColumnLayout {

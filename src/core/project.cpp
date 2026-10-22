@@ -124,7 +124,7 @@ std::int64_t Project::mediaTimeUs(const Clip& clip, std::int64_t frame) const {
 
 std::int64_t Project::mediaFrameIndex(const Clip& clip, std::int64_t frame) const {
     const MediaItem* item = findMedia(clip.media);
-    if (!item) {
+    if (!item || item->still) {
         return 0;
     }
     const std::int64_t index = microsecondsToFrame(mediaTimeUs(clip, frame), item->frameRate);

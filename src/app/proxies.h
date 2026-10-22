@@ -32,10 +32,16 @@ public:
 
     // Pone en cola los que no tengan proxy (ni estén ya en cola).
     void create(const QStringList& mediaPaths);
+    // Crear solos los proxies que falten (al activarlos, al abrir un proyecto o al importar
+    // videos), tras mirar cuáles existen. Los que fallaron no se reintentan solos, y
+    // cancelAll() lo desactiva hasta la próxima vez.
+    void setAutoCreate(bool on);
     void cancelAll();
 
     // Trabajos pendientes (en cola o en marcha) y su progreso conjunto (0–1).
     int pending() const;
+    // Cuántos de esos medios tienen su proxy listo.
+    int readyCount(const QStringList& mediaPaths) const;
     double totalProgress() const;
 
 signals:
@@ -52,7 +58,12 @@ private:
     };
     void startNext();
 
+    void createMissing();
+
     QString m_directory;
+    QStringList m_mediaPaths; // los del último setDirectory()
+    bool m_autoCreate = false;
+    bool m_scanned = false; // ya se miró qué proxies existen en la carpeta
     std::map<QString, Entry> m_entries;
     QThreadPool m_pool; // un hilo: crear proxies ya usa toda la máquina
     std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);

@@ -31,6 +31,8 @@ void ProxyManager::setDirectory(const QString& directory, const QStringList& med
         ++m_generation;
         m_directory = directory;
     }
+    m_mediaPaths = mediaPaths;
+    m_scanned = false;
     if (m_directory.isEmpty()) {
         emit changed();
         return;
@@ -64,7 +66,9 @@ void ProxyManager::setDirectory(const QString& directory, const QStringList& med
                         entry.proxyPath = file;
                     }
                 }
+                self->m_scanned = true;
                 emit self->changed();
+                self->createMissing();
             },
             Qt::QueuedConnection);
     });
@@ -90,6 +94,14 @@ int ProxyManager::pending() const {
     int count = 0;
     for (const auto& [path, entry] : m_entries) {
         count += entry.state == State::Queued || entry.state == State::Working;
+    }
+    return count;
+}
+
+int ProxyManager::readyCount(const QStringList& mediaPaths) const {
+    int count = 0;
+    for (const QString& media : mediaPaths) {
+        count += state(media) == State::Ready;
     }
     return count;
 }
@@ -121,7 +133,28 @@ void ProxyManager::create(const QStringList& mediaPaths) {
     startNext();
 }
 
+void ProxyManager::setAutoCreate(bool on) {
+    m_autoCreate = on;
+    createMissing();
+}
+
+void ProxyManager::createMissing() {
+    if (!m_autoCreate || !m_scanned || m_directory.isEmpty()) {
+        return;
+    }
+    QStringList missing;
+    for (const QString& media : m_mediaPaths) {
+        if (state(media) == State::None) {
+            missing << media;
+        }
+    }
+    if (!missing.isEmpty()) {
+        create(missing);
+    }
+}
+
 void ProxyManager::cancelAll() {
+    m_autoCreate = false; // cancelados a mano: no vuelven a empezar solos
     m_cancel->store(true);
     m_cancel = std::make_shared<std::atomic<bool>>(false);
     ++m_generation;
@@ -178,18 +211,25 @@ void ProxyManager::startNext() {
     m_pool.start([media, target, cancel, post] {
         bool ok = false;
         try {
-            sharkcut::writeProxy(
-                media.toStdString(), target.toStdString(),
-                [&post, media](std::int64_t done, std::int64_t total) {
-                    const double fraction =
-                        total > 0 ? static_cast<double>(done) / static_cast<double>(total) : 0.0;
-                    post([media, fraction](ProxyManager& m) {
-                        m.m_entries[media].progress = fraction;
-                        emit m.changed();
-                    });
-                },
-                cancel.get());
-            ok = true;
+            // Ya creado (se pidió antes de terminar de mirar la carpeta): está completo,
+            // porque writeProxy solo deja el archivo al acabar.
+            if (QFileInfo::exists(target)) {
+                ok = true;
+            } else {
+                sharkcut::writeProxy(
+                    media.toStdString(), target.toStdString(),
+                    [&post, media](std::int64_t done, std::int64_t total) {
+                        const double fraction =
+                            total > 0 ? static_cast<double>(done) / static_cast<double>(total)
+                                      : 0.0;
+                        post([media, fraction](ProxyManager& m) {
+                            m.m_entries[media].progress = fraction;
+                            emit m.changed();
+                        });
+                    },
+                    cancel.get());
+                ok = true;
+            }
         } catch (const std::exception&) {
             ok = false; // archivo sin video, cancelado o sin codificador
         }

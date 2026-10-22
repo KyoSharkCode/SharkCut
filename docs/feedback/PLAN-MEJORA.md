@@ -32,12 +32,24 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   de PLAN.md: «Overlays e imágenes»). Añadir imágenes al filtro del diálogo de importar.
 - **Hecho cuando:** un PNG con alfa y un JPG se importan, se ven en el visor y en la
   exportación, y se pueden alargar o acortar.
+- **Hecho:** medio «imagen fija» (`MediaItem::still`, archivo .sharkp versión 10). FFmpeg
+  las abre como `*_pipe`/`image2`, sin duración y sin poder saltar dentro: por eso el PNG
+  salía con 0:00 y el JPG no se veía. VideoDecoder las lee una vez y las entrega como
+  fotograma 0; sus clips se alargan sin límite hacia los dos lados (`in` puede ser
+  negativo). Duración al importarlas: 5 s, cambiable en Propiedades («Usar para las
+  imágenes nuevas»), donde también está la duración del clip. No deciden el lienzo ni los
+  fps de la secuencia y no tienen proxy. Filtro «Imágenes» en el diálogo de importar.
 
 ### A2 · La transición y su sonido se mueven juntos · FB-004 · M
 - **Problema:** al mover una transición, su efecto de sonido se queda donde estaba.
 - **Hacer:** enlazar el clip de la transición con su sonido (como el video y el audio de un
   medio), para moverlos, recortarlos y borrarlos juntos; que se puedan desenlazar.
 - **Hecho cuando:** arrastrar la transición mueve también su sonido, con deshacer/rehacer.
+- **Hecho:** usa el enlace de los clips (`Clip::link`), que ahora también une una
+  transición-clip con un clip de audio sin compartir tramo (`linkEffectSound`). Se mueven,
+  se copian y se quitan juntos; al recortar cada uno conserva su duración. «Desvincular la
+  transición y su sonido» en el menú del clip y en Propiedades. Las transiciones de
+  proyectos anteriores no se enlazan solas.
 
 ### A3 · Botón «Proxies» que se entienda · FB-020 (primera parte) · S
 - **Problema:** parece que a veces no funciona: está desactivado sin guardar el proyecto y,
@@ -46,6 +58,11 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   explicar en la ayuda del botón por qué está desactivado; indicar cuántos medios
   tienen proxy.
 - **Hecho cuando:** activar «Proxies» siempre tiene un efecto visible o explica por qué no.
+- **Hecho:** sin proyecto guardado el botón no se desactiva (así su ayuda explica por qué) y
+  un clic abre «Guardar». Mientras estén activados se crean solos los que falten (al
+  activarlos, al abrir un proyecto y al importar videos; cancelar lo detiene hasta volver a
+  activarlos). El botón y la etiqueta del visor dicen cuántos videos tienen proxy
+  («Proxies 2/3»).
 
 ### A4 · Atajos de teclado que se descubran · FB-003 · S–M
 - **Problema:** se pidió Alt+C para cortar en el cabezal; ya existe Ctrl+K, pero nadie lo

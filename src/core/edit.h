@@ -172,6 +172,11 @@ bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
 // Separa los clips de sus enlazados: a partir de ahí se editan por separado.
 bool unlinkClips(Project& project, const std::vector<ObjectId>& clips);
 
+// Enlaza una transición-clip con un clip de audio (su efecto de sonido): se mueven, se
+// copian y se quitan juntos, pero cada uno conserva su tramo al recortarlo. Deshace los
+// enlaces que tuvieran antes. false si no es esa pareja o alguno está bloqueado.
+bool linkEffectSound(Project& project, ObjectId effect, ObjectId sound);
+
 // --- Edición con rizo ---
 //
 // Como en Premiere con "bloqueo de sincronización": al cerrar un hueco se desplaza todo
@@ -273,7 +278,8 @@ ObjectId placeTransitionSound(Project& project, ObjectId transition, ObjectId so
 std::vector<ObjectId> withLinked(const Project& project, const std::vector<ObjectId>& clips);
 
 // Comprueba los enlaces: se conservan los recíprocos entre un clip de video y uno de
-// audio con el mismo medio, posición y tramo; el resto se deshacen.
+// audio con el mismo medio, posición y tramo, y entre una transición-clip y un clip de
+// audio; el resto se deshacen.
 void repairLinks(Project& project);
 
 // Formato antiguo (versión 1 del .sharkp, sin enlaces fiables): enlaza el clip de V1

@@ -129,6 +129,7 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectClips() const {
                     {QStringLiteral("start"), static_cast<qint64>(block.start)},
                     {QStringLiteral("length"), static_cast<qint64>(block.end - block.start)},
                     {QStringLiteral("link"), qint64{0}},
+                    {QStringLiteral("linkedEffect"), false},
                     {QStringLiteral("in"), qint64{0}},
                     {QStringLiteral("media"), qint64{0}},
                     {QStringLiteral("volumeDb"), 0.0},

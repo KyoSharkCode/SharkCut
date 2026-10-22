@@ -7,7 +7,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-001](#fb-001) | 2026-10-22 | Marca/logo | Usabilidad | El logo parece un pincho de Geometry Dash, no una aleta | En el plan |
 | [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
 | [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | En el plan |
-| [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | En el plan |
+| [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
 | [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | En el plan |
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | En el plan |
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
@@ -15,7 +15,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | En el plan |
 | [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | En el plan |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
-| [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | En el plan |
+| [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
 | [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | En el plan |
 | [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | En el plan |
 | [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | En el plan |
@@ -80,7 +80,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Al poner una transición, se separa de su audio: si se intenta mover, se mueve solo uno, no los dos a la vez.
 - **Contexto:** Transiciones como clips con su efecto de sonido (Editor::addEffectClip + placeSoundHit).
 - **Notas:** El sonido se coloca junto a la transición pero no queda enlazado como el video/audio de un medio. Se espera que se comporten como un clip enlazado.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A2)
 
 <a id="fb-005"></a>
 ### FB-005 · Alt + rueda para desplazarse en vertical en la línea de tiempo
@@ -174,7 +174,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** El PNG no aparece en la línea de tiempo y en el proyecto sale como 0:00. Los JPG sí aparecen en la línea de tiempo, pero no se ven en el visor (Programa) y no se puede alargar su duración.
 - **Contexto:** Importar imágenes fijas.
 - **Notas:** El diálogo de importar solo lista videos y audio; las imágenes fijas no tienen aún soporte propio (duración ajustable). En el plan aparece «Overlays e imágenes (PNG con transparencia)».
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A1)
 
 <a id="fb-013"></a>
 ### FB-013 · Efecto de color personalizado
@@ -275,7 +275,7 @@ Formato y estados: ver [README.md](README.md).
   Los proxies son archivos aparte a 540p (`kProxyHeight`), no una resolución de
   reproducción. Lo que pide (completa, 1/2, 1/4…) es otra cosa: bajar la resolución del
   visor en vivo, sin crear archivos. Pueden convivir las dos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md)): la primera parte (botón «Proxies», A3) está hecha; la calidad de la vista previa elegible es M5.
 
 <a id="fb-021"></a>
 ### FB-021 · Ver y configurar la aceleración por hardware

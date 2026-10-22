@@ -23,6 +23,9 @@ Formato y estados: ver [README.md](README.md).
 | [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Registrado |
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | Registrado |
 | [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | Registrado |
+| [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | Registrado |
+| [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | Registrado |
+| [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | Registrado |
 
 ---
 
@@ -251,4 +254,61 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Usabilidad
 - **Qué dijo:** Mover los botones de acercar y alejar de la línea de tiempo a la esquina superior derecha.
 - **Contexto:** Barra de la línea de tiempo.
+- **Estado:** Registrado
+
+<a id="fb-020"></a>
+### FB-020 · El botón Proxies «a veces no sirve»; elegir la calidad de la vista previa
+- **Fecha:** 2026-10-22
+- **Quién:** Miyon
+- **Versión:** 0.1.0
+- **Área:** Visor
+- **Tipo:** Usabilidad (con una propuesta)
+- **Qué dijo:** no se entiende por qué a veces el botón «Proxies» no funciona. Si los proxies
+  son una vista previa de baja calidad en el visor, sería ideal elegir cuánta calidad se
+  quiere: completa, 3/4, 1/2… como en Premiere.
+- **Contexto:** botón «Proxies» de la barra del visor.
+- **Notas:** según el código (`Main.qml`, `Editor::decodePath`), el botón:
+  1. está desactivado mientras el proyecto no está guardado (los proxies van en su caché);
+  2. al activarlo solo cambia los medios que ya tienen un proxy creado: los proxies no se
+     crean solos, hay que hacerlo con clic derecho → «Crear proxy» en Medios. Sin proxies
+     creados, activarlo no cambia nada a la vista, y eso parece que «no sirve».
+  Los proxies son archivos aparte a 540p (`kProxyHeight`), no una resolución de
+  reproducción. Lo que pide (completa, 1/2, 1/4…) es otra cosa: bajar la resolución del
+  visor en vivo, sin crear archivos. Pueden convivir las dos.
+- **Estado:** Registrado
+
+<a id="fb-021"></a>
+### FB-021 · Ver y configurar la aceleración por hardware
+- **Fecha:** 2026-10-22
+- **Quién:** Miyon
+- **Versión:** 0.1.0
+- **Área:** Rendimiento
+- **Tipo:** Propuesta
+- **Qué dijo:** preguntó por un apartado de configuración para comprobar cómo se está
+  acelerando la app («aceleración por hardware»).
+- **Contexto:** pregunta general sobre ajustes/rendimiento.
+- **Notas:** la app ya usa la GPU sola, sin ajustes: decodifica con D3D11VA/NVDEC si puede
+  (si no, por software), dibuja con Direct3D 11 y exporta con NVENC, AMF o Quick Sync, o con
+  x264/x265 por software. Hoy no se ve en ninguna parte qué se está usando (solo el códec
+  al terminar una exportación y el registro de la sesión). Idea: un apartado de
+  Configuración/Información con la GPU detectada, el decodificador y el codificador en uso,
+  y quizá poder forzar el camino por software si da problemas.
+- **Estado:** Registrado
+
+<a id="fb-022"></a>
+### FB-022 · ¿El códec de exportación aguanta la recompresión de YouTube?
+- **Fecha:** 2026-10-22
+- **Quién:** Miyon
+- **Versión:** 0.1.0
+- **Área:** Exportación
+- **Tipo:** Pregunta
+- **Qué dijo:** YouTube comprime los videos; ¿el códec con el que exporta SharkCut evita esa
+  compresión o la aguanta bien?
+- **Contexto:** exportar para subir a YouTube.
+- **Notas:** ningún códec evita la recompresión: YouTube vuelve a codificar todo lo que se
+  sube. Lo que ayuda es subir con mucha calidad para que pierda menos. SharkCut exporta MP4
+  H.264 o H.265 + AAC 192 kbps; la calidad «Alta» va a 16 Mbps en 1080p60 (YouTube
+  recomienda ~12) y «Máxima» a 40 Mbps. Idea para el futuro: un preset «YouTube» en
+  Exportar con una explicación corta, y quizá la opción de exportar a 1440p (YouTube
+  usa entonces un códec mejor, VP9/AV1, y se ve mejor incluso a 1080p).
 - **Estado:** Registrado

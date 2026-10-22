@@ -16,7 +16,7 @@ Al terminar las pruebas se ordenará todo (agrupar, priorizar y llevarlo al plan
 - **Versión:** versión de SharkCut probada, si se sabe
 - **Área:** Marca/logo · Instalación · Proyectos · Línea de tiempo · Visor · Medios ·
   Propiedades · Efectos · Subtítulos · Audio · Exportación · Rendimiento · Otro
-- **Tipo:** Error · Usabilidad · Propuesta · Opinión
+- **Tipo:** Error · Usabilidad · Propuesta · Opinión · Pregunta
 - **Qué dijo:** cita o resumen fiel de lo que comentó.
 - **Contexto:** qué estaba haciendo o qué estaba viendo.
 - **Notas:** observaciones para la fase de organización (sin decidir nada).

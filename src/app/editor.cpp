@@ -98,7 +98,9 @@ QString fpsText(sharkcut::FrameRate rate) {
 // fotogramas por segundo del proyecto (como al crear una secuencia desde un clip).
 void adoptSettings(Project& project, ObjectId media) {
     const MediaItem* item = project.findMedia(media);
-    if (project.length() > 0 || !item || !item->hasVideo || item->width <= 0 || item->height <= 0) {
+    // Una imagen no decide el lienzo ni los fps (una foto de 4000×3000 a «25 fps»…).
+    if (project.length() > 0 || !item || !item->hasVideo || item->still || item->width <= 0 ||
+        item->height <= 0) {
         return;
     }
     if (project.settings.adoptFrameRate) {
@@ -293,7 +295,9 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
     connect(this, &Editor::projectChanged, this, &Editor::libraryChanged);
+    connect(this, &Editor::projectChanged, this, &Editor::proxiesChanged); // medios con proxy
     m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
+    m_proxies.setAutoCreate(m_useProxies);
     connect(&m_proxies, &ProxyManager::changed, this, [this] {
         emit libraryChanged();
         emit proxiesChanged();
@@ -357,11 +361,14 @@ QVariantList Editor::mediaItems() const {
                                     QString::fromLatin1(
                                         QUrl::toPercentEncoding(QString::fromStdString(item.path))))
                           : QString();
-        entry[QStringLiteral("details")] = item.hasVideo ? QStringLiteral("%1×%2 · %3 fps")
-                                                               .arg(item.width)
-                                                               .arg(item.height)
-                                                               .arg(fpsText(item.frameRate))
-                                                         : QStringLiteral("Solo audio");
+        entry[QStringLiteral("still")] = item.still;
+        entry[QStringLiteral("details")] =
+            item.still      ? QStringLiteral("Imagen · %1×%2").arg(item.width).arg(item.height)
+            : item.hasVideo ? QStringLiteral("%1×%2 · %3 fps")
+                                  .arg(item.width)
+                                  .arg(item.height)
+                                  .arg(fpsText(item.frameRate))
+                            : QStringLiteral("Solo audio");
         list.append(entry);
     }
     return list;
@@ -373,6 +380,10 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     QVariantMap entry;
     entry[QStringLiteral("id")] = static_cast<qint64>(clip.id);
     entry[QStringLiteral("link")] = static_cast<qint64>(clip.link);
+    // Enlace entre una transición-clip y su sonido (no entre el video y el audio).
+    const Clip* partner = clip.link != 0 ? p.clip(clip.link) : nullptr;
+    entry[QStringLiteral("linkedEffect")] =
+        partner != nullptr && (clip.isEffect() || partner->isEffect());
     entry[QStringLiteral("track")] = static_cast<int>(track);
     entry[QStringLiteral("video")] =
         track < p.tracks.size() && p.tracks[track].kind == sharkcut::TrackKind::Video;
@@ -486,6 +497,22 @@ QVariantMap Editor::nearestCut(int track, qint64 frame, double maxDistance) cons
     return {{QStringLiteral("track"), track}, {QStringLiteral("cut"), *best}};
 }
 
+namespace {
+
+// El clip que representa a un grupo de enlazados: la transición-clip si la hay (su
+// sonido va con ella); si no, el primero.
+const Clip* representative(const Project& p, const std::vector<ObjectId>& group) {
+    for (ObjectId id : group) {
+        const Clip* clip = p.clip(id);
+        if (clip && clip->isEffect()) {
+            return clip;
+        }
+    }
+    return p.clip(group.front());
+}
+
+} // namespace
+
 QVariantList Editor::clipGroup(qint64 clipId) const {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);
@@ -545,8 +572,10 @@ QVariantMap Editor::selectedClip() const {
     if (group.empty()) {
         return {};
     }
-    const Clip* first = p.clip(group.front());
-    const bool single = group.size() == 1 || (group.size() == 2 && first->link == group[1]);
+    const Clip* first = representative(p, group);
+    const bool single =
+        group.size() == 1 || (group.size() == 2 && first->link != 0 &&
+                              std::find(group.begin(), group.end(), first->link) != group.end());
     if (!single) {
         // Varios: cuántos de video, el primero (para aplicarles efectos) y si hay enlaces.
         int videos = 0;
@@ -587,12 +616,16 @@ QVariantMap Editor::selectedClip() const {
                         {QStringLiteral("length"), static_cast<qint64>(e.durationFrames)},
                         {QStringLiteral("track"), QString::fromStdString(p.trackName(ref->track))},
                         {QStringLiteral("locked"), p.tracks[ref->track].locked}};
+        // Enlazada con su efecto de sonido (se mueven y se quitan juntos).
+        result[QStringLiteral("linked")] = group.size() == 2;
         return result;
     }
     result[QStringLiteral("linked")] = group.size() == 2;
     result[QStringLiteral("start")] = static_cast<qint64>(first->start);
     result[QStringLiteral("end")] = static_cast<qint64>(first->end());
     const MediaItem* item = p.findMedia(first->media);
+    // Imagen fija: su duración se cambia desde Propiedades.
+    result[QStringLiteral("still")] = item && item->still;
     result[QStringLiteral("name")] =
         item ? QString::fromStdString(item->name) : QStringLiteral("?");
     result[QStringLiteral("video")] = qint64{0};
@@ -649,7 +682,7 @@ bool Editor::waveformLoading(qint64 mediaId) const {
 QStringList Editor::mediaPaths() const {
     QStringList paths;
     for (const MediaItem& item : document().media) {
-        if (item.hasVideo) {
+        if (item.hasVideo && !item.still) { // una imagen no necesita proxy
             paths << QString::fromStdString(item.path);
         }
     }
@@ -690,8 +723,23 @@ void Editor::setUseProxies(bool use) {
     }
     m_useProxies = use;
     QSettings().setValue(QStringLiteral("vista/proxies"), use);
+    // Sin proxies, activarlos no cambiaría nada: mientras se usen, se crean los que falten.
+    m_proxies.setAutoCreate(use);
     emit proxiesChanged();
     reloadVideo();
+}
+
+double Editor::stillSeconds() const {
+    return QSettings().value(QStringLiteral("medios/duracionImagen"), 5.0).toDouble();
+}
+
+void Editor::setStillSeconds(double seconds) {
+    seconds = std::clamp(seconds, 0.1, 3600.0);
+    if (seconds == stillSeconds()) {
+        return;
+    }
+    QSettings().setValue(QStringLiteral("medios/duracionImagen"), seconds);
+    emit stillSecondsChanged();
 }
 
 QString Editor::proxyStatus() const {
@@ -713,7 +761,7 @@ void Editor::createProxies(const QVariantList& mediaIds) {
             std::any_of(mediaIds.begin(), mediaIds.end(), [&item](const QVariant& v) {
                 return static_cast<ObjectId>(v.toLongLong()) == item.id;
             });
-        if (wanted && item.hasVideo) {
+        if (wanted && item.hasVideo && !item.still) {
             paths << QString::fromStdString(item.path);
         }
     }
@@ -804,8 +852,10 @@ QString Editor::selectionDescription() const {
     if (group.empty()) {
         return {};
     }
-    const Clip* first = p.clip(group.front());
-    const bool single = group.size() == 1 || (group.size() == 2 && first->link == group[1]);
+    const Clip* first = representative(p, group);
+    const bool single =
+        group.size() == 1 || (group.size() == 2 && first->link != 0 &&
+                              std::find(group.begin(), group.end(), first->link) != group.end());
     if (!single) {
         return QStringLiteral("%1 clips").arg(group.size());
     }
@@ -2067,7 +2117,8 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track, qi
     // El análisis abre los archivos: fuera del hilo de la interfaz.
     QPointer<Editor> self(this);
     const quint64 uid = m_activeProject;
-    QThreadPool::globalInstance()->start([self, uid, paths, placeAt, track, folder] {
+    const auto stillUs = static_cast<std::int64_t>(std::llround(stillSeconds() * 1e6));
+    QThreadPool::globalInstance()->start([self, uid, paths, placeAt, track, folder, stillUs] {
         auto items = std::make_shared<std::vector<MediaItem>>();
         QStringList errors;
         for (const QString& path : paths) {
@@ -2078,7 +2129,15 @@ void Editor::importPaths(const QStringList& paths, qint64 placeAt, int track, qi
                 item.name = QFileInfo(path).fileName().toStdString();
                 item.durationUs = info.durationUs;
                 item.hasAudio = !info.audio.empty();
-                if (info.video) {
+                if (info.video && info.video->still) {
+                    // Imagen fija: dura lo elegido para las imágenes (luego se alarga).
+                    item.hasVideo = true;
+                    item.still = true;
+                    item.hasAudio = false;
+                    item.width = info.video->width;
+                    item.height = info.video->height;
+                    item.durationUs = stillUs;
+                } else if (info.video) {
                     item.hasVideo = true;
                     item.frameRate = info.video->frameRate;
                     item.width = info.video->width;
@@ -3203,13 +3262,17 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         if (created == 0) {
             return false;
         }
-        // Su efecto de sonido, con el golpe en la mitad de la transición.
+        // Su efecto de sonido, con el golpe en la mitad de la transición y enlazado a ella
+        // (se mueven y se quitan juntos).
         if (const sharkcut::SoundEffect* sound =
                 sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type))) {
             const std::int64_t hit =
                 sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds, rate.frameDuration());
-            sharkcut::placeSoundHit(p, soundMedia(p, *sound), start + params.durationFrames / 2,
-                                    hit, kSoundVolumeDb);
+            const ObjectId soundClip = sharkcut::placeSoundHit(
+                p, soundMedia(p, *sound), start + params.durationFrames / 2, hit, kSoundVolumeDb);
+            if (soundClip != 0) {
+                sharkcut::linkEffectSound(p, created, soundClip);
+            }
         }
         return true;
     });
@@ -3428,6 +3491,7 @@ bool Editor::isSelected(qint64 clipId) const {
 }
 
 void Editor::onProjectChanged() {
+    refreshView(); // lo de abajo mira ya la secuencia editada
     // La selección solo conserva los clips que siguen existiendo; su descripción
     // puede cambiar aunque sigan (recortes, movimientos).
     std::erase_if(m_selection, [this](ObjectId id) { return project().clip(id) == nullptr; });
@@ -3442,7 +3506,6 @@ void Editor::onProjectChanged() {
 
     // Solo se recolocan los hilos de video o se reinicia el audio si cambia lo que
     // tienen que leer: mover la facecam o cambiar un volumen no corta la reproducción.
-    refreshView();
     const auto now = std::make_shared<const Project>(m_view);
     const bool videoChanged = !m_prepared || !sameVideo(*m_prepared, *now);
     const bool audioChanged = !m_prepared || !sameAudio(*m_prepared, *now);

@@ -71,8 +71,14 @@ class Editor : public CompositionSource {
     // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
     // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
     Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
+    // Duración (s) con la que se importan las imágenes fijas (PNG, JPG…).
+    Q_PROPERTY(
+        double stillSeconds READ stillSeconds WRITE setStillSeconds NOTIFY stillSecondsChanged)
     Q_PROPERTY(bool proxiesAvailable READ proxiesAvailable NOTIFY proxiesChanged)
     Q_PROPERTY(QString proxyStatus READ proxyStatus NOTIFY proxiesChanged)
+    // Videos del proyecto que pueden tener proxy y cuántos lo tienen ya listo.
+    Q_PROPERTY(int proxiesTotal READ proxiesTotal NOTIFY proxiesChanged)
+    Q_PROPERTY(int proxiesReady READ proxiesReady NOTIFY proxiesChanged)
     // Pistas en el orden de `tracks` del proyecto: {index, name, kind, number, hidden,
     // muted, locked}
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY projectChanged)
@@ -187,6 +193,10 @@ public:
     void setUseProxies(bool use);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
     QString proxyStatus() const;
+    double stillSeconds() const;
+    void setStillSeconds(double seconds);
+    int proxiesTotal() const { return static_cast<int>(mediaPaths().size()); }
+    int proxiesReady() const { return m_proxies.readyCount(mediaPaths()); }
     // Datos de un clip para la línea de tiempo (TimelineClipsModel): {id, link, track,
     // video, media, start, length, in, volumeDb, transformed, name}.
     QVariantMap clipEntry(std::size_t track, const sharkcut::Clip& clip) const;
@@ -603,6 +613,7 @@ signals:
     void projectChanged();
     void libraryChanged(); // medios de la biblioteca (o el estado de sus proxies)
     void proxiesChanged();
+    void stillSecondsChanged();
     void projectsChanged(); // proyectos abiertos, pestañas o secuencias
     void fileChanged();
     void modifiedChanged();

@@ -1,4 +1,5 @@
 #include "core/edit.h"
+#include "core/history.h"
 #include "core/project_file.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -25,6 +26,22 @@ struct TwoCuts {
         TransitionParams params = transitionInfo(TransitionType::ZoomIn).defaults;
         params.durationFrames = frames;
         return params;
+    }
+};
+
+// Transición en 100–130 con su sonido (golpe en la mitad) enlazado.
+struct WithSound : TwoCuts {
+    ObjectId effect = 0;
+    ObjectId sound = 0;
+    WithSound() {
+        MediaItem whoosh;
+        whoosh.path = "/sfx/whoosh.wav";
+        whoosh.durationUs = 1'000'000; // 60 fotogramas a 60 fps
+        whoosh.hasAudio = true;
+        const ObjectId media = addMedia(p, whoosh);
+        effect = placeEffect(p, kVideoTrack, 100, zoom(30));
+        sound = placeSoundHit(p, media, 115, 20, 0.0);
+        linkEffectSound(p, effect, sound);
     }
 };
 
@@ -123,4 +140,74 @@ TEST_CASE("Effect clips are copied, pasted and saved", "[effects]") {
     }
     CHECK(effects == 2);
     CHECK(onlyEffect(back) != nullptr);
+}
+
+TEST_CASE("An effect clip and its sound are linked", "[effects]") {
+    WithSound t;
+    REQUIRE(t.effect != 0);
+    REQUIRE(t.sound != 0);
+    CHECK(t.p.clip(t.effect)->link == t.sound);
+    CHECK(t.p.clip(t.sound)->link == t.effect);
+    CHECK(t.p.clip(t.sound)->start == 95);
+    // Solo una transición y un clip de audio: dos clips de video no se enlazan así.
+    const ObjectId first = t.p.tracks[kVideoTrack].clips.front().id;
+    CHECK_FALSE(linkEffectSound(t.p, t.effect, first));
+    // Las ediciones posteriores conservan el enlace (no comparten tramo).
+    repairLinks(t.p);
+    CHECK(t.p.clip(t.effect)->link == t.sound);
+}
+
+TEST_CASE("Moving or removing an effect clip takes its sound along", "[effects]") {
+    WithSound t;
+    REQUIRE(moveClips(t.p, {t.effect}, 50));
+    CHECK(t.p.clip(t.effect)->start == 150);
+    CHECK(t.p.clip(t.sound)->start == 145);
+    // También al arrastrar el sonido.
+    REQUIRE(moveClips(t.p, {t.sound}, -10));
+    CHECK(t.p.clip(t.effect)->start == 140);
+    CHECK(t.p.clip(t.sound)->start == 135);
+
+    const Clipboard copied = copyClips(t.p, {t.effect});
+    CHECK(copied.clips.size() == 2);
+    const auto pasted = pasteClips(t.p, copied, 400);
+    REQUIRE(pasted.size() == 2);
+    CHECK(t.p.clip(pasted[0])->link == pasted[1]);
+
+    REQUIRE(removeClips(t.p, {t.effect}));
+    CHECK(t.p.clip(t.effect) == nullptr);
+    CHECK(t.p.clip(t.sound) == nullptr);
+}
+
+TEST_CASE("Trimming an effect clip keeps its sound length", "[effects]") {
+    WithSound t;
+    const std::int64_t soundLength = t.p.clip(t.sound)->length;
+    REQUIRE(trimEnd(t.p, t.effect, 120));
+    CHECK(t.p.clip(t.effect)->length == 20);
+    CHECK(t.p.clip(t.sound)->length == soundLength);
+    REQUIRE(trimStart(t.p, t.effect, 105));
+    CHECK(t.p.clip(t.sound)->start == 95);
+    CHECK(t.p.clip(t.effect)->link == t.sound);
+}
+
+TEST_CASE("An effect clip and its sound can be unlinked", "[effects]") {
+    History history;
+    history.apply("Preparar", [](Project& p) {
+        p = WithSound().p;
+        return true;
+    });
+    const WithSound ids;
+    REQUIRE(history.apply("Desvincular", [&](Project& p) { return unlinkClips(p, {ids.effect}); }));
+    REQUIRE(history.apply("Mover", [&](Project& p) { return moveClips(p, {ids.effect}, 50); }));
+    CHECK(history.project().clip(ids.sound)->start == 95); // ya no la sigue
+    REQUIRE(history.undo());
+    REQUIRE(history.undo());
+    CHECK(history.project().clip(ids.effect)->link == ids.sound);
+}
+
+TEST_CASE("The link between an effect clip and its sound is saved", "[effects]") {
+    WithSound t;
+    const Project back = projectFromJson(projectToJson(t.p, "/p/a.sharkp"), "/p/a.sharkp");
+    REQUIRE(back.clip(t.effect) != nullptr);
+    CHECK(back.clip(t.effect)->link == t.sound);
+    CHECK(back.clip(t.sound)->link == t.effect);
 }

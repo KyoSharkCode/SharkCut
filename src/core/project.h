@@ -41,6 +41,10 @@ struct MediaItem {
     bool hasVideo = false;
     bool hasAudio = false;
     ObjectId folder = 0; // carpeta de la biblioteca (0 = raíz)
+    // Imagen fija (PNG, JPG…): siempre se ve el mismo fotograma y sus clips se alargan
+    // sin límite, hacia los dos lados. `durationUs` es la duración al ponerla en la línea
+    // de tiempo (la de las imágenes nuevas se elige en la app).
+    bool still = false;
 
     friend bool operator==(const MediaItem&, const MediaItem&) = default;
 };
@@ -188,7 +192,10 @@ double gainFromDb(double db);
 struct Clip {
     ObjectId id = 0;
     ObjectId media = 0;
-    ObjectId link = 0;         // clip enlazado de la otra pista; 0 = ninguno
+    // Clip enlazado de la otra pista (0 = ninguno): el video y el audio de un medio, con
+    // el mismo tramo, o una transición-clip y su efecto de sonido (cada uno con el suyo).
+    // Los enlazados se mueven, se copian y se quitan juntos.
+    ObjectId link = 0;
     std::int64_t start = 0;    // primer fotograma en la línea de tiempo
     std::int64_t in = 0;       // desfase dentro del medio
     std::int64_t length = 0;   // fotogramas (siempre > 0)
@@ -396,7 +403,8 @@ struct Project {
     const Transition* transitionInto(ObjectId clip) const;
     const Transition* transitionOutOf(ObjectId clip) const;
 
-    // Duración del medio en fotogramas del proyecto.
+    // Duración del medio en fotogramas del proyecto (de una imagen fija, la que tiene al
+    // ponerla en la línea de tiempo: sus clips no tienen límite).
     std::int64_t mediaFrames(const MediaItem& item) const;
 
     // Instante del medio (µs desde su inicio) que se ve en el fotograma `frame` de
@@ -404,7 +412,8 @@ struct Project {
     std::int64_t mediaTimeUs(const Clip& clip, std::int64_t frame) const;
 
     // Fotograma del medio (en sus propios fps) que se ve en `frame`. Fuera del clip
-    // (en una transición) sigue el medio, limitado a su primer y último fotograma.
+    // (en una transición) sigue el medio, limitado a su primer y último fotograma. De
+    // una imagen fija, siempre 0.
     std::int64_t mediaFrameIndex(const Clip& clip, std::int64_t frame) const;
 
     // --- Subtítulos ---

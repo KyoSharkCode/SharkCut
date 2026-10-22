@@ -19,6 +19,9 @@ struct VideoStreamInfo {
     Rational timeBase;   // base de tiempo de los pts del flujo
     std::int64_t frameCount = 0;
     bool variableFrameRate = false; // indicio de VFR (fotogramas variables)
+    // Imagen fija (PNG, JPG…): un solo fotograma, sin duración propia. VideoDecoder la
+    // lee una vez y la entrega como fotograma 0 (no se puede saltar dentro de ella).
+    bool still = false;
 };
 
 struct AudioStreamInfo {

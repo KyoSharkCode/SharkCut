@@ -1850,7 +1850,8 @@ Rectangle {
             popup()
         }
         Action {
-            text: "Desvincular audio y video"
+            text: menuClip.clipMenu !== null && menuClip.clipMenu.linkedEffect
+                  ? "Desvincular la transición y su sonido" : "Desvincular audio y video"
             enabled: menuClip.clipMenu !== null && menuClip.clipMenu.link !== 0
             onTriggered: raiz.editor.unlinkSelection()
         }

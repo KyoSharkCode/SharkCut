@@ -20,7 +20,9 @@ extern "C" {
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <thread>
+#include <utility>
 
 using namespace sharkcut;
 using namespace sharkcut::test;
@@ -519,6 +521,115 @@ TEST_CASE("Los mov con transparencia conservan su alfa", "[media][alfa]") {
     const auto frame = plain.nextFrame();
     REQUIRE(frame.has_value());
     CHECK_FALSE(frame->hasAlpha());
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+}
+
+namespace {
+
+// Imagen de 64×32 de un solo fotograma: "png" (RGBA, mitad izquierda transparente y la
+// derecha opaca y gris 180) o "mjpeg" (JPG gris 180). El paquete del codificador es el
+// archivo entero. Ruta vacía si FFmpeg no tiene ese codificador.
+std::filesystem::path writeImage(const char* codecName, const std::string& name) {
+    const AVCodec* codec = avcodec_find_encoder_by_name(codecName);
+    if (!codec) {
+        return {};
+    }
+    const bool png = std::string(codecName) == "png";
+    AVCodecContext* enc = avcodec_alloc_context3(codec);
+    enc->width = 64;
+    enc->height = 32;
+    enc->time_base = {1, 25};
+    enc->pix_fmt = png ? AV_PIX_FMT_RGBA : AV_PIX_FMT_YUVJ420P;
+    REQUIRE(avcodec_open2(enc, codec, nullptr) >= 0);
+    AVFrame* frame = av_frame_alloc();
+    frame->format = enc->pix_fmt;
+    frame->width = 64;
+    frame->height = 32;
+    av_frame_get_buffer(frame, 0);
+    for (int y = 0; y < 32; ++y) {
+        for (int x = 0; x < 64; ++x) {
+            if (png) {
+                std::uint8_t* px = frame->data[0] + y * frame->linesize[0] + x * 4;
+                px[0] = px[1] = px[2] = 180;
+                px[3] = x >= 32 ? 255 : 0;
+            } else {
+                frame->data[0][y * frame->linesize[0] + x] = 180;
+                if (x % 2 == 0 && y % 2 == 0) {
+                    frame->data[1][y / 2 * frame->linesize[1] + x / 2] = 128;
+                    frame->data[2][y / 2 * frame->linesize[2] + x / 2] = 128;
+                }
+            }
+        }
+    }
+    frame->pts = 0;
+    AVPacket* packet = av_packet_alloc();
+    REQUIRE(avcodec_send_frame(enc, frame) >= 0);
+    avcodec_send_frame(enc, nullptr);
+    REQUIRE(avcodec_receive_packet(enc, packet) == 0);
+    const std::filesystem::path path = tempClipPath(name);
+    {
+        std::ofstream file(path, std::ios::binary);
+        file.write(reinterpret_cast<const char*>(packet->data), packet->size);
+    }
+    av_packet_free(&packet);
+    av_frame_free(&frame);
+    avcodec_free_context(&enc);
+    return path;
+}
+
+} // namespace
+
+TEST_CASE("Las imagenes PNG y JPG se leen como imagen fija", "[media][imagen]") {
+    const auto [codec, name] =
+        GENERATE(std::pair{"png", "imagen.png"}, std::pair{"mjpeg", "imagen.jpg"});
+    CAPTURE(name);
+    const std::filesystem::path path = writeImage(codec, name);
+    if (path.empty()) {
+        SKIP("FFmpeg sin ese codificador");
+    }
+    const bool png = std::string(codec) == "png";
+
+    const MediaInfo info = probeMedia(path.string());
+    REQUIRE(info.video);
+    CHECK(info.video->still);
+    CHECK(info.video->frameCount == 1);
+    CHECK(info.video->width == 64);
+
+    {
+        VideoDecoder decoder(path.string(), HwAccel::None);
+        auto frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index == 0);
+        CHECK(frame->hasAlpha() == png);
+        if (png) {
+            CHECK(frame->a[std::size_t{16 * 64 + 4}] <= 2);    // transparente
+            CHECK(frame->a[std::size_t{16 * 64 + 60}] >= 253); // opaca
+        }
+        // Gris 180 → luma de rango limitado (≈ 170).
+        CHECK(std::abs(frame->y[std::size_t{16 * 64 + 60}] - 170) <= 4);
+        CHECK_FALSE(decoder.nextFrame().has_value()); // un solo fotograma
+        // Cualquier salto vuelve a dar la imagen (sin tocar el archivo).
+        decoder.seekToFrame(500);
+        frame = decoder.nextFrame();
+        REQUIRE(frame.has_value());
+        CHECK(frame->index == 0);
+        decoder.seekNear(30);
+        CHECK(decoder.nextFrame().has_value());
+
+        // Sin proxy: no le hace falta.
+        DecodeWorker worker(path.string(), HwAccel::None, {}, 4);
+        worker.seek(0);
+        REQUIRE(waitFor([&] { return worker.hasFrame(0); }));
+        auto shown = worker.takeUpTo(0);
+        REQUIRE(shown);
+        CHECK(shown->width == 64);
+        worker.seek(0); // otra vez (p. ej. al volver al clip)
+        REQUIRE(waitFor([&] { return worker.hasFrame(0); }));
+    }
+    // Un video no es una imagen fija.
+    TempClip video({.frames = 5});
+    CHECK_FALSE(probeMedia(video.path.string()).video->still);
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
 }

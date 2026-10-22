@@ -87,10 +87,12 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
             claim(ids, clip.id);
-            if (!clip.isEffect() && !project.findMedia(clip.media)) {
+            const MediaItem* item = clip.isEffect() ? nullptr : project.findMedia(clip.media);
+            if (!clip.isEffect() && !item) {
                 throw ProjectError("Un clip hace referencia a un medio que no existe");
             }
-            if (clip.length <= 0 || clip.start < 0 || clip.in < 0) {
+            // Una imagen fija se alarga también hacia la izquierda: su `in` puede ser < 0.
+            if (clip.length <= 0 || clip.start < 0 || (clip.in < 0 && !(item && item->still))) {
                 throw ProjectError("Clip con posición o duración no válida en el proyecto");
             }
         }
@@ -672,6 +674,9 @@ std::string documentToJson(const Document& document, const std::filesystem::path
         if (item.folder != 0) {
             entry["folder"] = item.folder;
         }
+        if (item.still) {
+            entry["still"] = true;
+        }
         const std::string relative = relativeMediaPath(item.path, projectFile);
         if (!relative.empty()) {
             entry["relativePath"] = relative;
@@ -749,6 +754,7 @@ LoadedDocument documentFromJson(std::string_view text, const std::filesystem::pa
             item.hasVideo = entry.at("video").get<bool>();
             item.hasAudio = entry.at("audio").get<bool>();
             item.folder = entry.value("folder", ObjectId{0});
+            item.still = entry.value("still", false);
             // El proyecto se movió con sus medios: buscar por la ruta relativa.
             const std::string relative = entry.value("relativePath", std::string());
             if (!relative.empty() && !dir.empty() && !fileExists(pathFromUtf8(item.path))) {

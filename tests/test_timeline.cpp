@@ -1017,3 +1017,37 @@ TEST_CASE("Pasting into another project adds the media and missing tracks", "[ti
     CHECK(target.media.size() == 1);
     checkInvariants(target);
 }
+
+TEST_CASE("Still image clips can be stretched both ways", "[timeline][imagen]") {
+    Project p;
+    MediaItem image = media("logo.png", 5, true, false);
+    image.still = true;
+    const ObjectId still = addMedia(p, image);
+    const ObjectId vod = addMedia(p, media("vod.mp4", 60, true, true));
+    // Se pone con la duración elegida para las imágenes (5 s a 60 fps).
+    const ObjectId clip = placeClip(p, still, 600);
+    REQUIRE(clip != 0);
+    CHECK(p.clip(clip)->length == 300);
+    REQUIRE(placeClip(p, vod, 1200) != 0);
+
+    // Hacia la derecha, sin el límite del medio (solo el clip siguiente)…
+    CHECK(limitTrimEnd(p, clip, 5000) == 1200);
+    REQUIRE(trimEnd(p, clip, 1100));
+    CHECK(p.clip(clip)->length == 500);
+    // …y hacia la izquierda, aunque el medio «empiece» en el fotograma 0.
+    CHECK(limitTrimStart(p, clip, 0) == 0);
+    REQUIRE(trimStart(p, clip, 100));
+    CHECK(p.clip(clip)->start == 100);
+    CHECK(p.clip(clip)->in == -500);
+    // Siempre se ve el único fotograma de la imagen.
+    CHECK(p.mediaFrameIndex(*p.clip(clip), 100) == 0);
+    CHECK(p.mediaFrameIndex(*p.clip(clip), 1099) == 0);
+    const auto layers = p.videoLayersAt(700);
+    REQUIRE(layers.size() == 1);
+    CHECK(layers.front().mediaFrame == 0);
+
+    // Un video sigue limitado por su duración.
+    const ObjectId videoClip = p.clipAt(kVideoTrack, 1200)->id;
+    CHECK(limitTrimEnd(p, videoClip, 100'000) == 1200 + 3600);
+    CHECK(limitTrimStart(p, videoClip, 0) == 1200);
+}

@@ -5,6 +5,7 @@ En esta fase solo se **documenta**: no se decide ni se prioriza nada todavía.
 Al terminar las pruebas se ordenará todo (agrupar, priorizar y llevarlo al plan).
 
 - `FEEDBACK.md`: una entrada por comentario recibido, de la más antigua a la más nueva.
+- `PLAN-MEJORA.md`: el feedback organizado por prioridad (alta, media, baja).
 - `capturas/`: imágenes que acompañan a las entradas (`FB-XXX-descripcion.png`).
 
 ## Formato de cada entrada

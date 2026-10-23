@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SharkCut · Firma del código</title>
+<meta name="description" content="Política de firma del código de SharkCut: qué se firma, quién lo aprueba y cómo se compila.">
+<link rel="icon" href="icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&family=Fredoka:wght@600;700&family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="texto.css">
+</head>
+<body>
+<main>
+  <a class="volver" href="./"><img src="icono.png" alt=""> SharkCut</a>
+  <h1>Política de firma del código</h1>
+  <p class="fecha">Última actualización: 23 de octubre de 2026</p>
+
+  <div class="tarjeta">
+    <h2>Estado</h2>
+    <!-- Cuando SignPath Foundation apruebe el proyecto, cambiar este párrafo por:
+         «Firma de código gratuita de SignPath.io, certificado de SignPath Foundation.» -->
+    <p class="resumen"><b>Pendiente.</b> SharkCut va a solicitar la firma de código gratuita de
+      <a href="https://signpath.io">SignPath.io</a>, con certificado de
+      <a href="https://signpath.org">SignPath Foundation</a>. Hasta que se apruebe, las versiones
+      publicadas no van firmadas y Windows puede mostrar un aviso al instalarlas.</p>
+
+    <h2>Qué se firma</h2>
+    <ul>
+      <li>El ejecutable de SharkCut (<code>SharkCut.exe</code>) y el instalador
+        (<code>SharkCut-X.Y.Z-Setup.exe</code>) de cada versión publicada en
+        <a href="https://github.com/KyoSharkCode/SharkCut/releases">GitHub Releases</a>.</li>
+      <li>Solo se firma lo que se compila a partir del código de este proyecto. Las bibliotecas de otros
+        autores que van con SharkCut (Qt, FFmpeg…) se reparten tal como las publican sus autores, sin
+        firmarlas con el certificado de SharkCut.</li>
+    </ul>
+
+    <h2>Cómo se compila</h2>
+    <ul>
+      <li>Todo lo que se firma se compila en GitHub Actions, a partir del código público del repositorio
+        <a href="https://github.com/KyoSharkCode/SharkCut">KyoSharkCode/SharkCut</a>, con el flujo
+        <code>.github/workflows/build.yml</code>. Nunca se firma nada compilado en un equipo personal.</li>
+      <li>Solo se firma al publicar una versión: una etiqueta <code>vX.Y.Z</code> en la rama principal,
+        que debe coincidir con la versión del proyecto.</li>
+      <li>Cada firma la aprueba a mano una persona aprobadora antes de que se publique la versión.</li>
+    </ul>
+
+    <h2>Equipo y funciones</h2>
+    <ul>
+      <li><b>Autora y revisora del código:</b> KyoSumiVT (<a href="https://github.com/KyoSharkCode">@KyoSharkCode</a>).
+        Todos los cambios llegan a la rama principal mediante <i>pull requests</i> que ella revisa.</li>
+      <li><b>Aprobadora de las firmas:</b> KyoSumiVT.</li>
+    </ul>
+    <p>Las cuentas del equipo en GitHub y en SignPath deben tener activada la verificación en dos pasos.</p>
+
+    <h2>Privacidad</h2>
+    <p>SharkCut no envía información a otros sistemas salvo en lo que explica su
+      <a href="privacidad.html">política de privacidad</a>: buscar actualizaciones en GitHub al abrirse
+      (se puede desactivar) y descargar el modelo de subtítulos cuando el usuario los crea.</p>
+
+    <h2>Avisos</h2>
+    <p>Si crees que un archivo firmado con el certificado de SharkCut no viene de este proyecto o se ha
+      usado mal, avisa en <a href="https://github.com/KyoSharkCode/SharkCut/issues">GitHub</a>.</p>
+
+    <h2 lang="en">In English</h2>
+    <div lang="en">
+      <p><b>Status:</b> pending. SharkCut is applying for free code signing provided by SignPath.io,
+        with a certificate by SignPath Foundation. Until it is approved, releases are not signed.</p>
+      <p><b>What is signed:</b> <code>SharkCut.exe</code> and the installer of each release, built only
+        by GitHub Actions from the public repository, on a <code>vX.Y.Z</code> tag. Third-party libraries
+        (Qt, FFmpeg) are shipped as published by their authors and are not signed with this certificate.</p>
+      <p><b>Team roles:</b> committer and reviewer: KyoSumiVT (@KyoSharkCode); approver: KyoSumiVT.
+        Every signing request is approved manually. Team accounts must use multi-factor authentication.</p>
+      <p><b>Privacy:</b> this program does not transfer information to other networked systems except as
+        described in the <a href="privacidad.html">privacy policy</a>: an update check against GitHub on
+        startup (can be turned off) and downloading the speech recognition model when the user creates
+        subtitles.</p>
+    </div>
+  </div>
+
+  <footer>© 2026 KyoSumiVT · <a href="./">Descargar SharkCut</a> · <a href="privacidad.html">Privacidad</a></footer>
+</main>
+</body>
+</html>

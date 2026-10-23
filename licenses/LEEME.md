@@ -5,6 +5,11 @@ carpeta (`licenses/`), con el texto de cada licencia.
 
 SharkCut es software libre y gratuito bajo la licencia GPL 3.0 (`GPL-3.0.txt`; el archivo
 `LICENSE` del repositorio). Su código está en <https://github.com/KyoSharkCode/SharkCut>.
+© 2026 KyoSumiVT.
+
+**Marca:** el nombre «SharkCut», el logotipo y el icono (`src/app/icons/`) no están
+cubiertos por la GPL. Una versión modificada que se reparta debe llevar otro nombre y otro
+icono. Ver `MARCA.md` en el repositorio.
 
 | Componente | Para qué | Licencia | Texto | Código |
 |---|---|---|---|---|
@@ -19,9 +24,29 @@ SharkCut es software libre y gratuito bajo la licencia GPL 3.0 (`GPL-3.0.txt`; e
 - **Qt** va como bibliotecas dinámicas (`Qt6*.dll`): se pueden sustituir por otras
   versiones compatibles de Qt, como permite la LGPL.
 - **FFmpeg** va como bibliotecas dinámicas (`av*.dll`, `sw*.dll`). La compilación incluye
-  componentes GPL, así que el conjunto se reparte bajo la GPL 3.0. El código de esa
-  versión exacta está en los enlaces de la tabla.
+  componentes GPL, así que el conjunto se reparte bajo la GPL 3.0. Ver «Código fuente de
+  FFmpeg» más abajo.
 - Los **efectos de sonido** de `presets/sfx/` son propios de SharkCut (sintetizados) y
   van con licencia CC0 1.0. Ver `presets/sfx/LICENCIAS.md`.
 - Los **modelos de whisper** no van con SharkCut: se descargan aparte la primera vez que
   se crean subtítulos (de <https://huggingface.co/ggerganov/whisper.cpp>, licencia MIT).
+
+## Código fuente de FFmpeg
+
+La compilación de FFmpeg que va con SharkCut en Windows es la «full shared» 9.0.2 de
+Gyan Doshi (<https://www.gyan.dev/ffmpeg/builds/>). Su configuración completa (todas las
+bibliotecas que incluye) está en el `README.txt` de esa compilación.
+
+**Junto a cada versión de SharkCut en GitHub Releases** se publica el código fuente de:
+
+| Componente | Versión | Archivo en la versión | Origen |
+|---|---|---|---|
+| FFmpeg | 9.0.2 (commit `946fcce07b`) | `ffmpeg-9.0.2.tar.xz` | <https://ffmpeg.org/releases/> |
+| x264 | r3223 (commit `0480cb05`) | `x264-0480cb05.tar.gz` | <https://code.videolan.org/videolan/x264> |
+
+El resto de bibliotecas de la compilación (x265, dav1d, libvpx, libaom, etc.) tienen su
+código en sus proyectos de origen. x265 es la versión `4.3+45` (commit `116b875`); su
+repositorio oficial es <https://bitbucket.org/multicoreware/x265_git>.
+
+Si necesitas el código de algún componente de una versión concreta de SharkCut, pídelo en
+<https://github.com/KyoSharkCode/SharkCut/issues>.

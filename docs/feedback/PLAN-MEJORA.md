@@ -98,6 +98,17 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** que el selector de modelo de DialogoSubtitulos diga «descargado» si el
   archivo ya está en la carpeta de modelos, y «descarga de ~X MB» solo si no.
 
+### A10 · Cortar sin tirón mientras se reproduce · FB-023 · M
+- **Problema:** al cortar con la reproducción en marcha se nota un pequeño tirón.
+- **Causa probable:** al dividir cambian los clips, y `Editor::onProjectChanged` lo trata
+  como un cambio de lo que hay que leer: pausa, reinicia todos los hilos de video
+  (`resetVideoSlots`), reinicia el audio (`restartAudio`), vuelve a buscar y reanuda.
+- **Hacer:** reconocer las ediciones que no cambian lo que se ve ni lo que se oye (dividir
+  un clip deja el mismo medio en los mismos fotogramas) y no reiniciar nada; en el resto,
+  reiniciar solo los decodificadores y el audio de lo que cambió.
+- **Hecho cuando:** cortar con Ctrl+K o la cuchilla durante la reproducción no detiene ni
+  hace saltar la imagen ni el sonido.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -179,6 +190,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A9 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020 |
+| Alta | A1–A10 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023 |
 | Media | M1–M9 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022 |
 | Baja | B1–B3 | FB-011, 016, 018 |

@@ -325,7 +325,7 @@ Formato y estados: ver [README.md](README.md).
 ### FB-023 · Tirón al cortar durante la reproducción
 - **Fecha:** 2026-10-23
 - **Quién:** Kyo
-- **Versión:** sin confirmar (0.1.0 o 0.1.1)
+- **Versión:** 0.1.1
 - **Área:** Línea de tiempo
 - **Tipo:** Error
 - **Qué dijo:** cuando se hace un corte y el video se está reproduciendo, se genera un

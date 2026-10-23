@@ -29,6 +29,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | En el plan |
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
+| [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | En el plan |
 
 ---
 
@@ -366,3 +367,19 @@ Formato y estados: ver [README.md](README.md).
   un «bloque» (`TimelineClipsModel`, `kMinClipPixels`), y un bloque no se puede
   seleccionar. Acercando el zoom vuelven a ser clips normales.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A11)
+
+<a id="fb-026"></a>
+### FB-026 · Un medio recién importado no se deja arrastrar a la línea de tiempo
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Medios
+- **Tipo:** Error
+- **Qué dijo:** importó un archivo nuevo e intentó arrastrarlo a la línea de tiempo, pero no
+  la dejó; es como si al cerrar la ventana de importar la app se hubiera quedado bugueada.
+- **Contexto:** importar con la ventana de importar y arrastrar el medio enseguida.
+- **Notas:** falta saber: tipo de archivo, si se arreglaba solo al rato o con otro clic, si
+  otros medios sí se podían arrastrar y cómo se cerró el diálogo (botón Abrir o doble clic
+  en el archivo). El registro de la sesión
+  (<datos de la app>/registros/, botón en Proyectos) puede ayudar.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A12)

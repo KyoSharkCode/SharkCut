@@ -121,6 +121,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hecho cuando:** con la línea de tiempo alejada, un clic sobre clips cortos siempre
   selecciona algo o acerca el zoom, nunca se ignora.
 
+### A12 · No se puede arrastrar un medio recién importado · FB-026 · M
+- **Problema:** tras importar con la ventana de importar, el medio nuevo no se deja
+  arrastrar a la línea de tiempo; la app parece quedarse atascada.
+- **Hacer:** reproducirlo primero en Windows (importar con el botón, con Ctrl+I y con
+  doble clic sobre el archivo en el diálogo; con video, audio e imagen; arrastrar justo
+  después y pasados unos segundos). Revisar el registro de la sesión de cuando pasó.
+- **Sospechas (sin confirmar):** el clic que cierra el diálogo nativo llega a la app y deja
+  el arrastre de Medios (`fantasma` en `PanelBiblioteca.qml`) a medias; o el medio aún se
+  está analizando y no se puede soltar hasta que termina.
+- **Hecho cuando:** un medio recién importado se arrastra a la línea de tiempo a la
+  primera, con cualquier forma de importar.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -206,6 +218,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A11 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025 |
+| Alta | A1–A12 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026 |
 | Media | M1–M10 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024 |
 | Baja | B1–B3 | FB-011, 016, 018 |

@@ -124,14 +124,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### A12 · No se puede arrastrar un medio recién importado · FB-026 · M
 - **Problema:** tras importar con la ventana de importar, el medio nuevo no se deja
   arrastrar a la línea de tiempo; la app parece quedarse atascada.
-- **Hacer:** reproducirlo primero en Windows (importar con el botón, con Ctrl+I y con
-  doble clic sobre el archivo en el diálogo; con video, audio e imagen; arrastrar justo
-  después y pasados unos segundos). Revisar el registro de la sesión de cuando pasó.
-- **Sospechas (sin confirmar):** el clic que cierra el diálogo nativo llega a la app y deja
-  el arrastre de Medios (`fantasma` en `PanelBiblioteca.qml`) a medias; o el medio aún se
-  está analizando y no se puede soltar hasta que termina.
+- **Causa probable:** con «Proxies» activado, la creación automática del proxy del medio
+  nuevo avisa del progreso cada 30 fotogramas, y cada aviso reconstruye toda la lista de
+  Medios (`ProxyManager::changed` → `Editor::libraryChanged` → `mediaItems`): el panel se
+  vuelve inutilizable (el desplazamiento vuelve arriba, el arrastre se corta) hasta que
+  el proxy termina.
+- **Hacer:** que el progreso de un proxy actualice solo su etiqueta («PROXY 40 %») sin
+  reconstruir la lista (señal o modelo aparte), y limitar los avisos (p. ej. como mucho
+  unas pocas veces por segundo). Confirmar antes en Windows: importar un video con
+  «Proxies» activado e intentar desplazarse y arrastrar mientras se crea.
 - **Hecho cuando:** un medio recién importado se arrastra a la línea de tiempo a la
-  primera, con cualquier forma de importar.
+  primera, también mientras se crea su proxy, y la lista de Medios no salta mientras se
+  crean proxies.
 
 ---
 

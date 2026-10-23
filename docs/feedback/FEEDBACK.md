@@ -378,8 +378,14 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** importó un archivo nuevo e intentó arrastrarlo a la línea de tiempo, pero no
   la dejó; es como si al cerrar la ventana de importar la app se hubiera quedado bugueada.
 - **Contexto:** importar con la ventana de importar y arrastrar el medio enseguida.
-- **Notas:** falta saber: tipo de archivo, si se arreglaba solo al rato o con otro clic, si
-  otros medios sí se podían arrastrar y cómo se cerró el diálogo (botón Abrir o doble clic
-  en el archivo). El registro de la sesión
-  (<datos de la app>/registros/, botón en Proyectos) puede ayudar.
+- **Detalles (Kyo):** video de unos 3 minutos; se cerró el diálogo con el botón «Abrir».
+  No funcionaba nada del panel Medios: al desplazarse, la lista volvía al principio. Se
+  arregló guardando, cerrando y abriendo la app.
+- **Notas:** causa probable (sin confirmar en Windows): desde la 0.1.1, con «Proxies»
+  activado, el proxy de un medio nuevo se crea solo (`ProxyManager::setAutoCreate`).
+  Mientras se crea, cada 30 fotogramas (`writeProxy`) se avisa del progreso
+  (`ProxyManager::changed` → `Editor::libraryChanged`), y eso vuelve a construir toda la
+  lista de Medios varias veces por segundo: el desplazamiento vuelve arriba y el
+  arrastre se corta porque el elemento se destruye. Al reabrir la app el proxy ya
+  estaba hecho, por eso todo iba bien. Falta confirmar que «Proxies» estaba activado.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A12)

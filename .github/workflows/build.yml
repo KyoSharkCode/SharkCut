@@ -10,6 +10,11 @@ on:
 
 env:
   QT_VERSION: "6.10.3"
+  # Código fuente que se publica con cada versión (la GPL lo exige por la compilación de
+  # FFmpeg de cmake/FFmpeg.cmake, que incluye x264). Cambiarlos a la vez que esa compilación.
+  FFMPEG_SOURCE_VERSION: "9.0.2"
+  FFMPEG_SOURCE_SHA256: "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+  X264_COMMIT: "0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee"
 
 jobs:
   windows:
@@ -17,6 +22,12 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write # publicar la versión (solo con una etiqueta v*)
+    env:
+      # Firma con SignPath (docs/FIRMA.md): solo se firma si están configuradas estas
+      # variables del repositorio y el secreto SIGNPATH_API_TOKEN.
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+      SIGNPATH_POLICY_SLUG: ${{ vars.SIGNPATH_POLICY_SLUG }}
     steps:
       - uses: actions/checkout@v5
 
@@ -52,10 +63,34 @@ jobs:
         run: cmake --install build/windows-release --prefix "${{ github.workspace }}/dist/SharkCut"
 
       - name: Subir ejecutable
+        id: ejecutable
         uses: actions/upload-artifact@v4
         with:
           name: SharkCut-windows
           path: dist/SharkCut
+
+      # Solo al publicar una versión y con SignPath configurado: firma bin/SharkCut.exe y
+      # sustituye la carpeta por la firmada (el instalador y el .zip llevan la firmada).
+      - name: Firmar el ejecutable
+        id: firma-ejecutable
+        if: github.ref_type == 'tag' && env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: ejecutable
+          github-artifact-id: ${{ steps.ejecutable.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/SharkCut-firmado
+
+      - name: Usar el ejecutable firmado
+        if: steps.firma-ejecutable.outcome == 'success'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force dist\SharkCut
+          Move-Item dist\SharkCut-firmado dist\SharkCut
 
       # Versión del proyecto (CMakeLists.txt). Con una etiqueta, debe coincidir con ella.
       - name: Versión
@@ -83,10 +118,47 @@ jobs:
           Compress-Archive -Path dist\SharkCut -DestinationPath "dist\SharkCut-${{ steps.version.outputs.version }}-Windows.zip"
 
       - name: Subir instalador
+        id: instalador
         uses: actions/upload-artifact@v4
         with:
           name: SharkCut-instalador
           path: dist/SharkCut-*-Setup.exe
+
+      - name: Firmar el instalador
+        id: firma-instalador
+        if: github.ref_type == 'tag' && env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: instalador
+          github-artifact-id: ${{ steps.instalador.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/instalador-firmado
+
+      - name: Usar el instalador firmado
+        if: steps.firma-instalador.outcome == 'success'
+        shell: pwsh
+        run: Move-Item -Force dist\instalador-firmado\SharkCut-*-Setup.exe dist\
+
+      # Solo con una etiqueta v*: el código fuente de FFmpeg y de x264 que exige la GPL
+      # (licenses/LEEME.md). FFmpeg, comprobado con su SHA-256; x264, por su commit.
+      - name: Código fuente de FFmpeg
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $ffmpeg = "dist\ffmpeg-$env:FFMPEG_SOURCE_VERSION.tar.xz"
+          Invoke-WebRequest "https://ffmpeg.org/releases/ffmpeg-$env:FFMPEG_SOURCE_VERSION.tar.xz" -OutFile $ffmpeg
+          $hash = (Get-FileHash $ffmpeg -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:FFMPEG_SOURCE_SHA256) { throw "El SHA-256 de $ffmpeg no coincide ($hash)" }
+          $corto = $env:X264_COMMIT.Substring(0, 8)
+          git init -q x264
+          git -C x264 fetch -q --depth 1 https://code.videolan.org/videolan/x264.git $env:X264_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw "No se pudo descargar x264" }
+          git -C x264 archive --format=tar.gz --prefix="x264-$corto/" -o "..\dist\x264-$corto.tar.gz" FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw "No se pudo empaquetar x264" }
 
       # Solo con una etiqueta v*: la versión en GitHub Releases, con sus novedades
       # (docs/novedades/<versión>.md). SharkCut y la página de descarga la buscan ahí.
@@ -99,6 +171,8 @@ jobs:
           files: |
             dist/SharkCut-${{ steps.version.outputs.version }}-Setup.exe
             dist/SharkCut-${{ steps.version.outputs.version }}-Windows.zip
+            dist/ffmpeg-*.tar.xz
+            dist/x264-*.tar.gz
 
   linux:
     name: Linux (GCC)

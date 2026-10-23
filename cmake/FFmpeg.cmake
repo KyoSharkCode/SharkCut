@@ -9,6 +9,9 @@
 set(SHARKCUT_FFMPEG_LIBS avformat avcodec avutil swscale swresample)
 
 if(WIN32)
+    # Al cambiar de compilación, actualizar también el código fuente que se publica con
+    # cada versión (FFMPEG_SOURCE_* y X264_COMMIT en .github/workflows/build.yml) y la
+    # tabla de licenses/LEEME.md.
     set(SHARKCUT_FFMPEG_VERSION "9.0.2")
     set(SHARKCUT_FFMPEG_DIR "" CACHE PATH "Carpeta de FFmpeg precompilado (vacío = descargar)")
     set(SHARKCUT_DEPS_DIR "${PROJECT_SOURCE_DIR}/.deps" CACHE PATH "Carpeta de dependencias descargadas")

@@ -27,6 +27,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | En el plan |
+| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
+| [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
 
 ---
 
@@ -335,3 +337,32 @@ Formato y estados: ver [README.md](README.md).
   reinicia los hilos de video y el audio, vuelve a buscar y reanuda; eso explica el tirón.
   Dividir no cambia lo que se ve ni se oye, así que se podría evitar el reinicio.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A10)
+
+<a id="fb-024"></a>
+### FB-024 · Doble clic en Medios abre Importar
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** al hacer doble clic en Medios, donde está toda la media, que se abra la
+  ventana de importar sin tener que pulsar el botón Importar.
+- **Contexto:** panel Medios (PanelBiblioteca).
+- **Notas:** hoy el doble clic solo abre carpetas y secuencias; en la zona vacía no hace
+  nada. Es lo que hace Premiere.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
+
+<a id="fb-025"></a>
+### FB-025 · Clips muy cortos no se seleccionan con la línea de tiempo alejada
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Línea de tiempo
+- **Tipo:** Error
+- **Qué dijo:** a veces, si los cortes son muy pequeños y la línea de tiempo está muy
+  alejada, al intentar seleccionarlos no se consigue, no lo registra.
+- **Contexto:** línea de tiempo con poco zoom y muchos cortes cortos.
+- **Notas:** por rendimiento, los clips de menos de 16 px en pantalla se dibujan juntos como
+  un «bloque» (`TimelineClipsModel`, `kMinClipPixels`), y un bloque no se puede
+  seleccionar. Acercando el zoom vuelven a ser clips normales.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A11)

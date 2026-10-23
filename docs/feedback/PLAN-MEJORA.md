@@ -109,6 +109,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hecho cuando:** cortar con Ctrl+K o la cuchilla durante la reproducción no detiene ni
   hace saltar la imagen ni el sonido.
 
+### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
+- **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden
+  seleccionar.
+- **Causa probable:** por rendimiento, `TimelineClipsModel` junta los clips de menos de
+  16 px (`kMinClipPixels`) en un «bloque», y los bloques no se pueden seleccionar ni
+  arrastrar.
+- **Hacer:** que un clic en un bloque haga algo útil (seleccionar el clip que hay bajo el
+  ratón, o todos los del bloque, o acercar el zoom a esa zona) y que se vea que es un
+  grupo de clips.
+- **Hecho cuando:** con la línea de tiempo alejada, un clic sobre clips cortos siempre
+  selecciona algo o acerca el zoom, nunca se ignora.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -164,6 +176,10 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
 
+### M10 · Doble clic en Medios para importar · FB-024 · S
+- **Hacer:** doble clic en la zona vacía del panel Medios abre el diálogo de importar (el
+  doble clic sobre una carpeta o secuencia sigue abriéndola).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -190,6 +206,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A10 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023 |
-| Media | M1–M9 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022 |
+| Alta | A1–A11 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025 |
+| Media | M1–M10 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024 |
 | Baja | B1–B3 | FB-011, 016, 018 |

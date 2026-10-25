@@ -1,7 +1,7 @@
 # SharkCut
 
-Editor de video gratuito y de código abierto para Windows, pensado para editar VODs
-largos de Twitch y sacar de ellos clips y shorts.
+Editor de video gratuito y de código abierto para Windows, pensado para creadores de
+contenido: editar VODs largos de stream y sacar de ellos clips y shorts.
 
 **[Descargar SharkCut](https://kyosharkcode.github.io/SharkCut/)** ·
 [Todas las versiones](https://github.com/KyoSharkCode/SharkCut/releases) ·

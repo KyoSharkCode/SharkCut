@@ -67,7 +67,7 @@ Popup {
         Text {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "Editor de video para Windows, pensado para VODs largos y shorts."
+            text: "Editor de video para creadores, pensado para VODs largos y shorts."
             color: Theme.texto
             font.pixelSize: Theme.tamTexto
         }

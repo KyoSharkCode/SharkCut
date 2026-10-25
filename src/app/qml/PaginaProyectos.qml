@@ -194,6 +194,13 @@ Item {
                     ayuda: "Al abrir, mira si hay una versión nueva y te la ofrece"
                     onPulsado: Updater.autoCheck = !Updater.autoCheck
                 }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "info"
+                    texto: "Acerca de SharkCut"
+                    ayuda: "Versión, licencia y créditos"
+                    onPulsado: acercaDe.open()
+                }
             }
         }
 
@@ -388,6 +395,8 @@ Item {
             }
         }
     }
+
+    DialogoAcercaDe { id: acercaDe }
 
     component Etiqueta: Text {
         property string texto

@@ -25,6 +25,7 @@ AppName=SharkCut
 AppVersion={#AppVersion}
 AppVerName=SharkCut {#AppVersion}
 AppPublisher=KyoSumiVT
+AppCopyright=Copyright (C) 2026 KyoSumiVT
 AppPublisherURL=https://kyosharkcode.github.io/SharkCut/
 AppSupportURL=https://github.com/KyoSharkCode/SharkCut/issues
 AppUpdatesURL=https://kyosharkcode.github.io/SharkCut/

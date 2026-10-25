@@ -12,6 +12,7 @@ BEGIN
             VALUE "CompanyName", "KyoSumiVT"
             VALUE "FileDescription", "SharkCut, editor de video"
             VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "LegalCopyright", "Copyright (C) 2026 KyoSumiVT"
             VALUE "ProductName", "SharkCut"
             VALUE "ProductVersion", "@PROJECT_VERSION@"
             VALUE "OriginalFilename", "SharkCut.exe"

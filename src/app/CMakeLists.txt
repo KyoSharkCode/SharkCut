@@ -32,6 +32,7 @@ qt_add_qml_module(SharkCut
         qml/DialogoSubtitulos.qml
         qml/DialogoAjusteClip.qml
         qml/DialogoActualizacion.qml
+        qml/DialogoAcercaDe.qml
         qml/MenuTema.qml
         qml/BarraDesplazamiento.qml
         qml/PanelBiblioteca.qml

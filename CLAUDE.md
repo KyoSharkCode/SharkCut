@@ -1,7 +1,9 @@
 # SharkCut
 
-Editor de video nativo de escritorio para Windows, de uso personal (KyoSumiVT).
-Pensado para VODs de Twitch largos (40+ min) y para shorts/clips.
+Editor de video nativo de escritorio para Windows, gratuito y libre (GPL 3.0), para
+creadores de contenido; lo desarrolla KyoSumiVT. Pensado para VODs largos de stream
+(40+ min) y para shorts/clips. Los textos públicos lo presentan como una app para la
+comunidad, sin nombrar productos de terceros.
 El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes.
 
 ## Stack
@@ -182,8 +184,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Instalador: installer/SharkCut.iss (Inno Setup, sin administrador). Icono:
   src/app/icons (tools/icono/generar_icono.py). Licencias de terceros: licenses/.
   Publicar: subir la etiqueta vX.Y.Z (igual a la versión de CMake) con
-  docs/novedades/X.Y.Z.md; CI crea la versión con el instalador y el .zip. Página de
-  descarga: web/ (GitHub Pages, .github/workflows/pages.yml).
+  docs/novedades/X.Y.Z.md; CI crea la versión con el instalador y el .zip (y el código de
+  FFmpeg y x264 que exige la GPL: FFMPEG_SOURCE_* y X264_COMMIT en build.yml, a la par que
+  cmake/FFmpeg.cmake). Firma con SignPath preparada en build.yml, desactivada mientras no
+  haya variables (docs/FIRMA.md). Página de descarga: web/ (GitHub Pages,
+  .github/workflows/pages.yml), con privacidad.html (= PRIVACIDAD.md) y firma.html.
+  Textos legales: MARCA.md (nombre, logo e icono fuera de la GPL), CONTRIBUTING.md (no se
+  aceptan cambios de código), PRIVACIDAD.md; © 2026 KyoSumiVT. «Acerca de»:
+  qml/DialogoAcercaDe.qml (botón en Proyectos). Enlace de Ko-fi: vacío por ahora
+  (enlaceKofi en DialogoAcercaDe.qml y ENLACE_KOFI en web/index.html; vacío = oculto).
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.

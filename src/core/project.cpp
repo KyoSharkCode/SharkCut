@@ -113,6 +113,22 @@ const Clip* Project::clipAt(std::size_t track, std::int64_t frame) const {
     return nullptr;
 }
 
+std::vector<Clip> continuousClips(const Track& track) {
+    std::vector<Clip> joined;
+    for (const Clip& clip : track.clips) {
+        if (!joined.empty()) {
+            Clip& last = joined.back();
+            if (last.media == clip.media && last.end() == clip.start && last.out() == clip.in &&
+                last.effect == clip.effect && last.volumeDb == clip.volumeDb) {
+                last.length += clip.length;
+                continue;
+            }
+        }
+        joined.push_back(clip);
+    }
+    return joined;
+}
+
 std::int64_t Project::mediaFrames(const MediaItem& item) const {
     const FrameRate rate = settings.frameRate;
     return mulDiv(item.durationUs, rate.num, rate.den * 1'000'000, Rounding::Nearest);

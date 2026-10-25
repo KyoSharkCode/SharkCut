@@ -1051,3 +1051,31 @@ TEST_CASE("Still image clips can be stretched both ways", "[timeline][imagen]") 
     CHECK(limitTrimEnd(p, videoClip, 100'000) == 1200 + 3600);
     CHECK(limitTrimStart(p, videoClip, 0) == 1200);
 }
+
+TEST_CASE("Splitting a clip keeps what is played", "[timeline]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("vod.mp4", 60, true, true));
+    REQUIRE(placeClip(p, a, 0, 100, 600) != 0);
+    const Project before = p;
+    REQUIRE(splitAt(p, 250));
+    REQUIRE(video(p).size() == 2);
+    for (std::size_t t = 0; t < p.tracks.size(); ++t) {
+        const std::vector<Clip> was = continuousClips(before.tracks[t]);
+        const std::vector<Clip> now = continuousClips(p.tracks[t]);
+        REQUIRE(was.size() == 1);
+        REQUIRE(now.size() == 1);
+        CHECK(now[0].start == was[0].start);
+        CHECK(now[0].in == was[0].in);
+        CHECK(now[0].length == was[0].length);
+    }
+    // Un salto en el medio, otro volumen o un hueco sí son otro tramo.
+    Project jump = p;
+    jump.tracks[kVideoTrack].clips[1].in += 10;
+    CHECK(continuousClips(jump.tracks[kVideoTrack]).size() == 2);
+    Project louder = p;
+    const std::size_t audioTrack = *p.trackIndex(TrackKind::Audio, 0);
+    louder.tracks[audioTrack].clips[1].volumeDb = 3.0;
+    CHECK(continuousClips(louder.tracks[audioTrack]).size() == 2);
+    REQUIRE(trimStart(p, video(p)[1].id, 260));
+    CHECK(continuousClips(p.tracks[kVideoTrack]).size() == 2);
+}

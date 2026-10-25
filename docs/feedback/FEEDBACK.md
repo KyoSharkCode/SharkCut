@@ -26,7 +26,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
-| [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | En el plan |
+| [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
@@ -339,7 +339,7 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** en el código, dividir cambia los clips y `Editor::onProjectChanged` pausa,
   reinicia los hilos de video y el audio, vuelve a buscar y reanuda; eso explica el tirón.
   Dividir no cambia lo que se ve ni se oye, así que se podría evitar el reinicio.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A10)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A10)
 
 <a id="fb-024"></a>
 ### FB-024 · Doble clic en Medios abre Importar

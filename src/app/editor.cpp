@@ -179,9 +179,18 @@ QString aspectLabel(int w, int h) {
     return QStringLiteral("%1×%2").arg(w).arg(h);
 }
 
+// Mismo tramo del mismo medio (los ids pueden cambiar: dividir crea uno nuevo).
 bool sameTiming(const Clip& a, const Clip& b) {
-    return a.id == b.id && a.media == b.media && a.start == b.start && a.in == b.in &&
-           a.length == b.length;
+    return a.media == b.media && a.start == b.start && a.in == b.in && a.length == b.length;
+}
+
+// ¿Se lee lo mismo en las dos pistas? Las dos mitades de un corte cuentan como el clip
+// entero: dividir durante la reproducción no reinicia nada.
+template <typename Same>
+bool sameClips(const sharkcut::Track& a, const sharkcut::Track& b, Same same) {
+    const std::vector<Clip> ca = sharkcut::continuousClips(a);
+    const std::vector<Clip> cb = sharkcut::continuousClips(b);
+    return std::equal(ca.begin(), ca.end(), cb.begin(), cb.end(), same);
 }
 
 // ¿Cambia lo que deben decodificar los hilos de video? (No: posición, escala, audio…)
@@ -196,9 +205,7 @@ bool sameVideo(const Project& a, const Project& b) {
         if (ta.kind != tb.kind || ta.hidden != tb.hidden) {
             return false;
         }
-        if (ta.kind == sharkcut::TrackKind::Video &&
-            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
-                        sameTiming)) {
+        if (ta.kind == sharkcut::TrackKind::Video && !sameClips(ta, tb, sameTiming)) {
             return false;
         }
         // Lo que dura cada transición cambia qué fotogramas hacen falta (su tipo, no).
@@ -227,10 +234,9 @@ bool sameAudio(const Project& a, const Project& b) {
             return false;
         }
         if (ta.kind == sharkcut::TrackKind::Audio &&
-            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
-                        [](const Clip& x, const Clip& y) {
-                            return sameTiming(x, y) && x.volumeDb == y.volumeDb;
-                        })) {
+            !sameClips(ta, tb, [](const Clip& x, const Clip& y) {
+                return sameTiming(x, y) && x.volumeDb == y.volumeDb;
+            })) {
             return false;
         }
     }
@@ -3718,6 +3724,27 @@ void Editor::placeSlot(std::size_t track, int slot, std::int64_t index, bool for
     s.seekIndex = index;
 }
 
+bool Editor::continueSlot(std::size_t t, int slot, const Need& need) {
+    // La mitad nueva de un corte (dividir durante la reproducción): el hilo que se le da
+    // es el del mismo medio, que ya entregó el fotograma que se ve y sigue en orden con
+    // los de después. Se le pasa ese fotograma y no se busca nada (sin tirón).
+    TrackVideo& track = m_video[t];
+    VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
+    const std::shared_ptr<const sharkcut::VideoFrame> current = track.last;
+    // (Se pide en el fotograma del corte o en el siguiente: el de la cola llega ya.)
+    if (!current || s.media != need.clip->media || current->index > need.index ||
+        need.index - current->index > 1 || !s.worker->continuesAfter(current->index)) {
+        return false;
+    }
+    for (TrackVideo::Shown& shown : track.shown) {
+        if (shown.frame == current) {
+            shown.clip = need.clip->id;
+        }
+    }
+    s.seekIndex = need.index;
+    return true;
+}
+
 void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
     const std::vector<Need> needs = needsAt(t, frame);
     int used = -1; // hilo ya ocupado por otro clip que se ve
@@ -3730,7 +3757,9 @@ void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
             }
         } else {
             slot = slotFor(t, *need.clip, used);
-            placeSlot(t, slot, need.index, true);
+            if (!continueSlot(t, slot, need)) {
+                placeSlot(t, slot, need.index, false);
+            }
         }
         used = slot;
     }

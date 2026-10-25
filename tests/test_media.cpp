@@ -269,6 +269,29 @@ TEST_CASE("DecodeWorker prepara fotogramas y atiende busquedas", "[media]") {
     CHECK(last == 119);
 }
 
+TEST_CASE("DecodeWorker sabe si sigue justo despues de un fotograma", "[media]") {
+    TempClip clip({.frames = 60});
+    DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 4);
+    worker.seek(10);
+    REQUIRE(waitFor([&] { return worker.hasFrame(12); }));
+    auto frame = worker.takeUpTo(10);
+    REQUIRE(frame);
+    CHECK(worker.continuesAfter(10)); // el 11 está en la cola
+    CHECK_FALSE(worker.continuesAfter(30));
+    // Vaciar la cola: lo siguiente es el que se decodifica tras el último entregado.
+    std::int64_t last = 10;
+    REQUIRE(waitFor([&] {
+        if (auto f = worker.takeUpTo(1'000)) {
+            last = f->index;
+        }
+        return last >= 20;
+    }));
+    CHECK(worker.continuesAfter(last));
+    CHECK_FALSE(worker.continuesAfter(last - 5));
+    worker.seek(40);
+    CHECK_FALSE(worker.continuesAfter(last));
+}
+
 TEST_CASE("DecodeWorker informa si el archivo no se puede abrir", "[media]") {
     std::atomic<bool> failed = false;
     DecodeWorker::Callbacks callbacks;

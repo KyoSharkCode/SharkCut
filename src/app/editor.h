@@ -731,6 +731,7 @@ private:
     std::optional<Need> upcoming(std::size_t track, std::int64_t frame) const;
     int slotFor(std::size_t track, const sharkcut::Clip& clip, int avoid);
     int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
+    bool continueSlot(std::size_t track, int slot, const Need& need);
     void placeSlot(std::size_t track, int slot, std::int64_t index, bool force);
     // Coloca los hilos de la pista para `frame`. `seeking`: tras un salto (no avanzando).
     void assignTrack(std::size_t track, std::int64_t frame, bool seeking);

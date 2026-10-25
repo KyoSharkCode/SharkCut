@@ -43,6 +43,7 @@ void DecodeWorker::seek(std::int64_t index) {
         const std::int64_t previous = std::exchange(m_lastRequest, index);
         m_queue.clear();
         m_endOfStream = false;
+        m_nextIndex = index;
         auto it = m_cache.find(index);
         if (it != m_cache.end()) {
             // Desde la caché: el destino y los que le siguen sin hueco.
@@ -56,6 +57,7 @@ void DecodeWorker::seek(std::int64_t index) {
             }
             m_seekTarget = -1;
             m_resumeAt = next;
+            m_nextIndex = next;
             served = true;
         } else {
             // Un paso (o pocos) hacia atrás: guardar también los anteriores.
@@ -112,6 +114,17 @@ bool DecodeWorker::hasFrame(std::int64_t index) const {
     std::lock_guard lock(m_mutex);
     return m_seekTarget < 0 && !m_queue.empty() && m_queue.front()->index <= index &&
            index <= m_queue.back()->index;
+}
+
+bool DecodeWorker::continuesAfter(std::int64_t index) const {
+    std::lock_guard lock(m_mutex);
+    if (m_seekTarget >= 0) {
+        return false;
+    }
+    if (!m_queue.empty()) {
+        return m_queue.front()->index <= index + 1 && index + 1 <= m_queue.back()->index;
+    }
+    return !m_endOfStream && m_nextIndex == index + 1;
 }
 
 bool DecodeWorker::finished() const {
@@ -178,6 +191,7 @@ void DecodeWorker::run() {
             if (frame) {
                 auto shared = std::make_shared<const VideoFrame>(std::move(*frame));
                 remember(shared);
+                m_nextIndex = shared->index + 1;
                 m_queue.push_back(std::move(shared));
             } else {
                 m_endOfStream = true;

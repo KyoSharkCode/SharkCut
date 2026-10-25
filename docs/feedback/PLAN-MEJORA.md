@@ -108,6 +108,15 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   reiniciar solo los decodificadores y el audio de lo que cambió.
 - **Hecho cuando:** cortar con Ctrl+K o la cuchilla durante la reproducción no detiene ni
   hace saltar la imagen ni el sonido.
+- **Hecho:** `sameVideo`/`sameAudio` (editor.cpp) comparaban los clips por id, y dividir crea
+  uno nuevo: cada corte pausaba, reiniciaba todos los hilos de video y el audio y volvía
+  a buscar. Ahora comparan las pistas «como se leen» (`continuousClips` en project.h: las
+  dos mitades de un corte cuentan como el clip entero), así que dividir no reinicia nada.
+  La mitad nueva hereda el fotograma que se ve y el hilo que la decodificaba
+  (`Editor::continueSlot`, `DecodeWorker::continuesAfter`), sin buscar. Comprobado con Xvfb
+  (un aviso temporal en el registro): 4 cortes con Ctrl+K durante la reproducción, en 3
+  rondas, sin ningún reinicio ni búsqueda. Otras ediciones que sí cambian lo que se lee
+  (mover o recortar) siguen reiniciando lo necesario.
 
 ### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
 - **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden

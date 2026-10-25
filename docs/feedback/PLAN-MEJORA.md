@@ -137,6 +137,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   primera, también mientras se crea su proxy, y la lista de Medios no salta mientras se
   crean proxies.
 
+### A13 · La línea de tiempo sigue al cabezal al saltar entre cortes · FB-028 · S
+- **Problema:** al saltar entre cortes con las flechas, si el corte siguiente queda fuera
+  de la vista, la línea de tiempo no se mueve y el cabezal desaparece.
+- **Causa:** la vista solo sigue al cabezal durante la reproducción
+  (`onCurrentFrameChanged` en `LineaTiempo.qml` sale si no se está reproduciendo).
+- **Hacer:** que también lo siga cuando el cabezal se mueve con el teclado (↑/↓ entre
+  cortes, ←/→ por fotogramas, Inicio/Fin, marcadores) y quede fuera de la vista; sin
+  mover la vista si el cabezal ya se ve, ni cuando se mueve haciendo clic o arrastrando
+  en la regla.
+- **Hecho cuando:** con el zoom puesto, recorrer los cortes con ↑/↓ mantiene siempre el
+  cabezal a la vista.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -232,6 +244,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A12 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026 |
+| Alta | A1–A13 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028 |
 | Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
 | Baja | B1–B3 | FB-011, 016, 018 |

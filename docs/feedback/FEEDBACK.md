@@ -31,6 +31,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | En el plan |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
+| [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | En el plan |
 
 ---
 
@@ -408,3 +409,18 @@ Formato y estados: ver [README.md](README.md).
   proyecto cerrado): solo se vuelve a calcular. Hoy no se puede cambiar de sitio.
 - **Capturas:** [FB-027-carpetas-cache.png](capturas/FB-027-carpetas-cache.png)
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M11)
+
+<a id="fb-028"></a>
+### FB-028 · La vista no sigue al cabezal al saltar entre cortes
+- **Fecha:** 2026-10-25
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Línea de tiempo
+- **Tipo:** Usabilidad
+- **Qué dijo:** al moverse con las flechas saltando entre cortes, si el corte siguiente está
+  fuera de la vista de la línea de tiempo, que la línea de tiempo se mueva con él, para
+  saltar entre cortes con comodidad con el zoom puesto.
+- **Contexto:** navegar con ↑/↓ (ir al corte anterior/siguiente) con la línea de tiempo
+  acercada.
+- **Notas:** hoy la vista solo sigue al cabezal mientras se reproduce.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A13)

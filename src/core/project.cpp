@@ -113,6 +113,33 @@ const Clip* Project::clipAt(std::size_t track, std::int64_t frame) const {
     return nullptr;
 }
 
+const Clip* Project::nearestClip(std::size_t track, std::int64_t frame,
+                                 std::int64_t maxDistance) const {
+    if (const Clip* exact = clipAt(track, frame)) {
+        return exact;
+    }
+    if (track >= tracks.size()) {
+        return nullptr;
+    }
+    const auto& clips = tracks[track].clips;
+    // El siguiente (empieza después de `frame`) y el anterior (termina antes).
+    const auto next = std::upper_bound(clips.begin(), clips.end(), frame,
+                                       [](std::int64_t f, const Clip& c) { return f < c.end(); });
+    const Clip* best = nullptr;
+    std::int64_t bestDistance = maxDistance + 1;
+    if (next != clips.end() && next->start - frame < bestDistance) {
+        best = &*next;
+        bestDistance = next->start - frame;
+    }
+    if (next != clips.begin()) {
+        const Clip& previous = *std::prev(next);
+        if (frame - (previous.end() - 1) < bestDistance) {
+            best = &previous;
+        }
+    }
+    return best;
+}
+
 std::vector<Clip> continuousClips(const Track& track) {
     std::vector<Clip> joined;
     for (const Clip& clip : track.clips) {

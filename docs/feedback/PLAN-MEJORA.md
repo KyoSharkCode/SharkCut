@@ -129,6 +129,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   grupo de clips.
 - **Hecho cuando:** con la línea de tiempo alejada, un clic sobre clips cortos siempre
   selecciona algo o acerca el zoom, nunca se ignora.
+- **Hecho:** los bloques (`TimelineClipsModel`) ya responden. Un clic selecciona el clip que
+  hay debajo o, si cae en un hueco del bloque, el más cercano a 16 px
+  (`Project::nearestClip`, `Editor::clipNear`). Mayús/Ctrl+clic lo suma a la selección, el
+  clic derecho abre su menú y con la cuchilla se corta. Un doble clic acerca el zoom alrededor
+  del ratón hasta que ese clip mida unos 40 px. Los clips seleccionados se marcan sobre el
+  bloque, que dice cuántos clips tiene («×12», o el texto completo si cabe) y lo explica al
+  pasar el ratón. Los bloques de subtítulos funcionan igual (`Editor::captionNear`).
+  Comprobado con Xvfb con 150 clips de 4 fotogramas en 60 s.
 
 ### A12 · No se puede arrastrar un medio recién importado · FB-026 · M
 - **Problema:** tras importar con la ventana de importar, el medio nuevo no se deja

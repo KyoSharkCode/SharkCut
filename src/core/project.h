@@ -396,6 +396,9 @@ struct Project {
 
     // Clip de la pista `track` que se ve en `frame`, o nullptr si hay un hueco.
     const Clip* clipAt(std::size_t track, std::int64_t frame) const;
+    // El de `frame` o, si cae en un hueco, el más cercano a no más de `maxDistance`
+    // fotogramas (para clips que en pantalla miden menos que el ratón); nullptr si no hay.
+    const Clip* nearestClip(std::size_t track, std::int64_t frame, std::int64_t maxDistance) const;
 
     // --- Transiciones ---
     std::optional<TransitionRef> findTransition(ObjectId id) const;

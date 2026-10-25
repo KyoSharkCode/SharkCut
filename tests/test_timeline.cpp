@@ -1079,3 +1079,20 @@ TEST_CASE("Splitting a clip keeps what is played", "[timeline]") {
     REQUIRE(trimStart(p, video(p)[1].id, 260));
     CHECK(continuousClips(p.tracks[kVideoTrack]).size() == 2);
 }
+
+TEST_CASE("The nearest clip is found for tiny clips", "[timeline]") {
+    Project p;
+    const ObjectId a = addMedia(p, media("vod.mp4", 60, true, false));
+    const ObjectId first = placeClip(p, a, 100, 0, 3);
+    const ObjectId second = placeClip(p, a, 120, 0, 3);
+    REQUIRE(first != 0);
+    REQUIRE(second != 0);
+    CHECK(p.nearestClip(kVideoTrack, 101, 5)->id == first);  // encima
+    CHECK(p.nearestClip(kVideoTrack, 106, 5)->id == first);  // 4 fotogramas tras su final
+    CHECK(p.nearestClip(kVideoTrack, 117, 5)->id == second); // 3 antes del siguiente
+    CHECK(p.nearestClip(kVideoTrack, 111, 5) == nullptr);    // lejos de los dos
+    CHECK(p.nearestClip(kVideoTrack, 50, 5) == nullptr);
+    CHECK(p.nearestClip(kVideoTrack, 98, 5)->id == first);
+    CHECK(p.nearestClip(kVideoTrack, 200, 1000)->id == second);
+    CHECK(p.nearestClip(99, 100, 5) == nullptr); // pista que no existe
+}

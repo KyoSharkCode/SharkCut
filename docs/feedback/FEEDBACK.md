@@ -28,7 +28,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
-| [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
+| [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | Hecho |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
@@ -368,7 +368,7 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** por rendimiento, los clips de menos de 16 px en pantalla se dibujan juntos como
   un «bloque» (`TimelineClipsModel`, `kMinClipPixels`), y un bloque no se puede
   seleccionar. Acercando el zoom vuelven a ser clips normales.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A11)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A11)
 
 <a id="fb-026"></a>
 ### FB-026 · Un medio recién importado no se deja arrastrar a la línea de tiempo

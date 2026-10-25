@@ -590,6 +590,14 @@ public:
     Q_INVOKABLE void redo();
 
     Q_INVOKABLE void select(qint64 clipId, bool add);
+    // Con la línea de tiempo alejada, los clips (o subtítulos) diminutos se dibujan juntos
+    // en un bloque: el que hay en `frame` de la pista o el más cercano a no más de
+    // `maxDistance` fotogramas (0 = ninguno), y los datos de un clip como en la línea de
+    // tiempo (clipEntry) para su menú.
+    Q_INVOKABLE qint64 clipNear(int track, qint64 frame, qint64 maxDistance) const;
+    Q_INVOKABLE qint64 captionNear(int track, qint64 frame, qint64 maxDistance) const;
+    Q_INVOKABLE QVariantMap clipData(qint64 clipId) const;
+    Q_INVOKABLE QVariantMap captionData(qint64 id) const; // {start, length}
     Q_INVOKABLE void clearSelection();
     // Cuadro de selección de la línea de tiempo: los clips de las pistas `tracks` (índices
     // de tracks) que tocan [from, to); si no hay ninguna de esas, los subtítulos de las

@@ -2998,6 +2998,46 @@ void Editor::pruneTabs() {
     }
 }
 
+qint64 Editor::clipNear(int track, qint64 frame, qint64 maxDistance) const {
+    if (track < 0) {
+        return 0;
+    }
+    const Clip* clip = project().nearestClip(static_cast<std::size_t>(track), frame, maxDistance);
+    return clip ? static_cast<qint64>(clip->id) : 0;
+}
+
+qint64 Editor::captionNear(int track, qint64 frame, qint64 maxDistance) const {
+    const Project& p = project();
+    if (track < 0 || static_cast<std::size_t>(track) >= p.captionTracks.size()) {
+        return 0;
+    }
+    ObjectId best = 0;
+    std::int64_t bestDistance = maxDistance + 1;
+    for (const sharkcut::Caption& c : p.captionTracks[static_cast<std::size_t>(track)].captions) {
+        const std::int64_t distance = frame < c.start    ? c.start - frame
+                                      : frame >= c.end() ? frame - (c.end() - 1)
+                                                         : 0;
+        if (distance < bestDistance) {
+            best = c.id;
+            bestDistance = distance;
+        }
+    }
+    return static_cast<qint64>(best);
+}
+
+QVariantMap Editor::clipData(qint64 clipId) const {
+    const auto ref = project().findClip(static_cast<ObjectId>(clipId));
+    return ref ? clipEntry(ref->track, project().tracks[ref->track].clips[ref->index])
+               : QVariantMap{};
+}
+
+QVariantMap Editor::captionData(qint64 id) const {
+    const sharkcut::Caption* c = project().caption(static_cast<ObjectId>(id));
+    return c ? QVariantMap{{QStringLiteral("start"), static_cast<qint64>(c->start)},
+                           {QStringLiteral("length"), static_cast<qint64>(c->length)}}
+             : QVariantMap{};
+}
+
 void Editor::select(qint64 clipId, bool add) {
     const auto id = static_cast<ObjectId>(clipId);
     if (!project().clip(id)) {

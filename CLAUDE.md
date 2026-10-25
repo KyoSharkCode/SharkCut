@@ -1,7 +1,9 @@
 # SharkCut
 
-Editor de video nativo de escritorio para Windows, de uso personal (KyoSumiVT).
-Pensado para VODs de Twitch largos (40+ min) y para shorts/clips.
+Editor de video nativo de escritorio para Windows, gratuito y libre (GPL 3.0), para
+creadores de contenido; lo desarrolla KyoSumiVT. Pensado para VODs largos de stream
+(40+ min) y para shorts/clips. Los textos públicos lo presentan como una app para la
+comunidad, sin nombrar productos de terceros.
 El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes.
 
 ## Stack

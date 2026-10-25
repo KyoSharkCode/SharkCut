@@ -196,6 +196,16 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** doble clic en la zona vacía del panel Medios abre el diálogo de importar (el
   doble clic sobre una carpeta o secuencia sigue abriéndola).
 
+### M11 · Caché en una carpeta común y limpieza · FB-027 · M
+- **Problema:** cada proyecto deja una carpeta `<nombre>.sharkp.cache` a su lado, y la
+  carpeta de proyectos se llena de carpetas que no se sabe para qué son.
+- **Hacer:** guardar la caché (ondas y proxies) en una carpeta común, como la caché de
+  medios de Premiere (por defecto en los datos de la app, cambiable en ajustes), con una
+  subcarpeta por proyecto; botón para ver cuánto ocupa y limpiarla. Seguir leyendo las
+  carpetas `.sharkp.cache` que ya existen.
+- **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
+  mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -223,5 +233,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A12 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026 |
-| Media | M1–M10 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024 |
+| Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
 | Baja | B1–B3 | FB-011, 016, 018 |

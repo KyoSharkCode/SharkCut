@@ -30,6 +30,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | En el plan |
+| [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 
 ---
 
@@ -389,3 +390,21 @@ Formato y estados: ver [README.md](README.md).
   arrastre se corta porque el elemento se destruye. Al reabrir la app el proxy ya
   estaba hecho, por eso todo iba bien. Falta confirmar que «Proxies» estaba activado.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A12)
+
+<a id="fb-027"></a>
+### FB-027 · ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar?
+- **Fecha:** 2026-10-25
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Proyectos
+- **Tipo:** Pregunta (con una propuesta)
+- **Qué dijo:** al guardar un proyecto se crean carpetas `.cache`; ¿qué función tienen? ¿Se
+  puede evitar que cree tantos archivos?
+- **Contexto:** diálogo «Guardar proyecto» en la carpeta de proyectos: junto a cada
+  `.sharkp` hay una carpeta `<nombre>.sharkp.cache`.
+- **Notas:** la carpeta guarda archivos que la app puede volver a generar: las ondas de
+  audio (`ondas/`) y los proxies (`proxies/`). Así no se recalculan cada vez que se abre el
+  proyecto y nunca se escribe junto a los medios originales. Borrarla es seguro (con el
+  proyecto cerrado): solo se vuelve a calcular. Hoy no se puede cambiar de sitio.
+- **Capturas:** [FB-027-carpetas-cache.png](capturas/FB-027-carpetas-cache.png)
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M11)

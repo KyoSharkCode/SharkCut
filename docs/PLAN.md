@@ -6,33 +6,40 @@
 >
 > Nombre del proyecto: **SharkCut** (nombre de trabajo original: KyoEditor).
 > Revisión 2: se cambia de Electron (web) a una **aplicación nativa en C++**.
+> Revisión 3 (octubre de 2026): deja de ser una herramienta personal y pasa a ser una
+> app gratuita y libre para la comunidad de creadores.
 
 ---
 
 ## 1. Visión
 
-SharkCut es un **editor de video nativo de escritorio para Windows**, de uso
-personal, pensado para el flujo de trabajo de KyoSumiVT:
+SharkCut es un **editor de video nativo de escritorio para Windows, gratuito y libre**
+(GPL 3.0), para **creadores de contenido**: streamers, VTubers y cualquiera que edite
+VODs largos y saque de ellos clips y shorts.
 
-- **VODs de Twitch** de 40 minutos o más (edición larga, muchos cortes).
+Nació como herramienta personal de KyoSumiVT, para sustituir Premiere Pro + Premiere
+Composer en su flujo de trabajo. En octubre de 2026 el enfoque cambia a la comunidad:
+muchos creadores dependen de editores de pago con precios altos y condiciones abusivas,
+y SharkCut quiere ser una alternativa gratuita, sin suscripciones ni recogida de datos.
+Casos de uso de referencia:
+
+- **VODs de stream** de 40 minutos o más (edición larga, muchos cortes).
 - Clips, shorts, TikToks y anuncios.
-- Contenido de stream con la marca de Kyo.
+- Contenido de stream con la identidad de cada creador (la app no lleva plantillas de
+  ninguna marca concreta).
 
-El objetivo es **sustituir por completo el uso real de Premiere Pro +
-Premiere Composer**, con una arquitectura de editor profesional (como
-DaVinci Resolve o Premiere), no un editor web empaquetado:
+Con una arquitectura de editor profesional (como DaVinci Resolve o Premiere), no un
+editor web empaquetado:
 
 - Línea de tiempo multipista fluida incluso con proyectos de varias horas.
 - Decodificación, composición y codificación en la GPU, sin copias
   innecesarias de píxeles.
 - Transiciones dinámicas propias (Zoom, Pan, Rotate, Shake & Distort…)
   arrastrables entre clips, con efectos de sonido sincronizados.
-- Textos, títulos y overlays con la marca Marea Nocturna.
+- Textos, títulos y overlays, sin plantillas de ninguna marca concreta.
 - Exportación rápida por hardware a MP4 en 16:9, 9:16 y 1:1.
 
-**Horizonte:** proyecto a largo plazo. La suscripción de Premiere vence en
-aproximadamente un año; es una fecha de referencia, no un límite. Se prioriza
-una base sólida sobre la rapidez.
+**Horizonte:** proyecto a largo plazo. Se prioriza una base sólida sobre la rapidez.
 
 ---
 
@@ -447,7 +454,7 @@ echar de menos Premiere.
 | Sincronía audio/video | Audio como reloj maestro; tiempos enteros y racionales |
 | Video con fotogramas variables (OBS) | Detectarlo al importar y ofrecer copia a fotogramas constantes |
 | Pruebas de GPU en la nube (sin Windows ni NVIDIA) | Tests del núcleo en Linux; pruebas de GPU en el PC de Kyo y en CI de Windows |
-| Licencias: Qt (LGPLv3) y FFmpeg (LGPL/GPL) | Enlace dinámico; uso personal; documentar en `LICENSES/` |
+| Licencias: Qt (LGPLv3) y FFmpeg (LGPL/GPL) | Enlace dinámico; SharkCut bajo GPL 3.0; textos en `licenses/` y código de FFmpeg con cada versión |
 | Licencias de sonidos | Registro obligatorio en `LICENCIAS.md` |
 | Alcance que crece sin control | Respetar las fases; nada de una fase posterior antes de cerrar la actual |
 

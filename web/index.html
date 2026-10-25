@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SharkCut · Descargar</title>
-<meta name="description" content="SharkCut: editor de video gratuito para Windows, para VODs largos y shorts. Hecho por KyoSumiVT.">
+<meta name="description" content="SharkCut: editor de video gratuito para Windows, para creadores de contenido: VODs largos y shorts.">
 <link rel="icon" href="icono.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -89,8 +89,16 @@
   .novedades { margin-top: 22px; font-size: 14px; line-height: 1.6; color: var(--espuma); }
   .novedades h1, .novedades h2, .novedades h3 { all: unset; display: block; font-family: "Fredoka", sans-serif;
     font-weight: 700; color: var(--perla); margin: 10px 0 4px; font-size: 16px; }
-  footer { text-align: center; margin-top: 56px; font-size: 13px; color: var(--espuma); }
+  .capturas { display: grid; gap: 26px; }
+  .capturas img { width: 100%; border-radius: 18px;
+    box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--abisal), 0 8px 0 8px var(--abisal); }
+  .requisitos { margin: 0; padding-left: 20px; }
+  .apoyo { text-align: center; }
+  .apoyo p { color: var(--espuma); font-size: 15px; margin: 0 0 22px; }
+  .boton.oro { background: var(--oro); }
+  footer { text-align: center; margin-top: 56px; font-size: 13px; line-height: 1.7; color: var(--espuma); }
   footer a { color: var(--bioluz); }
+  .legal { max-width: 640px; margin: 10px auto 0; font-size: 12px; opacity: .85; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
   @media (max-width: 600px) { .luna { top: 12px; right: 12px; width: 44px; height: 44px; } }
 </style>
@@ -117,7 +125,7 @@
     <img src="icono.png" alt="">
     <h1>SharkCut</h1>
   </div>
-  <p class="lema">El editor de video de KyoSumiVT: VODs largos y shorts, gratis para Windows 🦈🌊</p>
+  <p class="lema">El editor de video para creadores: VODs largos y shorts, gratis para Windows 🦈🌊</p>
 
   <section class="tarjeta">
     <div class="descarga">
@@ -142,10 +150,29 @@
   <div class="rejilla">
     <div class="funcion"><h3>Hecho para VODs</h3><p>Proyectos de horas con fluidez: proxies, línea de tiempo rápida y cortes con rizo.</p></div>
     <div class="funcion"><h3>Shorts en vertical</h3><p>Lienzos 9:16, 16:9 y 1:1, reencuadre en el visor y exportación por la GPU.</p></div>
-    <div class="funcion"><h3>Subtítulos automáticos</h3><p>Transcribe en tu PC, sin internet, y divide los subtítulos a tu gusto, con estilos.</p></div>
+    <div class="funcion"><h3>Subtítulos automáticos</h3><p>Transcribe en tu PC, sin subir tu audio a ningún sitio, y divide los subtítulos a tu gusto, con estilos.</p></div>
     <div class="funcion"><h3>Transiciones con sonido</h3><p>Zoom, giro, paneo y temblor como clips que afectan a todo lo de debajo, con su whoosh.</p></div>
     <div class="funcion"><h3>Efectos y keyframes</h3><p>Pantalla verde, desenfoque, esquinas, sombra y resplandor, todo animable.</p></div>
     <div class="funcion"><h3>Punto de anclaje</h3><p>Pega un texto o un sticker a algo que se mueve y lo sigue solo.</p></div>
+    <div class="funcion"><h3>Rápido por la GPU</h3><p>Decodifica y exporta con tu tarjeta gráfica (NVDEC y NVENC), en H.264 o H.265.</p></div>
+    <div class="funcion"><h3>Tus archivos, intactos</h3><p>Edición no destructiva: nunca modifica tus videos originales, y tus videos no salen de tu PC.</p></div>
+  </div>
+
+  <!-- Capturas: añadir las imágenes en web/capturas/ y quitar «hidden». -->
+  <section id="capturas" hidden>
+    <h2>Así se ve 📸</h2>
+    <div class="capturas">
+      <!-- <img src="capturas/linea-de-tiempo.png" alt="La línea de tiempo de SharkCut con un VOD"> -->
+    </div>
+  </section>
+
+  <h2>Requisitos 🖥️</h2>
+  <div class="nota">
+    <ul class="requisitos">
+      <li><b>Windows 10 u 11</b> de 64 bits.</li>
+      <li><b>Recomendado:</b> una tarjeta gráfica NVIDIA, para decodificar y exportar por la GPU. Sin ella, funciona por el procesador (más lento).</li>
+      <li>Espacio en disco para la caché de cada proyecto (proxies, miniaturas y ondas de audio).</li>
+    </ul>
   </div>
 
   <h2>Antes de instalar 💙</h2>
@@ -153,12 +180,30 @@
     <b>Windows puede avisar</b> («Windows protegió tu PC») porque SharkCut aún no tiene firma digital:
     pulsa <b>Más información → Ejecutar de todas formas</b>.<br>
     <b>Se actualiza solo:</b> al abrirlo mira si hay una versión nueva y te la ofrece.<br>
-    <b>Funciona mejor</b> con una tarjeta NVIDIA (decodifica y exporta por la GPU); sin ella, va por el procesador.<br>
     Es software libre: <a style="color:var(--bioluz)" href="https://github.com/KyoSharkCode/SharkCut">código en GitHub</a>
     y las licencias de sus componentes van en la carpeta <i>licenses</i>.
   </div>
 
-  <footer>Hecho con 💙 por <b>@KyoSumiVT</b> · <a href="https://github.com/KyoSharkCode/SharkCut/issues">¿Algo falla? Cuéntanoslo</a></footer>
+  <!-- Se muestra solo si ENLACE_KOFI (en el script de abajo) tiene una dirección. -->
+  <section class="apoyo" id="apoyo" hidden>
+    <h2>Apoya SharkCut 💛</h2>
+    <p>SharkCut es gratis y siempre lo será. Si te ayuda, puedes invitarme a un café.</p>
+    <a class="boton oro" id="botonKofi" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0A1030" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>
+      <span>Apoya SharkCut</span>
+    </a>
+  </section>
+
+  <footer>
+    Hecho con 💙 por <b>@KyoSumiVT</b> · <a href="https://github.com/KyoSharkCode/SharkCut/issues">¿Algo falla? Cuéntanoslo</a><br>
+    <a href="privacidad.html">Privacidad</a> ·
+    <a href="firma.html">Firma del código</a> ·
+    <a href="https://github.com/KyoSharkCode/SharkCut/blob/main/licenses/LEEME.md">Licencias</a> ·
+    <a href="https://github.com/KyoSharkCode/SharkCut/blob/main/MARCA.md">Marca</a>
+    <p class="legal">© 2026 KyoSumiVT. SharkCut es software libre bajo la licencia GPL 3.0.
+      El nombre «SharkCut», el logotipo y el icono no están cubiertos por esa licencia:
+      una versión modificada debe llevar otro nombre y otro icono.</p>
+  </footer>
 </main>
 
 <script>
@@ -175,8 +220,16 @@
     cielo.appendChild(e);
   }
 
-  // La última versión publicada (GitHub Releases): su instalador, su .zip y sus novedades.
   const $ = (id) => document.getElementById(id);
+
+  // Página de Ko-fi. Mientras esté vacía, la sección «Apoya SharkCut» no se muestra.
+  const ENLACE_KOFI = "";
+  if (ENLACE_KOFI) {
+    $("botonKofi").href = ENLACE_KOFI;
+    $("apoyo").hidden = false;
+  }
+
+  // La última versión publicada (GitHub Releases): su instalador, su .zip y sus novedades.
   const megas = (bytes) => (bytes / 1048576).toFixed(0) + " MB";
   const textoSeguro = (texto) => texto.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   // Markdown sencillo de las novedades (títulos, listas, negritas).

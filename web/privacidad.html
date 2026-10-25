@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SharkCut · Privacidad</title>
+<meta name="description" content="Política de privacidad de SharkCut: no recoge datos, no tiene telemetría y tus videos no salen de tu equipo.">
+<link rel="icon" href="icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&family=Fredoka:wght@600;700&family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="texto.css">
+</head>
+<body>
+<!-- El mismo texto que PRIVACIDAD.md en el repositorio: cambiar los dos a la vez. -->
+<main>
+  <a class="volver" href="./"><img src="icono.png" alt=""> SharkCut</a>
+  <h1>Política de privacidad</h1>
+  <p class="fecha">Última actualización: 23 de octubre de 2026</p>
+
+  <div class="tarjeta">
+    <h2>En resumen</h2>
+    <p class="resumen"><b>SharkCut no recoge datos tuyos.</b> No tiene cuentas, publicidad,
+      estadísticas de uso ni telemetría. Tus videos, proyectos y registros se quedan en tu equipo.</p>
+
+    <h2>Lo que SharkCut no hace</h2>
+    <ul>
+      <li>No envía tus videos, audios, imágenes, proyectos ni subtítulos a ningún sitio. La edición,
+        la exportación y la transcripción de subtítulos se hacen en tu equipo.</li>
+      <li>No recoge estadísticas de uso, informes de fallos ni identificadores de tu equipo.</li>
+      <li>No usa cookies, publicidad ni servicios de análisis.</li>
+    </ul>
+
+    <h2>Cuándo se conecta a internet</h2>
+    <p>SharkCut solo se conecta en estos casos:</p>
+    <ol>
+      <li><b>Buscar actualizaciones.</b> Al abrirse, pregunta a GitHub (<code>api.github.com</code>)
+        cuál es la última versión publicada. Puedes desactivarlo en la pestaña Proyectos («Buscar al
+        abrir SharkCut») y buscarlas a mano con «Buscar actualizaciones». Si aceptas una
+        actualización, el instalador se descarga de GitHub.</li>
+      <li><b>Descargar el modelo de subtítulos.</b> La primera vez que creas subtítulos automáticos,
+        SharkCut descarga el modelo de reconocimiento de voz de Hugging Face
+        (<code>huggingface.co</code>). Solo se descarga el modelo: tu audio no sale de tu equipo.</li>
+      <li><b>Abrir enlaces.</b> Si pulsas un enlace (GitHub, esta página, las licencias…), se abre en
+        tu navegador.</li>
+    </ol>
+    <p>En esas conexiones, GitHub y Hugging Face reciben lo que recibe cualquier página web que
+      visitas: tu dirección IP y datos técnicos de la petición (en la búsqueda de actualizaciones,
+      también la versión de SharkCut que usas). Lo que hagan con esos datos se rige por sus propias
+      políticas de privacidad:
+      <a href="https://docs.github.com/es/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a> y
+      <a href="https://huggingface.co/privacy">Hugging Face</a>.</p>
+
+    <h2>Lo que se guarda en tu equipo</h2>
+    <ul>
+      <li><b>Registros de cada sesión</b> (las últimas 8) y, si SharkCut se cierra por un fallo, un
+        volcado del fallo (<code>ultimo-cierre.dmp</code>), en la carpeta de datos de la app. Sirven
+        para investigar errores y <b>nunca se envían solos</b>: solo los recibe alguien si tú decides
+        mandarlos (por ejemplo, adjuntándolos a un <i>issue</i> de GitHub). Pueden incluir las rutas
+        de los archivos que abriste.</li>
+      <li><b>Copias de recuperación</b> de los proyectos sin guardar, los ajustes de la app y la lista
+        de proyectos recientes.</li>
+      <li><b>Cachés</b> de cada proyecto (proxies, miniaturas y ondas de audio), junto al archivo del
+        proyecto.</li>
+    </ul>
+    <p>Para borrarlo todo, desinstala SharkCut y borra su carpeta de datos y las carpetas
+      <code>.sharkp.cache</code> de tus proyectos.</p>
+
+    <h2>Esta página</h2>
+    <p>La página de descarga está alojada en GitHub Pages, consulta la última versión a GitHub y carga
+      sus tipografías de Google Fonts. No usa cookies ni estadísticas propias.</p>
+
+    <h2>Cambios y contacto</h2>
+    <p>Si esta política cambia, se actualizará aquí, con su fecha. Para cualquier duda, abre un
+      <i>issue</i> en <a href="https://github.com/KyoSharkCode/SharkCut/issues">GitHub</a>.</p>
+  </div>
+
+  <footer>© 2026 KyoSumiVT · <a href="./">Descargar SharkCut</a> · <a href="firma.html">Firma del código</a></footer>
+</main>
+</body>
+</html>

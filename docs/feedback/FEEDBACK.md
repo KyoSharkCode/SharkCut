@@ -31,7 +31,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
-| [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | En el plan |
+| [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
 
 ---
 
@@ -423,4 +423,4 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** navegar con ↑/↓ (ir al corte anterior/siguiente) con la línea de tiempo
   acercada.
 - **Notas:** hoy la vista solo sigue al cabezal mientras se reproduce.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A13)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A13)

@@ -156,6 +156,11 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   en la regla.
 - **Hecho cuando:** con el zoom puesto, recorrer los cortes con ↑/↓ mantiene siempre el
   cabezal a la vista.
+- **Hecho:** `LineaTiempo.mostrarCabezal()` centra la vista en el cabezal si quedó fuera; lo
+  llaman los atajos (←/→, Mayús+←/→, ↑/↓, Inicio/Fin, Mayús+M y Ctrl+Mayús+M) y los
+  botones de transporte del visor (`ventana.navegar` en Main.qml). Si el cabezal ya se
+  ve, la vista no se mueve; los clics y arrastres en la regla no la llaman. Comprobado con
+  Xvfb: con el zoom puesto, ↓ repetido mantiene siempre el cabezal a la vista.
 
 ---
 

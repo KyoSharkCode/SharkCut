@@ -274,6 +274,18 @@ Rectangle {
     }
 
     property bool seguirCabezal: true
+
+    // Tras mover el cabezal con el teclado (o con los botones del visor): si queda fuera
+    // de la vista, se centra en él. Al hacer clic o arrastrar en la regla no se llama.
+    function mostrarCabezal() {
+        Qt.callLater(() => {
+            const x = raiz.editor.currentFrame * raiz.escala
+            if (x >= vista.contentX && x <= vista.contentX + vista.width - 30)
+                return
+            vista.contentX = Math.max(0, Math.min(x - vista.width / 2,
+                                                  vista.contentWidth - vista.width))
+        })
+    }
     Connections {
         target: raiz.editor
         function onPlayingChanged() {

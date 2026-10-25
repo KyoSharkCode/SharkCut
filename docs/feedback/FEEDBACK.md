@@ -26,6 +26,12 @@ Formato y estados: ver [README.md](README.md).
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
+| [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | En el plan |
+| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
+| [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | En el plan |
+| [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | En el plan |
+| [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
+| [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | En el plan |
 
 ---
 
@@ -319,3 +325,102 @@ Formato y estados: ver [README.md](README.md).
   que se observa. En SharkCut ya se puede: Exportar → resolución 133 % (2560×1440 desde un
   lienzo 1080p), calidad «Alta» (~28 Mbps).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+
+<a id="fb-023"></a>
+### FB-023 · Tirón al cortar durante la reproducción
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Línea de tiempo
+- **Tipo:** Error
+- **Qué dijo:** cuando se hace un corte y el video se está reproduciendo, se genera un
+  pequeño «lagazo».
+- **Contexto:** cortar con la reproducción en marcha.
+- **Notas:** en el código, dividir cambia los clips y `Editor::onProjectChanged` pausa,
+  reinicia los hilos de video y el audio, vuelve a buscar y reanuda; eso explica el tirón.
+  Dividir no cambia lo que se ve ni se oye, así que se podría evitar el reinicio.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A10)
+
+<a id="fb-024"></a>
+### FB-024 · Doble clic en Medios abre Importar
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** al hacer doble clic en Medios, donde está toda la media, que se abra la
+  ventana de importar sin tener que pulsar el botón Importar.
+- **Contexto:** panel Medios (PanelBiblioteca).
+- **Notas:** hoy el doble clic solo abre carpetas y secuencias; en la zona vacía no hace
+  nada. Es lo que hace Premiere.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
+
+<a id="fb-025"></a>
+### FB-025 · Clips muy cortos no se seleccionan con la línea de tiempo alejada
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Línea de tiempo
+- **Tipo:** Error
+- **Qué dijo:** a veces, si los cortes son muy pequeños y la línea de tiempo está muy
+  alejada, al intentar seleccionarlos no se consigue, no lo registra.
+- **Contexto:** línea de tiempo con poco zoom y muchos cortes cortos.
+- **Notas:** por rendimiento, los clips de menos de 16 px en pantalla se dibujan juntos como
+  un «bloque» (`TimelineClipsModel`, `kMinClipPixels`), y un bloque no se puede
+  seleccionar. Acercando el zoom vuelven a ser clips normales.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A11)
+
+<a id="fb-026"></a>
+### FB-026 · Un medio recién importado no se deja arrastrar a la línea de tiempo
+- **Fecha:** 2026-10-23
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Medios
+- **Tipo:** Error
+- **Qué dijo:** importó un archivo nuevo e intentó arrastrarlo a la línea de tiempo, pero no
+  la dejó; es como si al cerrar la ventana de importar la app se hubiera quedado bugueada.
+- **Contexto:** importar con la ventana de importar y arrastrar el medio enseguida.
+- **Detalles (Kyo):** video de unos 3 minutos; se cerró el diálogo con el botón «Abrir».
+  No funcionaba nada del panel Medios: al desplazarse, la lista volvía al principio. Se
+  arregló guardando, cerrando y abriendo la app.
+- **Notas:** causa probable (sin confirmar en Windows): desde la 0.1.1, con «Proxies»
+  activado, el proxy de un medio nuevo se crea solo (`ProxyManager::setAutoCreate`).
+  Mientras se crea, cada 30 fotogramas (`writeProxy`) se avisa del progreso
+  (`ProxyManager::changed` → `Editor::libraryChanged`), y eso vuelve a construir toda la
+  lista de Medios varias veces por segundo: el desplazamiento vuelve arriba y el
+  arrastre se corta porque el elemento se destruye. Al reabrir la app el proxy ya
+  estaba hecho, por eso todo iba bien. Falta confirmar que «Proxies» estaba activado.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A12)
+
+<a id="fb-027"></a>
+### FB-027 · ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar?
+- **Fecha:** 2026-10-25
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Proyectos
+- **Tipo:** Pregunta (con una propuesta)
+- **Qué dijo:** al guardar un proyecto se crean carpetas `.cache`; ¿qué función tienen? ¿Se
+  puede evitar que cree tantos archivos?
+- **Contexto:** diálogo «Guardar proyecto» en la carpeta de proyectos: junto a cada
+  `.sharkp` hay una carpeta `<nombre>.sharkp.cache`.
+- **Notas:** la carpeta guarda archivos que la app puede volver a generar: las ondas de
+  audio (`ondas/`) y los proxies (`proxies/`). Así no se recalculan cada vez que se abre el
+  proyecto y nunca se escribe junto a los medios originales. Borrarla es seguro (con el
+  proyecto cerrado): solo se vuelve a calcular. Hoy no se puede cambiar de sitio.
+- **Capturas:** [FB-027-carpetas-cache.png](capturas/FB-027-carpetas-cache.png)
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M11)
+
+<a id="fb-028"></a>
+### FB-028 · La vista no sigue al cabezal al saltar entre cortes
+- **Fecha:** 2026-10-25
+- **Quién:** Kyo
+- **Versión:** 0.1.1
+- **Área:** Línea de tiempo
+- **Tipo:** Usabilidad
+- **Qué dijo:** al moverse con las flechas saltando entre cortes, si el corte siguiente está
+  fuera de la vista de la línea de tiempo, que la línea de tiempo se mueva con él, para
+  saltar entre cortes con comodidad con el zoom puesto.
+- **Contexto:** navegar con ↑/↓ (ir al corte anterior/siguiente) con la línea de tiempo
+  acercada.
+- **Notas:** hoy la vista solo sigue al cabezal mientras se reproduce.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A13)

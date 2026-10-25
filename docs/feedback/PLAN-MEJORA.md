@@ -98,6 +98,57 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** que el selector de modelo de DialogoSubtitulos diga «descargado» si el
   archivo ya está en la carpeta de modelos, y «descarga de ~X MB» solo si no.
 
+### A10 · Cortar sin tirón mientras se reproduce · FB-023 · M
+- **Problema:** al cortar con la reproducción en marcha se nota un pequeño tirón.
+- **Causa probable:** al dividir cambian los clips, y `Editor::onProjectChanged` lo trata
+  como un cambio de lo que hay que leer: pausa, reinicia todos los hilos de video
+  (`resetVideoSlots`), reinicia el audio (`restartAudio`), vuelve a buscar y reanuda.
+- **Hacer:** reconocer las ediciones que no cambian lo que se ve ni lo que se oye (dividir
+  un clip deja el mismo medio en los mismos fotogramas) y no reiniciar nada; en el resto,
+  reiniciar solo los decodificadores y el audio de lo que cambió.
+- **Hecho cuando:** cortar con Ctrl+K o la cuchilla durante la reproducción no detiene ni
+  hace saltar la imagen ni el sonido.
+
+### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
+- **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden
+  seleccionar.
+- **Causa probable:** por rendimiento, `TimelineClipsModel` junta los clips de menos de
+  16 px (`kMinClipPixels`) en un «bloque», y los bloques no se pueden seleccionar ni
+  arrastrar.
+- **Hacer:** que un clic en un bloque haga algo útil (seleccionar el clip que hay bajo el
+  ratón, o todos los del bloque, o acercar el zoom a esa zona) y que se vea que es un
+  grupo de clips.
+- **Hecho cuando:** con la línea de tiempo alejada, un clic sobre clips cortos siempre
+  selecciona algo o acerca el zoom, nunca se ignora.
+
+### A12 · No se puede arrastrar un medio recién importado · FB-026 · M
+- **Problema:** tras importar con la ventana de importar, el medio nuevo no se deja
+  arrastrar a la línea de tiempo; la app parece quedarse atascada.
+- **Causa probable:** con «Proxies» activado, la creación automática del proxy del medio
+  nuevo avisa del progreso cada 30 fotogramas, y cada aviso reconstruye toda la lista de
+  Medios (`ProxyManager::changed` → `Editor::libraryChanged` → `mediaItems`): el panel se
+  vuelve inutilizable (el desplazamiento vuelve arriba, el arrastre se corta) hasta que
+  el proxy termina.
+- **Hacer:** que el progreso de un proxy actualice solo su etiqueta («PROXY 40 %») sin
+  reconstruir la lista (señal o modelo aparte), y limitar los avisos (p. ej. como mucho
+  unas pocas veces por segundo). Confirmar antes en Windows: importar un video con
+  «Proxies» activado e intentar desplazarse y arrastrar mientras se crea.
+- **Hecho cuando:** un medio recién importado se arrastra a la línea de tiempo a la
+  primera, también mientras se crea su proxy, y la lista de Medios no salta mientras se
+  crean proxies.
+
+### A13 · La línea de tiempo sigue al cabezal al saltar entre cortes · FB-028 · S
+- **Problema:** al saltar entre cortes con las flechas, si el corte siguiente queda fuera
+  de la vista, la línea de tiempo no se mueve y el cabezal desaparece.
+- **Causa:** la vista solo sigue al cabezal durante la reproducción
+  (`onCurrentFrameChanged` en `LineaTiempo.qml` sale si no se está reproduciendo).
+- **Hacer:** que también lo siga cuando el cabezal se mueve con el teclado (↑/↓ entre
+  cortes, ←/→ por fotogramas, Inicio/Fin, marcadores) y quede fuera de la vista; sin
+  mover la vista si el cabezal ya se ve, ni cuando se mueve haciendo clic o arrastrando
+  en la regla.
+- **Hecho cuando:** con el zoom puesto, recorrer los cortes con ↑/↓ mantiene siempre el
+  cabezal a la vista.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -153,6 +204,20 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
 
+### M10 · Doble clic en Medios para importar · FB-024 · S
+- **Hacer:** doble clic en la zona vacía del panel Medios abre el diálogo de importar (el
+  doble clic sobre una carpeta o secuencia sigue abriéndola).
+
+### M11 · Caché en una carpeta común y limpieza · FB-027 · M
+- **Problema:** cada proyecto deja una carpeta `<nombre>.sharkp.cache` a su lado, y la
+  carpeta de proyectos se llena de carpetas que no se sabe para qué son.
+- **Hacer:** guardar la caché (ondas y proxies) en una carpeta común, como la caché de
+  medios de Premiere (por defecto en los datos de la app, cambiable en ajustes), con una
+  subcarpeta por proyecto; botón para ver cuánto ocupa y limpiarla. Seguir leyendo las
+  carpetas `.sharkp.cache` que ya existen.
+- **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
+  mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -179,6 +244,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A9 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020 |
-| Media | M1–M9 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022 |
+| Alta | A1–A13 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028 |
+| Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
 | Baja | B1–B3 | FB-011, 016, 018 |

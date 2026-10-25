@@ -275,25 +275,32 @@ Window {
             editor.importPaths(archivos, 0)
     }
 
+    // Mover el cabezal con el teclado o los botones del visor: la línea de tiempo lo
+    // mantiene a la vista.
+    function navegar(mover) {
+        mover()
+        lineaTiempo.mostrarCabezal()
+    }
+
     // Atajos de teclado (estilo Premiere)
     readonly property bool conSecuencia: !enProyectos && editor.hasSequence
     Shortcut { sequence: "Space"; enabled: ventana.conSecuencia; onActivated: editor.togglePlay() }
-    Shortcut { sequence: "Left"; enabled: ventana.conSecuencia; onActivated: editor.step(-1) }
-    Shortcut { sequence: "Right"; enabled: ventana.conSecuencia; onActivated: editor.step(1) }
-    Shortcut { sequence: "Shift+Left"; enabled: ventana.conSecuencia; onActivated: editor.step(-10) }
-    Shortcut { sequence: "Shift+Right"; enabled: ventana.conSecuencia; onActivated: editor.step(10) }
+    Shortcut { sequence: "Left"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(-1)) }
+    Shortcut { sequence: "Right"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(1)) }
+    Shortcut { sequence: "Shift+Left"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(-10)) }
+    Shortcut { sequence: "Shift+Right"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(10)) }
     // Flechas arriba/abajo (como en Premiere): al corte anterior / siguiente.
-    Shortcut { sequence: "Up"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(-1) }
-    Shortcut { sequence: "Down"; enabled: ventana.conSecuencia; onActivated: editor.goToEdit(1) }
+    Shortcut { sequence: "Up"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToEdit(-1)) }
+    Shortcut { sequence: "Down"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToEdit(1)) }
     Shortcut {
         sequence: "Home"
         enabled: ventana.conSecuencia
-        onActivated: { editor.pause(); editor.seek(0) }
+        onActivated: ventana.navegar(() => { editor.pause(); editor.seek(0) })
     }
     Shortcut {
         sequence: "End"
         enabled: ventana.conSecuencia
-        onActivated: { editor.pause(); editor.seek(editor.frameCount - 1) }
+        onActivated: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount - 1) })
     }
     Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrirProyecto.open() }
     Shortcut { sequences: [StandardKey.New]; onActivated: dialogoNuevo.open() }
@@ -311,8 +318,8 @@ Window {
     Shortcut { sequence: "L"; enabled: ventana.conSecuencia; onActivated: editor.shuttle(1) }
     // Marcadores: M pone uno en el cabezal; Mayús+M va al siguiente y Ctrl+Mayús+M al anterior.
     Shortcut { sequence: "M"; enabled: ventana.conSecuencia; onActivated: editor.addMarkerAtPlayhead() }
-    Shortcut { sequence: "Shift+M"; enabled: ventana.conSecuencia; onActivated: editor.goToMarker(1) }
-    Shortcut { sequence: "Ctrl+Shift+M"; enabled: ventana.conSecuencia; onActivated: editor.goToMarker(-1) }
+    Shortcut { sequence: "Shift+M"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToMarker(1)) }
+    Shortcut { sequence: "Ctrl+Shift+M"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToMarker(-1)) }
     Shortcut { sequence: "1"; onActivated: ventana.irA("proyectos") }
     Shortcut { sequence: "2"; onActivated: ventana.irA("editor") }
     Shortcut { sequence: "3"; onActivated: ventana.irA("exportar") }
@@ -588,8 +595,8 @@ Window {
                                 opacity: enabled ? 1 : 0.4
                                 spacing: 6
 
-                                BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: { editor.pause(); editor.seek(0) } }
-                                BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: editor.step(-1) }
+                                BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: ventana.navegar(() => { editor.pause(); editor.seek(0) }) }
+                                BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: ventana.navegar(() => editor.step(-1)) }
                                 BotonIcono {
                                     icono: editor.playing ? "pausa" : "reproducir"
                                     ayuda: "Reproducir / pausa (Espacio)"
@@ -597,11 +604,11 @@ Window {
                                     implicitWidth: 52
                                     onPulsado: editor.togglePlay()
                                 }
-                                BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: editor.step(1) }
+                                BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: ventana.navegar(() => editor.step(1)) }
                                 BotonIcono {
                                     icono: "final"
                                     ayuda: "Al final (Fin)"
-                                    onPulsado: { editor.pause(); editor.seek(editor.frameCount - 1) }
+                                    onPulsado: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount - 1) })
                                 }
                                 Item { implicitWidth: 8 }
                                 BotonIcono {

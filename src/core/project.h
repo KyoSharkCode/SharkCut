@@ -247,6 +247,11 @@ struct Track {
     friend bool operator==(const Track&, const Track&) = default;
 };
 
+// Los clips de una pista tal como se leen: dos seguidos del mismo medio y sin salto en él
+// (las dos mitades de un corte, con el mismo efecto y volumen) cuentan como uno, con el id
+// del primero. Dividir un clip no cambia el resultado (salvo los ids).
+std::vector<Clip> continuousClips(const Track& track);
+
 // Marcador de la secuencia (tecla M): un punto con nombre en la regla, para volver a él
 // o recordar algo ("aquí empieza la partida").
 struct Marker {
@@ -391,6 +396,9 @@ struct Project {
 
     // Clip de la pista `track` que se ve en `frame`, o nullptr si hay un hueco.
     const Clip* clipAt(std::size_t track, std::int64_t frame) const;
+    // El de `frame` o, si cae en un hueco, el más cercano a no más de `maxDistance`
+    // fotogramas (para clips que en pantalla miden menos que el ratón); nullptr si no hay.
+    const Clip* nearestClip(std::size_t track, std::int64_t frame, std::int64_t maxDistance) const;
 
     // --- Transiciones ---
     std::optional<TransitionRef> findTransition(ObjectId id) const;

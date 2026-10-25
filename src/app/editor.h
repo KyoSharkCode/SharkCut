@@ -63,11 +63,14 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString sequenceName READ sequenceName NOTIFY projectsChanged)
     // Biblioteca del proyecto activo: carpetas {id, name, count}, secuencias {id, name,
     // folder, canvas, details, duration, open} y medios (con su carpeta)
-    Q_PROPERTY(QVariantList folders READ folders NOTIFY projectChanged)
-    Q_PROPERTY(QVariantList sequences READ sequences NOTIFY projectChanged)
-    // (cada medio lleva también su proxy: "" | "queued" | "working" | "ready" | "failed",
-    // y proxyProgress 0–1)
+    Q_PROPERTY(QVariantList folders READ folders NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList sequences READ sequences NOTIFY libraryChanged)
+    // libraryChanged solo llega si cambió alguna de las tres listas.
     Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY libraryChanged)
+    // Proxy de cada medio que tiene o espera uno (clave: id del medio como texto):
+    // {state: "queued" | "working" | "ready" | "failed", progress 0–1}. Va aparte de
+    // mediaItems para que el progreso no reconstruya la lista de Medios.
+    Q_PROPERTY(QVariantMap proxyStates READ proxyStates NOTIFY proxiesChanged)
     // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
     // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
     Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
@@ -189,6 +192,7 @@ public:
     QVariantList sequences() const;
 
     QVariantList mediaItems() const;
+    QVariantMap proxyStates() const;
     bool useProxies() const { return m_useProxies; }
     void setUseProxies(bool use);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
@@ -586,6 +590,14 @@ public:
     Q_INVOKABLE void redo();
 
     Q_INVOKABLE void select(qint64 clipId, bool add);
+    // Con la línea de tiempo alejada, los clips (o subtítulos) diminutos se dibujan juntos
+    // en un bloque: el que hay en `frame` de la pista o el más cercano a no más de
+    // `maxDistance` fotogramas (0 = ninguno), y los datos de un clip como en la línea de
+    // tiempo (clipEntry) para su menú.
+    Q_INVOKABLE qint64 clipNear(int track, qint64 frame, qint64 maxDistance) const;
+    Q_INVOKABLE qint64 captionNear(int track, qint64 frame, qint64 maxDistance) const;
+    Q_INVOKABLE QVariantMap clipData(qint64 clipId) const;
+    Q_INVOKABLE QVariantMap captionData(qint64 id) const; // {start, length}
     Q_INVOKABLE void clearSelection();
     // Cuadro de selección de la línea de tiempo: los clips de las pistas `tracks` (índices
     // de tracks) que tocan [from, to); si no hay ninguna de esas, los subtítulos de las
@@ -727,6 +739,7 @@ private:
     std::optional<Need> upcoming(std::size_t track, std::int64_t frame) const;
     int slotFor(std::size_t track, const sharkcut::Clip& clip, int avoid);
     int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
+    bool continueSlot(std::size_t track, int slot, const Need& need);
     void placeSlot(std::size_t track, int slot, std::int64_t index, bool force);
     // Coloca los hilos de la pista para `frame`. `seeking`: tras un salto (no avanzando).
     void assignTrack(std::size_t track, std::int64_t frame, bool seeking);
@@ -798,6 +811,11 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    // Lo último que se anunció de la biblioteca (para avisar solo si cambia).
+    void updateLibrary();
+    QVariantList m_shownMedia;
+    QVariantList m_shownFolders;
+    QVariantList m_shownSequences;
     ProxyManager m_proxies;
     bool m_useProxies = false;
     // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.

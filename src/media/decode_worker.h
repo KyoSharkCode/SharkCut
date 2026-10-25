@@ -49,6 +49,11 @@ public:
     // true si el fotograma `index` está en la cola (entre el primero y el último).
     bool hasFrame(std::int64_t index) const;
 
+    // true si, sin buscar nada, lo siguiente que entregará es el fotograma `index` + 1: está
+    // en la cola o es el que se está decodificando ahora (tras entregar `index`). Sirve
+    // para pasar el hilo a la mitad nueva de un corte sin buscar (sin tirón).
+    bool continuesAfter(std::int64_t index) const;
+
     // true si se llegó al final del clip y ya no quedan fotogramas en la cola.
     bool finished() const;
 
@@ -72,6 +77,7 @@ private:
     // lo servido (-1 = nada pendiente).
     std::int64_t m_resumeAt = -1;
     std::int64_t m_lastRequest = -1; // último destino pedido (para notar que se va atrás)
+    std::int64_t m_nextIndex = -1;   // el siguiente que se pondrá en la cola
     std::map<std::int64_t, std::shared_ptr<const VideoFrame>> m_cache;
     std::size_t m_cacheBytes = 0;
 

@@ -235,6 +235,16 @@ Rectangle {
         limitarVista()
     }
 
+    // Doble clic en un bloque de clips diminutos: acerca el zoom alrededor del ratón hasta
+    // que el elemento de debajo (`duracion` fotogramas) mida unos 40 px y se vea suelto.
+    function acercarBloque(xContenido, duracion) {
+        const objetivo = 40 / Math.max(1, duracion)
+        zoomEn(Math.max(2, objetivo / escala), xContenido - vista.contentX)
+    }
+
+    // Distancia (en fotogramas) a la que un clic en un bloque alcanza el clip más cercano.
+    readonly property int alcanceBloque: Math.max(1, Math.ceil(16 / escala))
+
     // La vista nunca se queda más allá del contenido (al alejar estando al final, la
     // barra desaparece y no habría forma de volver).
     function limitarVista() {
@@ -274,6 +284,18 @@ Rectangle {
     }
 
     property bool seguirCabezal: true
+
+    // Tras mover el cabezal con el teclado (o con los botones del visor): si queda fuera
+    // de la vista, se centra en él. Al hacer clic o arrastrar en la regla no se llama.
+    function mostrarCabezal() {
+        Qt.callLater(() => {
+            const x = raiz.editor.currentFrame * raiz.escala
+            if (x >= vista.contentX && x <= vista.contentX + vista.width - 30)
+                return
+            vista.contentX = Math.max(0, Math.min(x - vista.width / 2,
+                                                  vista.contentWidth - vista.width))
+        })
+    }
     Connections {
         target: raiz.editor
         function onPlayingChanged() {
@@ -644,15 +666,49 @@ Rectangle {
                                     elide: Text.ElideRight
                                 }
                                 Loader {
-                                    active: subtitulo.bloque && subtitulo.width > 160
+                                    active: subtitulo.bloque && subtitulo.width > 28
                                     anchors.verticalCenter: parent.verticalCenter
                                     x: Math.max(6, vista.contentX - subtitulo.x + 6)
                                     sourceComponent: Text {
-                                        text: subtitulo.dato.count + " subtítulos · acércate para editarlos"
+                                        text: subtitulo.width > 200
+                                              ? subtitulo.dato.count + " subtítulos · clic: elegir uno · doble clic: acercar"
+                                              : "×" + subtitulo.dato.count
                                         color: Theme.texto
                                         opacity: 0.7
                                         font.pixelSize: Theme.tamTextoPequeno
                                     }
+                                }
+                                // Bloque de subtítulos diminutos: como el de los clips.
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: subtitulo.bloque && !subtitulo.bloqueado
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onPressed: (m) => {
+                                        const p = mapToItem(contenido, m.x, m.y)
+                                        const id = raiz.editor.captionNear(subtitulo.dato.track,
+                                                                           raiz.frameEn(p.x), raiz.alcanceBloque)
+                                        if (id === 0)
+                                            return
+                                        const sumar = (m.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
+                                        raiz.editor.selectCaption(id, sumar)
+                                        if (m.button === Qt.RightButton)
+                                            menuSubtitulos.abrir(subtitulo.pista)
+                                    }
+                                    onDoubleClicked: (m) => {
+                                        if (m.button !== Qt.LeftButton)
+                                            return
+                                        const p = mapToItem(contenido, m.x, m.y)
+                                        const id = raiz.editor.captionNear(subtitulo.dato.track,
+                                                                           raiz.frameEn(p.x), raiz.alcanceBloque)
+                                        const c = raiz.editor.captionData(id)
+                                        raiz.acercarBloque(p.x, c.length || 1)
+                                    }
+                                    ToolTip.visible: containsMouse && !pressed
+                                    ToolTip.delay: 600
+                                    ToolTip.text: subtitulo.dato.count + " subtítulos muy cortos a este zoom: "
+                                                  + "clic para elegir el de debajo, doble clic para acercar"
                                 }
                                 Rectangle {
                                     anchors.fill: parent
@@ -1054,15 +1110,78 @@ Rectangle {
 
                                 // Bloque de clips diminutos: cuántos son.
                                 Loader {
-                                    active: elemento.bloque && elemento.width > 160
+                                    active: elemento.bloque && elemento.width > 28
                                     anchors.verticalCenter: parent.verticalCenter
                                     x: Math.max(6, vista.contentX - elemento.x + 6)
                                     sourceComponent: Text {
-                                        text: elemento.modelData.count + " clips · acércate para editarlos"
+                                        text: elemento.width > 200
+                                              ? elemento.modelData.count + " clips · clic: elegir uno · doble clic: acercar"
+                                              : "×" + elemento.modelData.count
                                         color: Theme.texto
                                         opacity: 0.7
                                         font.pixelSize: Theme.tamTextoPequeno
                                     }
+                                }
+
+                                // Clips seleccionados dentro del bloque: una marca en su sitio.
+                                Repeater {
+                                    model: elemento.bloque ? raiz.editor.selection : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property var c: raiz.editor.clipData(modelData)
+                                        readonly property var b: elemento.modelData
+                                        visible: c.track === b.track && c.start >= b.start
+                                                 && c.start < b.start + b.length
+                                        x: c.start * raiz.escala - elemento.x
+                                        width: Math.max(3, (c.length || 0) * raiz.escala)
+                                        height: parent.height
+                                        color: Theme.acento
+                                    }
+                                }
+
+                                // Bloque de clips diminutos (línea de tiempo alejada): un clic
+                                // selecciona el clip que hay debajo (o el más cercano), con la
+                                // cuchilla lo corta y un doble clic acerca el zoom hasta verlos.
+                                MouseArea {
+                                    id: zonaBloque
+                                    anchors.fill: parent
+                                    enabled: elemento.bloque && !elemento.bloqueado
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: raiz.herramienta === "cuchilla" ? Qt.IBeamCursor
+                                                                                 : Qt.PointingHandCursor
+                                    onPressed: (m) => {
+                                        const p = mapToItem(contenido, m.x, m.y)
+                                        const id = raiz.editor.clipNear(elemento.modelData.track,
+                                                                        raiz.frameEn(p.x), raiz.alcanceBloque)
+                                        if (id === 0)
+                                            return
+                                        if (m.button === Qt.RightButton) {
+                                            if (!raiz.editor.isSelected(id))
+                                                raiz.editor.select(id, false)
+                                            menuClip.abrir(raiz.editor.clipData(id))
+                                            return
+                                        }
+                                        if (raiz.herramienta === "cuchilla") {
+                                            const f = raiz.ajustar(raiz.frameEn(p.x), [])
+                                            Qt.callLater(raiz.editor.splitClip, id, f)
+                                            return
+                                        }
+                                        const sumar = (m.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
+                                        raiz.editor.select(id, sumar)
+                                    }
+                                    onDoubleClicked: (m) => {
+                                        if (m.button !== Qt.LeftButton || raiz.herramienta === "cuchilla")
+                                            return
+                                        const p = mapToItem(contenido, m.x, m.y)
+                                        const c = raiz.editor.clipData(raiz.editor.clipNear(
+                                            elemento.modelData.track, raiz.frameEn(p.x), raiz.alcanceBloque))
+                                        raiz.acercarBloque(p.x, c.length || 1)
+                                    }
+                                    ToolTip.visible: containsMouse && !pressed
+                                    ToolTip.delay: 600
+                                    ToolTip.text: elemento.modelData.count + " clips muy cortos a este zoom: "
+                                                  + "clic para elegir el de debajo, doble clic para acercar"
                                 }
 
                                 // Pista bloqueada: rayado discreto, sin edición.

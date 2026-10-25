@@ -179,9 +179,18 @@ QString aspectLabel(int w, int h) {
     return QStringLiteral("%1×%2").arg(w).arg(h);
 }
 
+// Mismo tramo del mismo medio (los ids pueden cambiar: dividir crea uno nuevo).
 bool sameTiming(const Clip& a, const Clip& b) {
-    return a.id == b.id && a.media == b.media && a.start == b.start && a.in == b.in &&
-           a.length == b.length;
+    return a.media == b.media && a.start == b.start && a.in == b.in && a.length == b.length;
+}
+
+// ¿Se lee lo mismo en las dos pistas? Las dos mitades de un corte cuentan como el clip
+// entero: dividir durante la reproducción no reinicia nada.
+template <typename Same>
+bool sameClips(const sharkcut::Track& a, const sharkcut::Track& b, Same same) {
+    const std::vector<Clip> ca = sharkcut::continuousClips(a);
+    const std::vector<Clip> cb = sharkcut::continuousClips(b);
+    return std::equal(ca.begin(), ca.end(), cb.begin(), cb.end(), same);
 }
 
 // ¿Cambia lo que deben decodificar los hilos de video? (No: posición, escala, audio…)
@@ -196,9 +205,7 @@ bool sameVideo(const Project& a, const Project& b) {
         if (ta.kind != tb.kind || ta.hidden != tb.hidden) {
             return false;
         }
-        if (ta.kind == sharkcut::TrackKind::Video &&
-            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
-                        sameTiming)) {
+        if (ta.kind == sharkcut::TrackKind::Video && !sameClips(ta, tb, sameTiming)) {
             return false;
         }
         // Lo que dura cada transición cambia qué fotogramas hacen falta (su tipo, no).
@@ -227,10 +234,9 @@ bool sameAudio(const Project& a, const Project& b) {
             return false;
         }
         if (ta.kind == sharkcut::TrackKind::Audio &&
-            !std::equal(ta.clips.begin(), ta.clips.end(), tb.clips.begin(), tb.clips.end(),
-                        [](const Clip& x, const Clip& y) {
-                            return sameTiming(x, y) && x.volumeDb == y.volumeDb;
-                        })) {
+            !sameClips(ta, tb, [](const Clip& x, const Clip& y) {
+                return sameTiming(x, y) && x.volumeDb == y.volumeDb;
+            })) {
             return false;
         }
     }
@@ -294,14 +300,15 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     refreshView();
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
-    connect(this, &Editor::projectChanged, this, &Editor::libraryChanged);
+    // La biblioteca solo avisa si cambió lo que muestra: cada aviso reconstruye la lista de
+    // Medios (vuelve arriba y corta un arrastre en curso).
+    connect(this, &Editor::projectChanged, this, &Editor::updateLibrary);
+    connect(this, &Editor::projectsChanged, this, &Editor::updateLibrary);
     connect(this, &Editor::projectChanged, this, &Editor::proxiesChanged); // medios con proxy
     m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
     m_proxies.setAutoCreate(m_useProxies);
-    connect(&m_proxies, &ProxyManager::changed, this, [this] {
-        emit libraryChanged();
-        emit proxiesChanged();
-    });
+    // El estado de los proxies va aparte (proxyStates): no toca la lista de Medios.
+    connect(&m_proxies, &ProxyManager::changed, this, &Editor::proxiesChanged);
     connect(&m_proxies, &ProxyManager::ready, this, [this](const QString&) {
         if (m_useProxies) {
             reloadVideo(); // un proxy nuevo: los clips de ese medio pasan a usarlo
@@ -340,6 +347,36 @@ Editor::~Editor() {
 
 // --- Propiedades ------------------------------------------------------------------
 
+void Editor::updateLibrary() {
+    QVariantList media = mediaItems();
+    QVariantList folderList = folders();
+    QVariantList sequenceList = sequences();
+    if (media == m_shownMedia && folderList == m_shownFolders && sequenceList == m_shownSequences) {
+        return;
+    }
+    m_shownMedia = std::move(media);
+    m_shownFolders = std::move(folderList);
+    m_shownSequences = std::move(sequenceList);
+    emit libraryChanged();
+}
+
+QVariantMap Editor::proxyStates() const {
+    static const char* const kStates[] = {"", "queued", "working", "ready", "failed"};
+    QVariantMap states;
+    for (const MediaItem& item : document().media) {
+        const QString path = QString::fromStdString(item.path);
+        const ProxyManager::State state = m_proxies.state(path);
+        if (state == ProxyManager::State::None) {
+            continue;
+        }
+        states.insert(QString::number(item.id),
+                      QVariantMap{{QStringLiteral("state"),
+                                   QString::fromLatin1(kStates[static_cast<int>(state)])},
+                                  {QStringLiteral("progress"), m_proxies.progress(path)}});
+    }
+    return states;
+}
+
 QVariantList Editor::mediaItems() const {
     QVariantList list;
     for (const MediaItem& item : document().media) {
@@ -351,11 +388,6 @@ QVariantList Editor::mediaItems() const {
         entry[QStringLiteral("video")] = item.hasVideo;
         entry[QStringLiteral("audio")] = item.hasAudio;
         entry[QStringLiteral("folder")] = static_cast<qint64>(item.folder);
-        const QString path = QString::fromStdString(item.path);
-        static const char* const kStates[] = {"", "queued", "working", "ready", "failed"};
-        entry[QStringLiteral("proxy")] =
-            QString::fromLatin1(kStates[static_cast<int>(m_proxies.state(path))]);
-        entry[QStringLiteral("proxyProgress")] = m_proxies.progress(path);
         entry[QStringLiteral("thumbnail")] =
             item.hasVideo ? QString(QStringLiteral("image://miniaturas/") +
                                     QString::fromLatin1(
@@ -2966,6 +2998,46 @@ void Editor::pruneTabs() {
     }
 }
 
+qint64 Editor::clipNear(int track, qint64 frame, qint64 maxDistance) const {
+    if (track < 0) {
+        return 0;
+    }
+    const Clip* clip = project().nearestClip(static_cast<std::size_t>(track), frame, maxDistance);
+    return clip ? static_cast<qint64>(clip->id) : 0;
+}
+
+qint64 Editor::captionNear(int track, qint64 frame, qint64 maxDistance) const {
+    const Project& p = project();
+    if (track < 0 || static_cast<std::size_t>(track) >= p.captionTracks.size()) {
+        return 0;
+    }
+    ObjectId best = 0;
+    std::int64_t bestDistance = maxDistance + 1;
+    for (const sharkcut::Caption& c : p.captionTracks[static_cast<std::size_t>(track)].captions) {
+        const std::int64_t distance = frame < c.start    ? c.start - frame
+                                      : frame >= c.end() ? frame - (c.end() - 1)
+                                                         : 0;
+        if (distance < bestDistance) {
+            best = c.id;
+            bestDistance = distance;
+        }
+    }
+    return static_cast<qint64>(best);
+}
+
+QVariantMap Editor::clipData(qint64 clipId) const {
+    const auto ref = project().findClip(static_cast<ObjectId>(clipId));
+    return ref ? clipEntry(ref->track, project().tracks[ref->track].clips[ref->index])
+               : QVariantMap{};
+}
+
+QVariantMap Editor::captionData(qint64 id) const {
+    const sharkcut::Caption* c = project().caption(static_cast<ObjectId>(id));
+    return c ? QVariantMap{{QStringLiteral("start"), static_cast<qint64>(c->start)},
+                           {QStringLiteral("length"), static_cast<qint64>(c->length)}}
+             : QVariantMap{};
+}
+
 void Editor::select(qint64 clipId, bool add) {
     const auto id = static_cast<ObjectId>(clipId);
     if (!project().clip(id)) {
@@ -3692,6 +3764,27 @@ void Editor::placeSlot(std::size_t track, int slot, std::int64_t index, bool for
     s.seekIndex = index;
 }
 
+bool Editor::continueSlot(std::size_t t, int slot, const Need& need) {
+    // La mitad nueva de un corte (dividir durante la reproducción): el hilo que se le da
+    // es el del mismo medio, que ya entregó el fotograma que se ve y sigue en orden con
+    // los de después. Se le pasa ese fotograma y no se busca nada (sin tirón).
+    TrackVideo& track = m_video[t];
+    VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
+    const std::shared_ptr<const sharkcut::VideoFrame> current = track.last;
+    // (Se pide en el fotograma del corte o en el siguiente: el de la cola llega ya.)
+    if (!current || s.media != need.clip->media || current->index > need.index ||
+        need.index - current->index > 1 || !s.worker->continuesAfter(current->index)) {
+        return false;
+    }
+    for (TrackVideo::Shown& shown : track.shown) {
+        if (shown.frame == current) {
+            shown.clip = need.clip->id;
+        }
+    }
+    s.seekIndex = need.index;
+    return true;
+}
+
 void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
     const std::vector<Need> needs = needsAt(t, frame);
     int used = -1; // hilo ya ocupado por otro clip que se ve
@@ -3704,7 +3797,9 @@ void Editor::assignTrack(std::size_t t, std::int64_t frame, bool seeking) {
             }
         } else {
             slot = slotFor(t, *need.clip, used);
-            placeSlot(t, slot, need.index, true);
+            if (!continueSlot(t, slot, need)) {
+                placeSlot(t, slot, need.index, false);
+            }
         }
         used = slot;
     }

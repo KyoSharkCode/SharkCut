@@ -108,6 +108,15 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   reiniciar solo los decodificadores y el audio de lo que cambió.
 - **Hecho cuando:** cortar con Ctrl+K o la cuchilla durante la reproducción no detiene ni
   hace saltar la imagen ni el sonido.
+- **Hecho:** `sameVideo`/`sameAudio` (editor.cpp) comparaban los clips por id, y dividir crea
+  uno nuevo: cada corte pausaba, reiniciaba todos los hilos de video y el audio y volvía
+  a buscar. Ahora comparan las pistas «como se leen» (`continuousClips` en project.h: las
+  dos mitades de un corte cuentan como el clip entero), así que dividir no reinicia nada.
+  La mitad nueva hereda el fotograma que se ve y el hilo que la decodificaba
+  (`Editor::continueSlot`, `DecodeWorker::continuesAfter`), sin buscar. Comprobado con Xvfb
+  (un aviso temporal en el registro): 4 cortes con Ctrl+K durante la reproducción, en 3
+  rondas, sin ningún reinicio ni búsqueda. Otras ediciones que sí cambian lo que se lee
+  (mover o recortar) siguen reiniciando lo necesario.
 
 ### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
 - **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden
@@ -120,6 +129,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   grupo de clips.
 - **Hecho cuando:** con la línea de tiempo alejada, un clic sobre clips cortos siempre
   selecciona algo o acerca el zoom, nunca se ignora.
+- **Hecho:** los bloques (`TimelineClipsModel`) ya responden. Un clic selecciona el clip que
+  hay debajo o, si cae en un hueco del bloque, el más cercano a 16 px
+  (`Project::nearestClip`, `Editor::clipNear`). Mayús/Ctrl+clic lo suma a la selección, el
+  clic derecho abre su menú y con la cuchilla se corta. Un doble clic acerca el zoom alrededor
+  del ratón hasta que ese clip mida unos 40 px. Los clips seleccionados se marcan sobre el
+  bloque, que dice cuántos clips tiene («×12», o el texto completo si cabe) y lo explica al
+  pasar el ratón. Los bloques de subtítulos funcionan igual (`Editor::captionNear`).
+  Comprobado con Xvfb con 150 clips de 4 fotogramas en 60 s.
 
 ### A12 · No se puede arrastrar un medio recién importado · FB-026 · M
 - **Problema:** tras importar con la ventana de importar, el medio nuevo no se deja
@@ -136,6 +153,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hecho cuando:** un medio recién importado se arrastra a la línea de tiempo a la
   primera, también mientras se crea su proxy, y la lista de Medios no salta mientras se
   crean proxies.
+- **Hecho:** confirmado con la 0.1.1: con 15 proxies creándose solos, la lista de Medios se
+  reconstruyó 79 veces en unos 2 s. El estado de los proxies va ahora aparte
+  (`Editor::proxyStates`, solo cambia la etiqueta de cada medio), el progreso se anuncia como
+  mucho 4 veces por segundo y `libraryChanged` (medios, carpetas y secuencias) solo llega si
+  cambió lo que se muestra. Además, cuando la lista sí se reconstruye (p. ej. cambia la
+  duración de una secuencia al editar), conserva su desplazamiento. Comprobado con Xvfb:
+  importar un video de 1 min con «Proxies» activado, desplazarse y arrastrarlo a la línea de
+  tiempo mientras se crea su proxy.
 
 ### A13 · La línea de tiempo sigue al cabezal al saltar entre cortes · FB-028 · S
 - **Problema:** al saltar entre cortes con las flechas, si el corte siguiente queda fuera
@@ -148,6 +173,11 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   en la regla.
 - **Hecho cuando:** con el zoom puesto, recorrer los cortes con ↑/↓ mantiene siempre el
   cabezal a la vista.
+- **Hecho:** `LineaTiempo.mostrarCabezal()` centra la vista en el cabezal si quedó fuera; lo
+  llaman los atajos (←/→, Mayús+←/→, ↑/↓, Inicio/Fin, Mayús+M y Ctrl+Mayús+M) y los
+  botones de transporte del visor (`ventana.navegar` en Main.qml). Si el cabezal ya se
+  ve, la vista no se mueve; los clics y arrastres en la regla no la llaman. Comprobado con
+  Xvfb: con el zoom puesto, ↓ repetido mantiene siempre el cabezal a la vista.
 
 ---
 

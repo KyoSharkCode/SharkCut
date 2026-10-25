@@ -294,14 +294,15 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     refreshView();
     resetVideoSlots();
     connect(&m_waveforms, &WaveformCache::ready, this, &Editor::waveformsChanged);
-    connect(this, &Editor::projectChanged, this, &Editor::libraryChanged);
+    // La biblioteca solo avisa si cambió lo que muestra: cada aviso reconstruye la lista de
+    // Medios (vuelve arriba y corta un arrastre en curso).
+    connect(this, &Editor::projectChanged, this, &Editor::updateLibrary);
+    connect(this, &Editor::projectsChanged, this, &Editor::updateLibrary);
     connect(this, &Editor::projectChanged, this, &Editor::proxiesChanged); // medios con proxy
     m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
     m_proxies.setAutoCreate(m_useProxies);
-    connect(&m_proxies, &ProxyManager::changed, this, [this] {
-        emit libraryChanged();
-        emit proxiesChanged();
-    });
+    // El estado de los proxies va aparte (proxyStates): no toca la lista de Medios.
+    connect(&m_proxies, &ProxyManager::changed, this, &Editor::proxiesChanged);
     connect(&m_proxies, &ProxyManager::ready, this, [this](const QString&) {
         if (m_useProxies) {
             reloadVideo(); // un proxy nuevo: los clips de ese medio pasan a usarlo
@@ -340,6 +341,36 @@ Editor::~Editor() {
 
 // --- Propiedades ------------------------------------------------------------------
 
+void Editor::updateLibrary() {
+    QVariantList media = mediaItems();
+    QVariantList folderList = folders();
+    QVariantList sequenceList = sequences();
+    if (media == m_shownMedia && folderList == m_shownFolders && sequenceList == m_shownSequences) {
+        return;
+    }
+    m_shownMedia = std::move(media);
+    m_shownFolders = std::move(folderList);
+    m_shownSequences = std::move(sequenceList);
+    emit libraryChanged();
+}
+
+QVariantMap Editor::proxyStates() const {
+    static const char* const kStates[] = {"", "queued", "working", "ready", "failed"};
+    QVariantMap states;
+    for (const MediaItem& item : document().media) {
+        const QString path = QString::fromStdString(item.path);
+        const ProxyManager::State state = m_proxies.state(path);
+        if (state == ProxyManager::State::None) {
+            continue;
+        }
+        states.insert(QString::number(item.id),
+                      QVariantMap{{QStringLiteral("state"),
+                                   QString::fromLatin1(kStates[static_cast<int>(state)])},
+                                  {QStringLiteral("progress"), m_proxies.progress(path)}});
+    }
+    return states;
+}
+
 QVariantList Editor::mediaItems() const {
     QVariantList list;
     for (const MediaItem& item : document().media) {
@@ -351,11 +382,6 @@ QVariantList Editor::mediaItems() const {
         entry[QStringLiteral("video")] = item.hasVideo;
         entry[QStringLiteral("audio")] = item.hasAudio;
         entry[QStringLiteral("folder")] = static_cast<qint64>(item.folder);
-        const QString path = QString::fromStdString(item.path);
-        static const char* const kStates[] = {"", "queued", "working", "ready", "failed"};
-        entry[QStringLiteral("proxy")] =
-            QString::fromLatin1(kStates[static_cast<int>(m_proxies.state(path))]);
-        entry[QStringLiteral("proxyProgress")] = m_proxies.progress(path);
         entry[QStringLiteral("thumbnail")] =
             item.hasVideo ? QString(QStringLiteral("image://miniaturas/") +
                                     QString::fromLatin1(

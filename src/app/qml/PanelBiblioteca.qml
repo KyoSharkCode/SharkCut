@@ -57,6 +57,19 @@ ColumnLayout {
         return lista
     }
 
+    // Cada cambio de los elementos (un medio nuevo, la duración de una secuencia al
+    // editar…) crea la lista de nuevo: se asigna a mano para que no vuelva arriba.
+    function mostrar(vista) {
+        const y = vista.contentY
+        vista.model = elementos
+        vista.contentY = Math.max(vista.originY, y)
+        vista.returnToBounds()
+    }
+    onElementosChanged: {
+        mostrar(lista)
+        mostrar(rejilla)
+    }
+
     // --- Proyectos abiertos ---
     Flow {
         Layout.fillWidth: true
@@ -230,7 +243,7 @@ ColumnLayout {
         Layout.fillHeight: true
         clip: true
         spacing: 4
-        model: biblioteca.elementos
+        Component.onCompleted: model = biblioteca.elementos
         ScrollBar.vertical: ScrollBar {}
 
         delegate: Rectangle {
@@ -285,15 +298,18 @@ ColumnLayout {
                     font.pixelSize: Theme.tamTextoPequeno
                     font.family: "Consolas, monospace"
                 }
-                // Proxy del medio: listo, creándose o en cola.
+                // Proxy del medio: listo, creándose o en cola. Su estado va aparte de la
+                // lista (proxyStates): el progreso cambia solo esta etiqueta.
                 Chip {
-                    visible: fila.esMedio && (fila.modelData.proxy || "") !== ""
-                    texto: fila.modelData.proxy === "ready" ? "PROXY"
-                           : fila.modelData.proxy === "working"
-                             ? "PROXY " + Math.round(fila.modelData.proxyProgress * 100) + " %"
-                           : fila.modelData.proxy === "queued" ? "EN COLA" : "SIN PROXY"
-                    colorTexto: fila.modelData.proxy === "ready" ? Theme.acento
-                                : fila.modelData.proxy === "failed" ? Theme.aviso
+                    readonly property var proxy: fila.esMedio
+                        ? biblioteca.editor.proxyStates[fila.modelData.id] || ({}) : ({})
+                    visible: (proxy.state || "") !== ""
+                    texto: proxy.state === "ready" ? "PROXY"
+                           : proxy.state === "working"
+                             ? "PROXY " + Math.round(proxy.progress * 100) + " %"
+                           : proxy.state === "queued" ? "EN COLA" : "SIN PROXY"
+                    colorTexto: proxy.state === "ready" ? Theme.acento
+                                : proxy.state === "failed" ? Theme.aviso
                                 : Theme.textoSecundario
                 }
                 Text {
@@ -328,7 +344,7 @@ ColumnLayout {
         clip: true
         cellWidth: Math.floor(width / 3)
         cellHeight: cellWidth * 9 / 16 + 30
-        model: biblioteca.elementos
+        Component.onCompleted: model = biblioteca.elementos
         ScrollBar.vertical: ScrollBar {}
 
         delegate: Item {
@@ -544,9 +560,13 @@ ColumnLayout {
         Action {
             text: biblioteca.editor.proxiesAvailable ? "Crear proxy"
                                                      : "Crear proxy (guarda antes el proyecto)"
-            enabled: biblioteca.editor.proxiesAvailable && menuMedio.elemento !== null
-                     && menuMedio.elemento.video
-                     && (menuMedio.elemento.proxy === "" || menuMedio.elemento.proxy === "failed")
+            enabled: {
+                if (!biblioteca.editor.proxiesAvailable || menuMedio.elemento === null
+                        || !menuMedio.elemento.video || menuMedio.elemento.still)
+                    return false
+                const p = biblioteca.editor.proxyStates[menuMedio.elemento.id]
+                return !p || p.state === "failed"
+            }
             onTriggered: biblioteca.editor.createProxies([menuMedio.elemento.id])
         }
         Action {

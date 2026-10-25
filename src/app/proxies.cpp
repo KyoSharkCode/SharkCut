@@ -224,7 +224,11 @@ void ProxyManager::startNext() {
                                       : 0.0;
                         post([media, fraction](ProxyManager& m) {
                             m.m_entries[media].progress = fraction;
-                            emit m.changed();
+                            if (!m.m_lastProgress.isValid() ||
+                                m.m_lastProgress.elapsed() >= kProgressIntervalMs) {
+                                m.m_lastProgress.start();
+                                emit m.changed();
+                            }
                         });
                     },
                     cancel.get());

@@ -136,6 +136,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hecho cuando:** un medio recién importado se arrastra a la línea de tiempo a la
   primera, también mientras se crea su proxy, y la lista de Medios no salta mientras se
   crean proxies.
+- **Hecho:** confirmado con la 0.1.1: con 15 proxies creándose solos, la lista de Medios se
+  reconstruyó 79 veces en unos 2 s. El estado de los proxies va ahora aparte
+  (`Editor::proxyStates`, solo cambia la etiqueta de cada medio), el progreso se anuncia como
+  mucho 4 veces por segundo y `libraryChanged` (medios, carpetas y secuencias) solo llega si
+  cambió lo que se muestra. Además, cuando la lista sí se reconstruye (p. ej. cambia la
+  duración de una secuencia al editar), conserva su desplazamiento. Comprobado con Xvfb:
+  importar un video de 1 min con «Proxies» activado, desplazarse y arrastrarlo a la línea de
+  tiempo mientras se crea su proxy.
 
 ### A13 · La línea de tiempo sigue al cabezal al saltar entre cortes · FB-028 · S
 - **Problema:** al saltar entre cortes con las flechas, si el corte siguiente queda fuera

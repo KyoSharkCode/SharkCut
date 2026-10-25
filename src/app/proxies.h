@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -69,4 +70,8 @@ private:
     std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);
     quint64 m_generation = 0; // cambia con la carpeta: descarta resultados viejos
     bool m_busy = false;
+    // El progreso se anuncia como mucho cada kProgressIntervalMs (cada aviso repinta la
+    // interfaz); los cambios de estado, siempre.
+    static constexpr qint64 kProgressIntervalMs = 250;
+    QElapsedTimer m_lastProgress;
 };

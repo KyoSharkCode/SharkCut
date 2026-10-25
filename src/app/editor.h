@@ -63,11 +63,14 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString sequenceName READ sequenceName NOTIFY projectsChanged)
     // Biblioteca del proyecto activo: carpetas {id, name, count}, secuencias {id, name,
     // folder, canvas, details, duration, open} y medios (con su carpeta)
-    Q_PROPERTY(QVariantList folders READ folders NOTIFY projectChanged)
-    Q_PROPERTY(QVariantList sequences READ sequences NOTIFY projectChanged)
-    // (cada medio lleva también su proxy: "" | "queued" | "working" | "ready" | "failed",
-    // y proxyProgress 0–1)
+    Q_PROPERTY(QVariantList folders READ folders NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList sequences READ sequences NOTIFY libraryChanged)
+    // libraryChanged solo llega si cambió alguna de las tres listas.
     Q_PROPERTY(QVariantList mediaItems READ mediaItems NOTIFY libraryChanged)
+    // Proxy de cada medio que tiene o espera uno (clave: id del medio como texto):
+    // {state: "queued" | "working" | "ready" | "failed", progress 0–1}. Va aparte de
+    // mediaItems para que el progreso no reconstruya la lista de Medios.
+    Q_PROPERTY(QVariantMap proxyStates READ proxyStates NOTIFY proxiesChanged)
     // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
     // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
     Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
@@ -189,6 +192,7 @@ public:
     QVariantList sequences() const;
 
     QVariantList mediaItems() const;
+    QVariantMap proxyStates() const;
     bool useProxies() const { return m_useProxies; }
     void setUseProxies(bool use);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
@@ -798,6 +802,11 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    // Lo último que se anunció de la biblioteca (para avisar solo si cambia).
+    void updateLibrary();
+    QVariantList m_shownMedia;
+    QVariantList m_shownFolders;
+    QVariantList m_shownSequences;
     ProxyManager m_proxies;
     bool m_useProxies = false;
     // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.

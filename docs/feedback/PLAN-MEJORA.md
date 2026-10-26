@@ -64,14 +64,16 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   activarlos). El botón y la etiqueta del visor dicen cuántos videos tienen proxy
   («Proxies 2/3»).
 
-### A4 · Atajos de teclado que se descubran · FB-003 · S–M
+### A4 · Atajos visibles al pasar el ratón · FB-003 · S
 - **Problema:** se pidió Alt+C para cortar en el cabezal; ya existe Ctrl+K, pero nadie lo
-  encontró.
-- **Hacer:** lista de atajos visible (ventana o panel) y atajos en las ayudas de los
-  botones; añadir Alt+C como segundo atajo de «Cortar en el cabezal».
-- **Por decidir:** el mapa de atajos (PLAN.md lo tiene como decisión pendiente: copiar el
-  de Premiere o uno propio) y si los atajos serán configurables (eso iría a la prioridad
-  media).
+  encontró porque los atajos no se ven en ninguna parte.
+- **Decidido con Kyo (2026-10-26):** el mapa de atajos se queda como está (ya sigue el
+  estilo de los editores habituales: Ctrl+K, Q/W, J/K/L, V/C…) y no se añade Alt+C. Los
+  atajos configurables quedan fuera.
+- **Hacer:** mostrar el atajo en la ayuda que sale al pasar el ratón por cada botón o
+  herramienta que lo tenga (p. ej. «Cuchilla (C)», «Cortar en el cabezal (Ctrl+K)»). En
+  los textos no se nombran otros productos.
+- **Hecho cuando:** todos los botones con atajo lo muestran en su ayuda.
 
 ### A5 · Alt + rueda para desplazar en vertical · FB-005 · S
 - **Problema:** se pidió como función nueva, pero el código ya lo hace.
@@ -268,6 +270,13 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** PLAN.md decidió no meter los modelos en el instalador; una descarga opcional
   durante la instalación es compatible con eso.
 
+### B4 · Apartado de tutorial · FB-029 · L
+- **Hacer:** un apartado de tutorial dentro de la app para quien empieza: lo básico
+  (importar, cortar, transiciones, exportar), las funciones menos evidentes (punto de
+  anclaje, proxies, subtítulos) y la lista de atajos.
+- **Nota:** recoge lo que piden A8 (punto de anclaje confuso) y A4 (atajos que no se
+  ven) a mayor escala; se diseña con Kyo cuando toque.
+
 ---
 
 ## Resumen
@@ -276,4 +285,4 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 |-----------|--------|----------|
 | Alta | A1–A13 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028 |
 | Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
-| Baja | B1–B3 | FB-011, 016, 018 |
+| Baja | B1–B4 | FB-011, 016, 018, 029 |

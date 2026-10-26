@@ -32,6 +32,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
+| [FB-029](#fb-029) | 2026-10-26 | Otro | Propuesta | Apartado de tutorial en la app | En el plan |
 
 ---
 
@@ -74,6 +75,8 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Atajos de teclado; por ejemplo Alt+C para cortar justo donde está el cabezal de reproducción (Ctrl+C no sirve porque es copiar).
 - **Contexto:** Edición en la línea de tiempo.
 - **Notas:** Hoy ya existe Ctrl+K para cortar en el cabezal (`Main.qml`), pero no se descubrió: falta que los atajos se vean (menú, tooltips o una lista de atajos). Considerar atajos configurables.
+- **Decisión (Kyo, 2026-10-26):** no se cambian los atajos ni se añade Alt+C; los atajos se
+  mostrarán en la ayuda al pasar el ratón por cada herramienta (A4).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
 
 <a id="fb-004"></a>
@@ -424,3 +427,15 @@ Formato y estados: ver [README.md](README.md).
   acercada.
 - **Notas:** hoy la vista solo sigue al cabezal mientras se reproduce.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A13)
+
+<a id="fb-029"></a>
+### FB-029 · Apartado de tutorial en la app
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.2
+- **Área:** Otro
+- **Tipo:** Propuesta
+- **Qué dijo:** hace falta un apartado de «tutorial» para el futuro.
+- **Contexto:** surgió al hablar de los atajos que nadie encuentra (FB-003) y del punto de
+  anclaje confuso (FB-010).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B4)

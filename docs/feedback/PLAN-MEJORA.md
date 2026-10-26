@@ -119,6 +119,11 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   (un aviso temporal en el registro): 4 cortes con Ctrl+K durante la reproducción, en 3
   rondas, sin ningún reinicio ni búsqueda. Otras ediciones que sí cambian lo que se lee
   (mover o recortar) siguen reiniciando lo necesario.
+- **Hecho:** `isSpeechModelDownloaded` (src/speech, sin Qt: el archivo existe y mide lo que
+  debe) y `Editor::checkSpeechModels`, que lo mira en otro hilo al abrir el diálogo y tras
+  descargar un modelo (`speechModels`). El selector dice «descargado» o «descarga de ~X MB»
+  según el caso. Comprobado con Xvfb con un modelo rápido presente y el alto sin
+  descargar.
 
 ### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
 - **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden

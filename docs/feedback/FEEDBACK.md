@@ -20,7 +20,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | En el plan |
 | [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | En el plan |
 | [FB-016](#fb-016) | 2026-10-22 | Otro | Propuesta | Paneles reorganizables y diseños | En el plan |
-| [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | En el plan |
+| [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Hecho |
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | En el plan |
 | [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | En el plan |
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
@@ -240,7 +240,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Si ya se descargó el modelo de transcripción (o algo parecido), que deje de aparecer el aviso de «descarga la primera vez».
 - **Contexto:** Diálogo de subtítulos.
 - **Notas:** El texto del selector de modelo en `DialogoSubtitulos.qml` es fijo («descarga de ~550 MB la primera vez») aunque el modelo ya esté en <datos de la app>/modelos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A9)
 
 <a id="fb-018"></a>
 ### FB-018 · Descargas opcionales desde el instalador

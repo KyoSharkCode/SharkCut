@@ -27,7 +27,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
-| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
+| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | Hecho |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | Hecho |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
@@ -356,7 +356,7 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** panel Medios (PanelBiblioteca).
 - **Notas:** hoy el doble clic solo abre carpetas y secuencias; en la zona vacía no hace
   nada. Es lo que hace Premiere.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
 
 <a id="fb-025"></a>
 ### FB-025 · Clips muy cortos no se seleccionan con la línea de tiempo alejada

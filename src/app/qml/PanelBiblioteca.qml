@@ -245,6 +245,10 @@ ColumnLayout {
         spacing: 4
         Component.onCompleted: model = biblioteca.elementos
         ScrollBar.vertical: ScrollBar {}
+        // Doble clic en un hueco (no sobre un elemento): importar.
+        TapHandler {
+            onDoubleTapped: biblioteca.importar()
+        }
 
         delegate: Rectangle {
             id: fila
@@ -346,6 +350,9 @@ ColumnLayout {
         cellHeight: cellWidth * 9 / 16 + 30
         Component.onCompleted: model = biblioteca.elementos
         ScrollBar.vertical: ScrollBar {}
+        TapHandler {
+            onDoubleTapped: biblioteca.importar()
+        }
 
         delegate: Item {
             id: celda
@@ -451,7 +458,7 @@ ColumnLayout {
         horizontalAlignment: Text.AlignHCenter
         text: buscador.text.trim().length > 0 ? "Nada coincide con la búsqueda."
               : biblioteca.carpeta !== 0 ? "Carpeta vacía: arrastra aquí medios o secuencias."
-              : "Pulsa «Importar…» o arrastra videos aquí."
+              : "Pulsa «Importar…», haz doble clic aquí o arrastra videos."
         color: Theme.textoSecundario
         font.pixelSize: Theme.tamTexto
     }
@@ -459,7 +466,8 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: "Arrastra un medio a la línea de tiempo o a una carpeta · doble clic en una "
-              + "secuencia para abrirla · clic derecho para más opciones"
+              + "secuencia para abrirla, o en un hueco para importar · clic derecho para más "
+              + "opciones"
         color: Theme.textoDesactivado
         font.pixelSize: Theme.tamTextoPequeno
     }

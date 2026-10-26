@@ -571,6 +571,8 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** al hablar del tamaño de los paneles (FB-035).
 - **Notas:** hoy todas las pistas tienen la misma altura fija y Ctrl + rueda hace zoom
   horizontal.
+- **Decisión (Kyo):** Ctrl + rueda sobre las cabeceras cambia la altura; en el resto sigue
+  siendo el zoom.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)
 
 <a id="fb-038"></a>
@@ -584,4 +586,6 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** edición de clips en la línea de tiempo.
 - **Notas:** hoy los clips siempre se reproducen a velocidad normal: no hay ningún ajuste
   de velocidad.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)
+- **Decisión (Kyo):** para el final, por su tamaño; idea de estirar el clip con Alt +
+  arrastrar su borde.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B5)

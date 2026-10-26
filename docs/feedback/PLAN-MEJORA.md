@@ -367,10 +367,11 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 ### M17 · Altura de las pistas ajustable · FB-037 · M
 - **Hacer:** que cada pista de la línea de tiempo se pueda hacer más alta o más baja:
-  arrastrando el borde inferior de su cabecera, y con la rueda y un modificador con el
-  ratón sobre la cabecera (Ctrl + rueda ya es el zoom horizontal; usar otro, p. ej.
-  Mayús + rueda, o dejar Ctrl + rueda solo sobre las cabeceras). Atajo para hacer
-  todas las pistas más altas o más bajas. La altura se guarda en el proyecto.
+  arrastrando el borde inferior de su cabecera, y con Ctrl + rueda con el ratón sobre
+  las cabeceras de pista. Atajo para hacer todas las pistas más altas o más bajas. La
+  altura se guarda en el proyecto.
+- **Decidido con Kyo (2026-10-26):** Ctrl + rueda sobre las cabeceras cambia la altura de
+  esa pista; sobre el resto de la línea de tiempo sigue siendo el zoom horizontal.
 - **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
   con más altura se ven mejor las ondas y las miniaturas.
 
@@ -383,19 +384,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   objeto (se podría apoyar después en el punto de anclaje).
 - **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
   layer.frag, como las esquinas redondeadas (distancia a una forma).
-
-### M18 · Velocidad de los clips (acelerar y ralentizar) · FB-038 · L
-- **Hacer:** velocidad por clip (p. ej. 25 %, 50 %, 200 %, 400 % o un valor libre) en
-  Propiedades, que cambia la duración del clip en la línea de tiempo. El audio se
-  acelera o ralentiza con él, con opción de conservar el tono (que la voz no suene aguda
-  o grave). Poner el clip en marcha atrás puede venir después.
-- **Cuidado:** hoy un clip muestra el medio fotograma a fotograma (`in`, `length`,
-  `Clip::mediaFrameAt`). Cambiar la velocidad toca la posición en el medio, los
-  keyframes, los recortes y las divisiones, las transiciones, la mezcla de audio, las ondas,
-  la reproducción, la exportación y el archivo .sharkp (nueva versión). Ralentizar repite
-  fotogramas (sin interpolar por ahora).
-- **Por decidir:** si además hay una herramienta para estirar el clip arrastrando su borde
-  y que cambie la velocidad, y si la velocidad puede variar dentro del clip (rampas).
 
 ---
 
@@ -424,6 +412,22 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** recoge lo que piden A8 (punto de anclaje confuso) y A4 (atajos que no se
   ven) a mayor escala; se diseña con Kyo cuando toque.
 
+### B5 · Velocidad de los clips (acelerar y ralentizar) · FB-038 · L
+- **Hacer:** velocidad por clip (p. ej. 25 %, 50 %, 200 %, 400 % o un valor libre) en
+  Propiedades, que cambia la duración del clip en la línea de tiempo. El audio se
+  acelera o ralentiza con él, con opción de conservar el tono (que la voz no suene aguda
+  o grave). Poner el clip en marcha atrás puede venir después.
+- **Cuidado:** hoy un clip muestra el medio fotograma a fotograma (`in`, `length`,
+  `Clip::mediaFrameAt`). Cambiar la velocidad toca la posición en el medio, los
+  keyframes, los recortes y las divisiones, las transiciones, la mezcla de audio, las ondas,
+  la reproducción, la exportación y el archivo .sharkp (nueva versión). Ralentizar repite
+  fotogramas (sin interpolar por ahora).
+- **Decidido con Kyo (2026-10-26):** se deja para el final, por su tamaño.
+- **Idea de Kyo:** estirar el clip con Alt + arrastrar su borde para cambiar la velocidad
+  (un borde normal sigue recortando). Es sencillo una vez exista la velocidad por clip.
+- **Por decidir:** si la velocidad puede cambiar dentro del mismo clip (rampas: normal →
+  cámara lenta → normal).
+
 ---
 
 ## Resumen
@@ -431,5 +435,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M18 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 038 |
-| Baja | B1–B4 | FB-011, 016, 018, 029 |
+| Media | M1–M17 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037 |
+| Baja | B1–B5 | FB-011, 016, 018, 029, 038 |

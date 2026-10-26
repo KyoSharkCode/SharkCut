@@ -36,6 +36,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | En el plan |
 | [FB-031](#fb-031) | 2026-10-26 | Efectos | Propuesta | Clic en una transición la pone en el cabezal | En el plan |
 | [FB-032](#fb-032) | 2026-10-26 | Línea de tiempo | Propuesta | Cabezal con forma de aleta de tiburón | En el plan |
+| [FB-033](#fb-033) | 2026-10-26 | Exportación | Propuesta | Preset de exportación para TikTok | En el plan |
 
 ---
 
@@ -493,3 +494,14 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** regla de la línea de tiempo.
 - **Notas:** cambio pequeño de interfaz; mejor con la misma aleta que el logo nuevo (FB-001).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M13)
+
+<a id="fb-033"></a>
+### FB-033 · Preset de exportación para TikTok
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.3
+- **Área:** Exportación
+- **Tipo:** Propuesta
+- **Qué dijo:** que además del preset para YouTube haya uno de exportación para TikTok.
+- **Contexto:** al preparar M6 (preset «YouTube», FB-022).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M6)

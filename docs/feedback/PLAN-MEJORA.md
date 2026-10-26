@@ -267,9 +267,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
   sin crear archivos), independiente de los proxies.
 
-### M6 · Preset de exportación para YouTube · FB-022 · S
-- **Hacer:** preset «YouTube» en Exportar (1440p desde un lienzo 1080p, calidad Alta)
-  con una línea que explique por qué subir en 1440p mejora el resultado.
+### M6 · Presets de exportación para YouTube y TikTok · FB-022, FB-033 · S
+- **Hacer:** presets en Exportar con una línea que explique cada uno:
+  - «YouTube»: 1440p desde un lienzo 1080p, calidad Alta (subir en 1440p mejora el
+    resultado tras la recompresión).
+  - «TikTok»: vertical 1080×1920, H.264, calidad Alta, a los fps de la secuencia (30 o 60).
+    Con una secuencia horizontal, avisar de que no es vertical (no recortar por su cuenta).
 
 ### M7 · Ver qué aceleración por hardware se usa · FB-021 · S–M
 - **Hacer:** apartado de información (GPU detectada, decodificador y codificador en uso,
@@ -353,5 +356,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032 |
+| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033 |
 | Baja | B1–B4 | FB-011, 016, 018, 029 |

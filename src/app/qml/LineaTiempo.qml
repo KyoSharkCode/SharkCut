@@ -386,9 +386,6 @@ Rectangle {
                 onPulsado: raiz.editor.redo()
             }
             Item { Layout.fillHeight: true }
-            BotonIcono { icono: "acercar"; ayuda: "Acercar (+)"; onPulsado: raiz.acercar() }
-            BotonIcono { icono: "alejar"; ayuda: "Alejar (-)"; onPulsado: raiz.alejar() }
-            BotonIcono { icono: "ajustar"; ayuda: "Ver todo (\\)"; onPulsado: raiz.encajar() }
         }
 
         Rectangle {
@@ -436,6 +433,28 @@ Rectangle {
                     onPulsado: raiz.nuevaSecuencia()
                 }
                 Item { Layout.fillWidth: true }
+                // Zoom, en la esquina superior derecha.
+                BotonIcono {
+                    icono: "alejar"
+                    ayuda: "Alejar (- o Ctrl + rueda)"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.alejar()
+                }
+                BotonIcono {
+                    icono: "acercar"
+                    ayuda: "Acercar (+ o Ctrl + rueda)"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.acercar()
+                }
+                BotonIcono {
+                    icono: "ajustar"
+                    ayuda: "Ver todo (\\) · rueda: moverse en el tiempo · Alt + rueda: entre pistas"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.encajar()
+                }
             }
 
             RowLayout {
@@ -1730,6 +1749,8 @@ Rectangle {
                                         text: (marcador.modelData.name.length > 0 ? marcador.modelData.name
                                                                                   : "Marcador")
                                               + " · " + raiz.editor.timecodeFor(marcador.modelData.frame)
+                                              + "\nM: marcador en el cabezal · Mayús+M / Ctrl+Mayús+M: "
+                                              + "al siguiente / anterior"
                                         contentItem: Text {
                                             text: ayudaMarcador.text
                                             color: Theme.texto
@@ -1823,23 +1844,32 @@ Rectangle {
     }
 
     // Rueda: desplazar en el tiempo; con Alt, entre pistas; con Ctrl, zoom alrededor del ratón.
+    // Con Alt, Qt cambia el eje del giro (la rueda normal llega como horizontal y la
+    // horizontal como vertical): hacen falta los dos manejadores, uno por orientación.
+    function rueda(e) {
+        const p = raiz.mapToItem(vista, e.x, e.y)
+        if (raiz.editor.playing && !(e.modifiers & (Qt.AltModifier | Qt.ControlModifier)))
+            raiz.seguirCabezal = false
+        if (e.modifiers & Qt.ControlModifier) {
+            const d = e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x
+            raiz.zoomEn(d > 0 ? 1.25 : 0.8, p.x)
+        } else if (e.modifiers & Qt.AltModifier) {
+            raiz.desplazarPistas(e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x)
+        } else {
+            const d = e.angleDelta.x !== 0 ? e.angleDelta.x : e.angleDelta.y
+            vista.contentX = Math.max(0, Math.min(vista.contentWidth - vista.width,
+                                                  vista.contentX - d))
+        }
+    }
     WheelHandler {
         target: null
-        onWheel: (e) => {
-            const p = raiz.mapToItem(vista, e.x, e.y)
-            if (raiz.editor.playing && !(e.modifiers & (Qt.AltModifier | Qt.ControlModifier)))
-                raiz.seguirCabezal = false
-            if (e.modifiers & Qt.ControlModifier) {
-                raiz.zoomEn(e.angleDelta.y > 0 ? 1.25 : 0.8, p.x)
-            } else if (e.modifiers & Qt.AltModifier) {
-                // Con Alt, algunos sistemas mandan el giro en el eje horizontal.
-                raiz.desplazarPistas(e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x)
-            } else {
-                const d = e.angleDelta.x !== 0 ? e.angleDelta.x : e.angleDelta.y
-                vista.contentX = Math.max(0, Math.min(vista.contentWidth - vista.width,
-                                                      vista.contentX - d))
-            }
-        }
+        orientation: Qt.Vertical
+        onWheel: (e) => raiz.rueda(e)
+    }
+    WheelHandler {
+        target: null
+        orientation: Qt.Horizontal
+        onWheel: (e) => raiz.rueda(e)
     }
 
     // --- Menús -------------------------------------------------------------------
@@ -2004,11 +2034,11 @@ Rectangle {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
         }
         Action {
-            text: "Dividir en el cabezal"
+            text: "Dividir en el cabezal (Ctrl+K)"
             onTriggered: raiz.editor.splitAtPlayhead()
         }
         Action {
-            text: "Quitar (deja el hueco)"
+            text: "Quitar, dejando el hueco (Supr)"
             onTriggered: raiz.editor.removeSelection()
         }
         Action {

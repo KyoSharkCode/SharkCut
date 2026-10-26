@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 using namespace sharkcut;
@@ -50,4 +52,20 @@ TEST_CASE("Transcription returns timed words", "[speech]") {
     CHECK(transcribe(model, again, samples, options).empty());
 
     CHECK_THROWS_AS(transcribe("/no/existe.bin", again, samples, {}), SpeechError);
+}
+
+TEST_CASE("A speech model counts as downloaded only when complete", "[speech]") {
+    const std::filesystem::path folder =
+        std::filesystem::temp_directory_path() / "sharkcut-test-modelos";
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+    const std::string dir = folder.string();
+    CHECK_FALSE(isSpeechModelDownloaded(dir, kSpeechModelFast));
+    const std::filesystem::path file = folder / kSpeechModelFast.file;
+    std::ofstream(file) << "a medias";
+    CHECK_FALSE(isSpeechModelDownloaded(dir, kSpeechModelFast)); // descarga cortada
+    std::filesystem::resize_file(file, static_cast<std::uintmax_t>(kSpeechModelFast.size));
+    CHECK(isSpeechModelDownloaded(dir, kSpeechModelFast));
+    CHECK_FALSE(isSpeechModelDownloaded(dir, kSpeechModelAccurate));
+    std::filesystem::remove_all(folder);
 }

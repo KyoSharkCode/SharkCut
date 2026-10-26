@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -138,6 +139,12 @@ bool speechCpuSupported() {
 #else
     return true; // otras arquitecturas: ggml se compila para ellas sin estas extensiones
 #endif
+}
+
+bool isSpeechModelDownloaded(const std::string& folder, const SpeechModel& model) {
+    std::error_code error;
+    const auto size = std::filesystem::file_size(pathFromUtf8(folder) / model.file, error);
+    return !error && static_cast<std::int64_t>(size) == model.size;
 }
 
 std::vector<TimedWord> transcribe(const std::string& modelPath, AudioSource& source,

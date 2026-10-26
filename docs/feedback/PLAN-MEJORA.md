@@ -74,6 +74,15 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   herramienta que lo tenga (p. ej. «Cuchilla (C)», «Cortar en el cabezal (Ctrl+K)»). En
   los textos no se nombran otros productos.
 - **Hecho cuando:** todos los botones con atajo lo muestran en su ayuda.
+- **Hecho:** repasados todos los botones y menús con atajo. Ya lo decían las herramientas
+  (V, C, S), Dividir (Ctrl+K), Quitar (Supr), Deshacer/Rehacer, Inicio/Fin, Reproducir
+  (Espacio), Importar (Ctrl+I), Nuevo/Abrir/Guardar y Exportar rápido (Ctrl+E). Se añadió
+  en las pestañas Proyectos/Editor/Exportar (1, 2, 3 o Ctrl+M, con ayuda nueva en
+  `Pestana.qml`), los botones de fotograma anterior/siguiente (Mayús+←/→ y ↑/↓ entre
+  cortes), Reproducir (J/K/L), los botones de zoom (-, +, Ctrl + rueda, \\, Alt + rueda),
+  la ayuda de los marcadores (M, Mayús+M, Ctrl+Mayús+M) y el menú del clip («Dividir en el
+  cabezal (Ctrl+K)», «Quitar, dejando el hueco (Supr)»). No se añadió Alt+C y ningún texto
+  nombra otros productos.
 
 ### A5 · Alt + rueda para desplazar en vertical · FB-005 · S
 - **Problema:** se pidió como función nueva, pero el código ya lo hace.

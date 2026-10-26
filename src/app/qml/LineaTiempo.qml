@@ -1749,6 +1749,8 @@ Rectangle {
                                         text: (marcador.modelData.name.length > 0 ? marcador.modelData.name
                                                                                   : "Marcador")
                                               + " · " + raiz.editor.timecodeFor(marcador.modelData.frame)
+                                              + "\nM: marcador en el cabezal · Mayús+M / Ctrl+Mayús+M: "
+                                              + "al siguiente / anterior"
                                         contentItem: Text {
                                             text: ayudaMarcador.text
                                             color: Theme.texto
@@ -2032,11 +2034,11 @@ Rectangle {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
         }
         Action {
-            text: "Dividir en el cabezal"
+            text: "Dividir en el cabezal (Ctrl+K)"
             onTriggered: raiz.editor.splitAtPlayhead()
         }
         Action {
-            text: "Quitar (deja el hueco)"
+            text: "Quitar, dejando el hueco (Supr)"
             onTriggered: raiz.editor.removeSelection()
         }
         Action {

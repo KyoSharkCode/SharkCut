@@ -6,7 +6,7 @@ Formato y estados: ver [README.md](README.md).
 |----|-------|------|------|---------|--------|
 | [FB-001](#fb-001) | 2026-10-22 | Marca/logo | Usabilidad | El logo parece un pincho de Geometry Dash, no una aleta | En el plan |
 | [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
-| [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | En el plan |
+| [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | Hecho |
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
 | [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
@@ -77,7 +77,7 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** Hoy ya existe Ctrl+K para cortar en el cabezal (`Main.qml`), pero no se descubrió: falta que los atajos se vean (menú, tooltips o una lista de atajos). Considerar atajos configurables.
 - **Decisión (Kyo, 2026-10-26):** no se cambian los atajos ni se añade Alt+C; los atajos se
   mostrarán en la ayuda al pasar el ratón por cada herramienta (A4).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A4)
 
 <a id="fb-004"></a>
 ### FB-004 · La transición y su sonido se separan al moverlas

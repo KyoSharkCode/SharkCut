@@ -614,7 +614,7 @@ Rectangle {
                     Layout.fillWidth: true
                     icono: "quitar"
                     texto: propiedades.sub.count > 1 ? "Quitar los subtítulos" : "Quitar el subtítulo"
-                    ayuda: "Supr"
+                    ayuda: "Quitar (Supr)"
                     onPulsado: panel.editor.removeSelection()
                 }
             }

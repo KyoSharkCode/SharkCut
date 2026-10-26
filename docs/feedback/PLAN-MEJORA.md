@@ -349,6 +349,30 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   agarrarlo. Icono nuevo en `Trazos.qml`.
 - **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
 
+### M14 · Propiedades con una pestaña por efecto · FB-036 · M
+- **Hacer:** organizar Propiedades en pestañas: la de base (posición, escala, rotación,
+  opacidad, recorte) y una pestaña por cada efecto aplicado al clip (p. ej. al aplicar la
+  pantalla verde aparece la pestaña «Croma»). Al quitar el efecto, su pestaña desaparece.
+- **Nota:** es la base de M15 y M16 (las máscaras serán un efecto con su pestaña).
+
+### M15 · Línea de tiempo de keyframes en Propiedades · FB-035 · L
+- **Hacer:** dar más ancho al panel Propiedades y usar el espacio extra para una pequeña
+  línea de tiempo del clip seleccionado, al lado de cada valor, que muestre sus keyframes
+  (◆) y permita moverlos arrastrando, con el cabezal sincronizado.
+- **Por decidir:** cuánto ancho se le quita al visor (Programa), y si el panel se puede
+  ensanchar arrastrando su borde (relacionado con B1, paneles reorganizables).
+- **Depende de:** M14 (cada pestaña tendría su propia franja de keyframes).
+
+### M16 · Máscaras con formas simples · FB-034 · M–L
+- **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
+  quizá estrella y corazón): posición, tamaño, rotación, borde suave (difuminado),
+  invertir y opacidad, animables con keyframes. Al aplicarlo se crea su pestaña
+  «Máscaras» en Propiedades (M14) y la forma se puede ajustar en el visor.
+- **Fuera por ahora:** dibujar formas a mano (pluma) y que la máscara siga sola a un
+  objeto (se podría apoyar después en el punto de anclaje).
+- **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
+  layer.frag, como las esquinas redondeadas (distancia a una forma).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -383,5 +407,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033 |
+| Media | M1–M16 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036 |
 | Baja | B1–B4 | FB-011, 016, 018, 029 |

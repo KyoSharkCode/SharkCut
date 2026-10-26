@@ -425,8 +425,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Decidido con Kyo (2026-10-26):** se deja para el final, por su tamaño.
 - **Idea de Kyo:** estirar el clip con Alt + arrastrar su borde para cambiar la velocidad
   (un borde normal sigue recortando). Es sencillo una vez exista la velocidad por clip.
-- **Por decidir:** si la velocidad puede cambiar dentro del mismo clip (rampas: normal →
-  cámara lenta → normal).
+- **Decidido con Kyo (2026-10-26):** las rampas de velocidad (la velocidad cambia de forma
+  suave dentro del mismo clip: normal → cámara lenta → normal) serán un efecto aparte,
+  «Rampa de velocidad», que se aplica desde la pestaña Efectos y se ajusta en su pestaña de
+  Propiedades (M14): ajustes de partida (p. ej. «Normal → lenta → normal»), dónde empieza
+  y acaba el tramo lento, la velocidad mínima y lo suave del cambio (curvas de easing.h).
+  Va después de la velocidad constante, que es su base.
 
 ---
 

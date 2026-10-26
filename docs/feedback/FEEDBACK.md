@@ -588,4 +588,6 @@ Formato y estados: ver [README.md](README.md).
   de velocidad.
 - **Decisión (Kyo):** para el final, por su tamaño; idea de estirar el clip con Alt +
   arrastrar su borde.
+- **Decisión (Kyo):** las rampas de velocidad serán un efecto aparte que se aplica y se
+  ajusta como los demás efectos.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B5)

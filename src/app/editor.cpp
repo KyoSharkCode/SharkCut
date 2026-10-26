@@ -295,6 +295,14 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     m_tabs.push_back({first.uid, first.history.state().sequences.front().id, 0});
     m_selectedClipTimer.setSingleShot(true);
     m_selectedClipTimer.setInterval(150);
+    m_previewPool.setMaxThreadCount(1);
+    m_previewTimer.setInterval(100);
+    connect(&m_previewTimer, &QTimer::timeout, this, [this] {
+        // Al acabar el sonido, el botón vuelve a «Escuchar».
+        if (m_previewStarted && m_soundPreview && !m_soundPreview->playing()) {
+            stopSoundPreview();
+        }
+    });
     connect(&m_selectedClipTimer, &QTimer::timeout, this, &Editor::selectedClipChanged);
     m_activeTab = 0;
     refreshView();
@@ -3397,6 +3405,73 @@ void Editor::addSound(const QString& id, int track, qint64 frame) {
     });
     if (created != 0) {
         select(static_cast<qint64>(created), false);
+    }
+}
+
+void Editor::toggleSoundPreview(const QString& id) {
+    if (id == m_previewSound) {
+        stopSoundPreview();
+        return;
+    }
+    const sharkcut::SoundEffect* effect = sharkcut::soundEffect(id.toStdString());
+    if (!effect) {
+        return;
+    }
+    if (!m_soundPreview) {
+        try {
+            const bool useNull =
+                qEnvironmentVariable("SHARKCUT_AUDIO_DEVICE") == QLatin1String("null");
+            m_soundPreview = std::make_shared<sharkcut::SoundPreview>(
+                useNull ? sharkcut::AudioOutput::Device::Null
+                        : sharkcut::AudioOutput::Device::Default);
+        } catch (const std::exception& e) {
+            setError(QStringLiteral("No se puede escuchar el sonido: %1")
+                         .arg(QString::fromUtf8(e.what())));
+            return;
+        }
+    }
+    const quint64 request = ++m_previewRequest;
+    m_previewStarted = false;
+    m_previewSound = id;
+    emit previewSoundChanged();
+    m_previewTimer.start();
+    // Leer y decodificar el archivo: fuera del hilo de la interfaz.
+    const std::string path = QDir(soundFolder()).filePath(fromView(effect->file)).toStdString();
+    QPointer<Editor> self(this);
+    m_previewPool.start([self, preview = m_soundPreview, path, request] {
+        bool ok = true;
+        try {
+            preview->play(path);
+        } catch (const std::exception&) {
+            ok = false;
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, preview, request, ok] {
+                if (!self || self->m_previewRequest != request) {
+                    preview->stop(); // se pidió otro (o parar) mientras se cargaba
+                    return;
+                }
+                if (ok) {
+                    self->m_previewStarted = true;
+                } else {
+                    self->stopSoundPreview();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::stopSoundPreview() {
+    ++m_previewRequest;
+    m_previewTimer.stop();
+    m_previewStarted = false;
+    if (m_soundPreview) {
+        m_soundPreview->stop();
+    }
+    if (!m_previewSound.isEmpty()) {
+        m_previewSound.clear();
+        emit previewSoundChanged();
     }
 }
 

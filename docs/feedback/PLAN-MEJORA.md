@@ -124,6 +124,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   descargar un modelo (`speechModels`). El selector dice «descargado» o «descarga de ~X MB»
   según el caso. Comprobado con Xvfb con un modelo rápido presente y el alto sin
   descargar.
+- **Hecho:** cada sonido de la pestaña Sonidos tiene un botón ▶ (■ mientras suena): un
+  clic lo escucha y otro lo para; al acabar vuelve a ▶. `SoundPreview` (src/audio, sin Qt)
+  tiene su propia salida de audio, aparte de la secuencia, y decodifica el efecto entero con
+  FFmpeg (miniaudio sigue compilado solo con la API de dispositivos). El editor lo carga en
+  un hilo aparte (`Editor::toggleSoundPreview`). Test con la salida muda; comprobado con
+  Xvfb.
 
 ### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
 - **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden

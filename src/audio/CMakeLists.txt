@@ -5,6 +5,8 @@ add_library(sharkcut_audio STATIC
     audio_output.cpp
     audio_worker.h
     audio_worker.cpp
+    sound_preview.h
+    sound_preview.cpp
 )
 
 target_include_directories(sharkcut_audio PUBLIC ${PROJECT_SOURCE_DIR}/src)

@@ -191,8 +191,9 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Arrastra un sonido a una pista de audio (empieza donde lo sueltas) o "
-                          + "pulsa + para ponerlo con su golpe en el cabezal."
+                    text: "Pulsa ▶ para escucharlo. Arrastra un sonido a una pista de audio "
+                          + "(empieza donde lo sueltas) o pulsa + para ponerlo con su golpe en "
+                          + "el cabezal."
                     color: Theme.textoSecundario
                     font.pixelSize: Theme.tamTextoPequeno
                 }
@@ -225,7 +226,17 @@ Rectangle {
                                 anchors.leftMargin: 10
                                 anchors.rightMargin: 6
                                 spacing: 8
-                                Icono { nombre: "sonido"; tam: 15; color: Theme.clipAudioClaro }
+                                // Escuchar: un clic lo hace sonar y otro lo para.
+                                BotonIcono {
+                                    readonly property bool sonando:
+                                        panel.editor.previewSound === filaSonido.modelData.id
+                                    icono: sonando ? "detener" : "reproducir"
+                                    activo: sonando
+                                    implicitWidth: 26
+                                    implicitHeight: 26
+                                    ayuda: sonando ? "Parar" : "Escuchar"
+                                    onPulsado: panel.editor.toggleSoundPreview(filaSonido.modelData.id)
+                                }
                                 Text {
                                     Layout.fillWidth: true
                                     text: filaSonido.modelData.name
@@ -250,6 +261,7 @@ Rectangle {
                             MouseArea {
                                 id: arrastreSonido
                                 anchors.fill: parent
+                                anchors.leftMargin: 40 // el botón de escuchar
                                 anchors.rightMargin: 36
                                 hoverEnabled: true
                                 drag.target: panel.fantasma

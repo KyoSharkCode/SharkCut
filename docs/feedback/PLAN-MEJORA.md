@@ -385,6 +385,21 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
   layer.frag, como las esquinas redondeadas (distancia a una forma).
 
+### M18 · Atajos de teclado personalizables · FB-039 · M
+- **Hacer:** apartado «Atajos de teclado» en la configuración con todas las acciones
+  agrupadas (reproducción, navegación, edición, herramientas, vista, archivo): pulsar
+  una acción y luego la tecla o combinación nueva; aviso si ya la usa otra acción (con
+  opción de cambiarla); botón para volver a los atajos de fábrica, por acción y en total.
+  Se guardan en QSettings (para todos los proyectos).
+- **Cuidado:** hoy los atajos están escritos uno a uno en `Main.qml`; hay que pasarlos a
+  una tabla única de acciones de la que salgan los `Shortcut`, las ayudas de los botones
+  (A4) y la futura lista de atajos del tutorial (B4). Respetar los atajos de una tecla
+  que no deben saltar dentro de campos de texto.
+- **Motivo:** teclados compactos (60 %) sin flechas ni Inicio/Fin; también permite
+  adaptar SharkCut a la costumbre de cada persona.
+- **Nota:** cambia lo decidido en A4 («los atajos configurables quedan fuera»): ahora se
+  piden, como mejora aparte.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -439,5 +454,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M17 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037 |
+| Media | M1–M18 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039 |
 | Baja | B1–B5 | FB-011, 016, 018, 029, 038 |

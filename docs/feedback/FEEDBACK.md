@@ -42,6 +42,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-036](#fb-036) | 2026-10-26 | Propiedades | Propuesta | Una pestaña en Propiedades por cada efecto del clip | En el plan |
 | [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
 | [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
+| [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
 
 ---
 
@@ -591,3 +592,17 @@ Formato y estados: ver [README.md](README.md).
 - **Decisión (Kyo):** las rampas de velocidad serán un efecto aparte que se aplica y se
   ajusta como los demás efectos.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B5)
+
+<a id="fb-039"></a>
+### FB-039 · Atajos de teclado personalizables
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Otro
+- **Tipo:** Propuesta
+- **Qué dijo:** una opción para cambiar los controles y atajos según cada persona; por
+  ejemplo, con un teclado 60 % no hay flechas, así que esas teclas no se podrían usar.
+- **Contexto:** configuración de la app.
+- **Notas:** los teclados 60 % suelen tener las flechas en una capa con Fn, pero usarlas así
+  para navegar por cortes es incómodo. Hoy los atajos son fijos.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)

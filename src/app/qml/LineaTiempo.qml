@@ -1823,23 +1823,32 @@ Rectangle {
     }
 
     // Rueda: desplazar en el tiempo; con Alt, entre pistas; con Ctrl, zoom alrededor del ratón.
+    // Con Alt, Qt cambia el eje del giro (la rueda normal llega como horizontal y la
+    // horizontal como vertical): hacen falta los dos manejadores, uno por orientación.
+    function rueda(e) {
+        const p = raiz.mapToItem(vista, e.x, e.y)
+        if (raiz.editor.playing && !(e.modifiers & (Qt.AltModifier | Qt.ControlModifier)))
+            raiz.seguirCabezal = false
+        if (e.modifiers & Qt.ControlModifier) {
+            const d = e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x
+            raiz.zoomEn(d > 0 ? 1.25 : 0.8, p.x)
+        } else if (e.modifiers & Qt.AltModifier) {
+            raiz.desplazarPistas(e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x)
+        } else {
+            const d = e.angleDelta.x !== 0 ? e.angleDelta.x : e.angleDelta.y
+            vista.contentX = Math.max(0, Math.min(vista.contentWidth - vista.width,
+                                                  vista.contentX - d))
+        }
+    }
     WheelHandler {
         target: null
-        onWheel: (e) => {
-            const p = raiz.mapToItem(vista, e.x, e.y)
-            if (raiz.editor.playing && !(e.modifiers & (Qt.AltModifier | Qt.ControlModifier)))
-                raiz.seguirCabezal = false
-            if (e.modifiers & Qt.ControlModifier) {
-                raiz.zoomEn(e.angleDelta.y > 0 ? 1.25 : 0.8, p.x)
-            } else if (e.modifiers & Qt.AltModifier) {
-                // Con Alt, algunos sistemas mandan el giro en el eje horizontal.
-                raiz.desplazarPistas(e.angleDelta.y !== 0 ? e.angleDelta.y : e.angleDelta.x)
-            } else {
-                const d = e.angleDelta.x !== 0 ? e.angleDelta.x : e.angleDelta.y
-                vista.contentX = Math.max(0, Math.min(vista.contentWidth - vista.width,
-                                                      vista.contentX - d))
-            }
-        }
+        orientation: Qt.Vertical
+        onWheel: (e) => raiz.rueda(e)
+    }
+    WheelHandler {
+        target: null
+        orientation: Qt.Horizontal
+        onWheel: (e) => raiz.rueda(e)
     }
 
     // --- Menús -------------------------------------------------------------------

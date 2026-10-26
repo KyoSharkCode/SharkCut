@@ -8,7 +8,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
 | [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | En el plan |
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
-| [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | En el plan |
+| [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
 | [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
@@ -101,7 +101,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Que Alt + rueda del ratón desplace verticalmente la línea de tiempo.
 - **Contexto:** Navegación entre pistas.
 - **Notas:** En el código ya existe (WheelHandler de `LineaTiempo.qml`: Alt + rueda desplaza entre pistas). Revisar por qué no les funcionó (versión probada, zona donde está el ratón, ratón/sistema que manda el giro distinto) o si no lo conocían.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A5)
 
 <a id="fb-006"></a>
 ### FB-006 · Escuchar la vista previa de un sonido con un clic

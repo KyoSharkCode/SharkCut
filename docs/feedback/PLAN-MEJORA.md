@@ -87,6 +87,13 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   (p. ej. dibujar una onda aproximada mientras se calcula la completa, o repartir el
   cálculo en varios hilos).
 - **Hecho cuando:** hay cifras de antes y después con el mismo VOD.
+- **Hecho:** reproducido también en Linux: con Alt, Qt cambia el eje del giro (la rueda
+  normal llega como horizontal) y el `WheelHandler` de la línea de tiempo solo atendía la
+  vertical, así que Alt + rueda no llegaba en ninguna zona (solo funcionaba Alt + la rueda
+  horizontal). Ahora hay un manejador por orientación con la misma función (`rueda`), y el
+  desplazamiento horizontal de los touchpads también llega. Comprobado con Xvfb encima de los
+  clips, en las cabeceras de pista y en la regla, hacia arriba y hacia abajo, con la rueda
+  normal y con la horizontal. Alt + rueda se menciona en la ayuda de los botones de zoom.
 
 ### A7 · Escuchar los sonidos antes de usarlos · FB-006 · S
 - **Hacer:** en la pestaña Sonidos, un clic en el icono reproduce el sonido; otro clic lo

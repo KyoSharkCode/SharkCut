@@ -37,6 +37,12 @@ Formato y estados: ver [README.md](README.md).
 | [FB-031](#fb-031) | 2026-10-26 | Efectos | Propuesta | Clic en una transición la pone en el cabezal | Hecho |
 | [FB-032](#fb-032) | 2026-10-26 | Línea de tiempo | Propuesta | Cabezal con forma de aleta de tiburón | En el plan |
 | [FB-033](#fb-033) | 2026-10-26 | Exportación | Propuesta | Preset de exportación para TikTok | Hecho |
+| [FB-034](#fb-034) | 2026-10-26 | Efectos | Propuesta | Máscaras con formas simples | En el plan |
+| [FB-035](#fb-035) | 2026-10-26 | Propiedades | Propuesta | Propiedades más ancho con línea de tiempo de keyframes | En el plan |
+| [FB-036](#fb-036) | 2026-10-26 | Propiedades | Propuesta | Una pestaña en Propiedades por cada efecto del clip | En el plan |
+| [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
+| [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
+| [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
 
 ---
 
@@ -505,3 +511,98 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** que además del preset para YouTube haya uno de exportación para TikTok.
 - **Contexto:** al preparar M6 (preset «YouTube», FB-022).
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M6)
+
+<a id="fb-034"></a>
+### FB-034 · Máscaras con formas simples
+- **Fecha:** 2026-10-26
+- **Quién:** tester (pedido a Kyo, con un video de referencia sobre máscaras)
+- **Versión:** 0.1.4
+- **Área:** Efectos
+- **Tipo:** Propuesta
+- **Qué dijo:** pidieron «máscaras». Tras ver qué son, Kyo lo concreta: un efecto de
+  máscara con las formas simples y clásicas; al aplicarlo a un clip, aparece su pestaña
+  «Máscaras» en Propiedades (ver FB-036).
+- **Contexto:** una máscara es una forma que decide qué parte del clip se ve (con borde
+  suave, invertir y animación). Usos: facecam con forma, tapar o desenfocar una zona,
+  duplicarse en pantalla, foco de atención.
+- **Notas:** ya existen piezas parecidas: recorte rectangular, esquinas redondeadas,
+  pantalla verde, keyframes y punto de anclaje.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M16)
+
+<a id="fb-035"></a>
+### FB-035 · Propiedades más ancho con línea de tiempo de keyframes
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Propiedades
+- **Tipo:** Propuesta
+- **Qué dijo:** que el panel Propiedades tenga más espacio, más largo (casi del tamaño de la
+  captura), y que en ese espacio extra haya una línea de tiempo adicional que muestre dónde
+  hay keyframes y permita moverlos ahí mismo.
+- **Contexto:** panel Propiedades con un clip de video seleccionado; hoy cada valor tiene el
+  botón ⏱ y los keyframes se ven como ◆ sobre los clips de la línea de tiempo.
+- **Detalles (Kyo):** el panel va desde donde está hoy hasta donde está ahora el botón
+  «Proxies» del visor; los paneles se pueden ensanchar arrastrando su borde.
+- **Capturas:** [FB-035-propiedades.png](capturas/FB-035-propiedades.png),
+  [FB-035-ancho-propiedades.png](capturas/FB-035-ancho-propiedades.png)
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M15)
+
+<a id="fb-036"></a>
+### FB-036 · Una pestaña en Propiedades por cada efecto del clip
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Propiedades
+- **Tipo:** Propuesta
+- **Qué dijo:** al aplicar un efecto a un clip, que en Propiedades aparezca una pestaña nueva
+  para él (p. ej. se aplica croma → sale la pestaña «Croma» y ahí se configura). Las
+  máscaras serían un efecto más, con su pestaña.
+- **Contexto:** hoy Propiedades muestra todo seguido en una sola columna.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M14)
+
+<a id="fb-037"></a>
+### FB-037 · Pistas más altas o más bajas a gusto
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Línea de tiempo
+- **Tipo:** Propuesta
+- **Qué dijo:** que las pistas de la línea de tiempo se puedan hacer más altas a gusto,
+  con un atajo (cree recordar Ctrl + rueda) o con el ratón sobre la pista.
+- **Contexto:** al hablar del tamaño de los paneles (FB-035).
+- **Notas:** hoy todas las pistas tienen la misma altura fija y Ctrl + rueda hace zoom
+  horizontal.
+- **Decisión (Kyo):** Ctrl + rueda sobre las cabeceras cambia la altura; en el resto sigue
+  siendo el zoom.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)
+
+<a id="fb-038"></a>
+### FB-038 · Acelerar o ralentizar un clip
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Línea de tiempo
+- **Tipo:** Propuesta
+- **Qué dijo:** añadir la función de aumentar o reducir la velocidad de un video.
+- **Contexto:** edición de clips en la línea de tiempo.
+- **Notas:** hoy los clips siempre se reproducen a velocidad normal: no hay ningún ajuste
+  de velocidad.
+- **Decisión (Kyo):** para el final, por su tamaño; idea de estirar el clip con Alt +
+  arrastrar su borde.
+- **Decisión (Kyo):** las rampas de velocidad serán un efecto aparte que se aplica y se
+  ajusta como los demás efectos.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B5)
+
+<a id="fb-039"></a>
+### FB-039 · Atajos de teclado personalizables
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Otro
+- **Tipo:** Propuesta
+- **Qué dijo:** una opción para cambiar los controles y atajos según cada persona; por
+  ejemplo, con un teclado 60 % no hay flechas, así que esas teclas no se podrían usar.
+- **Contexto:** configuración de la app.
+- **Notas:** los teclados 60 % suelen tener las flechas en una capa con Fn, pero usarlas así
+  para navegar por cortes es incómodo. Hoy los atajos son fijos.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)

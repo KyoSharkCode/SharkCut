@@ -349,6 +349,57 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   agarrarlo. Icono nuevo en `Trazos.qml`.
 - **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
 
+### M14 · Propiedades con una pestaña por efecto · FB-036 · M
+- **Hacer:** organizar Propiedades en pestañas: la de base (posición, escala, rotación,
+  opacidad, recorte) y una pestaña por cada efecto aplicado al clip (p. ej. al aplicar la
+  pantalla verde aparece la pestaña «Croma»). Al quitar el efecto, su pestaña desaparece.
+- **Nota:** es la base de M15 y M16 (las máscaras serán un efecto con su pestaña).
+
+### M15 · Línea de tiempo de keyframes en Propiedades · FB-035 · L
+- **Hacer:** dar más ancho al panel Propiedades y usar el espacio extra para una pequeña
+  línea de tiempo del clip seleccionado, al lado de cada valor, que muestre sus keyframes
+  (◆) y permita moverlos arrastrando, con el cabezal sincronizado.
+- **Decidido con Kyo (2026-10-26):** el panel ocupa desde donde empieza hoy hasta donde está
+  ahora el botón «Proxies» del visor (aprox. el doble de ancho; el visor se estrecha). Su
+  borde se puede arrastrar para ensancharlo o estrecharlo, y el ancho se recuerda
+  (adelanta una parte de B1, paneles reorganizables).
+- **Depende de:** M14 (cada pestaña tendría su propia franja de keyframes).
+
+### M17 · Altura de las pistas ajustable · FB-037 · M
+- **Hacer:** que cada pista de la línea de tiempo se pueda hacer más alta o más baja:
+  arrastrando el borde inferior de su cabecera, y con Ctrl + rueda con el ratón sobre
+  las cabeceras de pista. Atajo para hacer todas las pistas más altas o más bajas. La
+  altura se guarda en el proyecto.
+- **Decidido con Kyo (2026-10-26):** Ctrl + rueda sobre las cabeceras cambia la altura de
+  esa pista; sobre el resto de la línea de tiempo sigue siendo el zoom horizontal.
+- **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
+  con más altura se ven mejor las ondas y las miniaturas.
+
+### M16 · Máscaras con formas simples · FB-034 · M–L
+- **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
+  quizá estrella y corazón): posición, tamaño, rotación, borde suave (difuminado),
+  invertir y opacidad, animables con keyframes. Al aplicarlo se crea su pestaña
+  «Máscaras» en Propiedades (M14) y la forma se puede ajustar en el visor.
+- **Fuera por ahora:** dibujar formas a mano (pluma) y que la máscara siga sola a un
+  objeto (se podría apoyar después en el punto de anclaje).
+- **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
+  layer.frag, como las esquinas redondeadas (distancia a una forma).
+
+### M18 · Atajos de teclado personalizables · FB-039 · M
+- **Hacer:** apartado «Atajos de teclado» en la configuración con todas las acciones
+  agrupadas (reproducción, navegación, edición, herramientas, vista, archivo): pulsar
+  una acción y luego la tecla o combinación nueva; aviso si ya la usa otra acción (con
+  opción de cambiarla); botón para volver a los atajos de fábrica, por acción y en total.
+  Se guardan en QSettings (para todos los proyectos).
+- **Cuidado:** hoy los atajos están escritos uno a uno en `Main.qml`; hay que pasarlos a
+  una tabla única de acciones de la que salgan los `Shortcut`, las ayudas de los botones
+  (A4) y la futura lista de atajos del tutorial (B4). Respetar los atajos de una tecla
+  que no deben saltar dentro de campos de texto.
+- **Motivo:** teclados compactos (60 %) sin flechas ni Inicio/Fin; también permite
+  adaptar SharkCut a la costumbre de cada persona.
+- **Nota:** cambia lo decidido en A4 («los atajos configurables quedan fuera»): ahora se
+  piden, como mejora aparte.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -376,6 +427,26 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** recoge lo que piden A8 (punto de anclaje confuso) y A4 (atajos que no se
   ven) a mayor escala; se diseña con Kyo cuando toque.
 
+### B5 · Velocidad de los clips (acelerar y ralentizar) · FB-038 · L
+- **Hacer:** velocidad por clip (p. ej. 25 %, 50 %, 200 %, 400 % o un valor libre) en
+  Propiedades, que cambia la duración del clip en la línea de tiempo. El audio se
+  acelera o ralentiza con él, con opción de conservar el tono (que la voz no suene aguda
+  o grave). Poner el clip en marcha atrás puede venir después.
+- **Cuidado:** hoy un clip muestra el medio fotograma a fotograma (`in`, `length`,
+  `Clip::mediaFrameAt`). Cambiar la velocidad toca la posición en el medio, los
+  keyframes, los recortes y las divisiones, las transiciones, la mezcla de audio, las ondas,
+  la reproducción, la exportación y el archivo .sharkp (nueva versión). Ralentizar repite
+  fotogramas (sin interpolar por ahora).
+- **Decidido con Kyo (2026-10-26):** se deja para el final, por su tamaño.
+- **Idea de Kyo:** estirar el clip con Alt + arrastrar su borde para cambiar la velocidad
+  (un borde normal sigue recortando). Es sencillo una vez exista la velocidad por clip.
+- **Decidido con Kyo (2026-10-26):** las rampas de velocidad (la velocidad cambia de forma
+  suave dentro del mismo clip: normal → cámara lenta → normal) serán un efecto aparte,
+  «Rampa de velocidad», que se aplica desde la pestaña Efectos y se ajusta en su pestaña de
+  Propiedades (M14): ajustes de partida (p. ej. «Normal → lenta → normal»), dónde empieza
+  y acaba el tramo lento, la velocidad mínima y lo suave del cambio (curvas de easing.h).
+  Va después de la velocidad constante, que es su base.
+
 ---
 
 ## Resumen
@@ -383,5 +454,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033 |
-| Baja | B1–B4 | FB-011, 016, 018, 029 |
+| Media | M1–M18 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039 |
+| Baja | B1–B5 | FB-011, 016, 018, 029, 038 |

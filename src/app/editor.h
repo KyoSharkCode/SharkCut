@@ -570,7 +570,7 @@ public:
     // Pone la transición `typeIndex` (de transitionNames) en el corte `cut` de la pista
     // de video `track`, con su duración y su efecto de sonido por defecto.
     Q_INVOKABLE void addTransition(int track, qint64 cut, int typeIndex);
-    // Transición como clip (como en Premiere Composer): la transición `typeIndex` soltada
+    // Transición como clip: la transición `typeIndex` soltada
     // en la pista de video `track` en `frame`. Se centra en el corte más cercano (a menos
     // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
     // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.

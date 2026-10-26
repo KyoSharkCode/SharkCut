@@ -166,7 +166,7 @@ struct Mp4Writer::Impl {
         ff::check(avcodec_parameters_from_context(videoStream->codecpar, video.get()),
                   "No se pudo configurar el video");
         if (video->codec_id == AV_CODEC_ID_HEVC) {
-            // "hvc1": la etiqueta que piden los reproductores de Apple (y Premiere) en MP4.
+            // "hvc1": la etiqueta que piden algunos reproductores y editores en MP4.
             videoStream->codecpar->codec_tag = MKTAG('h', 'v', 'c', '1');
         }
         videoStream->time_base = video->time_base;

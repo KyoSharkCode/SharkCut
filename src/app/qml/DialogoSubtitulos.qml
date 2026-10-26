@@ -4,8 +4,8 @@ import QtQuick.Layouts
 import QtCore
 import SharkCut
 
-// Opciones de los subtítulos, como «Crear subtítulos» de Premiere: diseño (una línea, dos o
-// una sola palabra), caracteres por línea, duración mínima, separación y puntuación.
+// Opciones de los subtítulos: diseño (una línea, dos o una sola palabra), caracteres por
+// línea, duración mínima, separación y puntuación.
 // Modo "crear": también idioma, audio y ajuste de estilo, para transcribir. Modo
 // "dividir": vuelve a dividir una pista que ya existe. Las medidas se recuerdan.
 Popup {

@@ -17,8 +17,8 @@ SharkCut es un **editor de video nativo de escritorio para Windows, gratuito y l
 (GPL 3.0), para **creadores de contenido**: streamers, VTubers y cualquiera que edite
 VODs largos y saque de ellos clips y shorts.
 
-Nació como herramienta personal de KyoSumiVT, para sustituir Premiere Pro + Premiere
-Composer en su flujo de trabajo. En octubre de 2026 el enfoque cambia a la comunidad:
+Nació como herramienta personal de KyoSumiVT, para sustituir el editor comercial y las
+plantillas de transiciones de pago que usaba en su flujo de trabajo. En octubre de 2026 el enfoque cambia a la comunidad:
 muchos creadores dependen de editores de pago con precios altos y condiciones abusivas,
 y SharkCut quiere ser una alternativa gratuita, sin suscripciones ni recogida de datos.
 Casos de uso de referencia:
@@ -28,8 +28,7 @@ Casos de uso de referencia:
 - Contenido de stream con la identidad de cada creador (la app no lleva plantillas de
   ninguna marca concreta).
 
-Con una arquitectura de editor profesional (como DaVinci Resolve o Premiere), no un
-editor web empaquetado:
+Con una arquitectura de editor profesional de escritorio, no un editor web empaquetado:
 
 - Línea de tiempo multipista fluida incluso con proyectos de varias horas.
 - Decodificación, composición y codificación en la GPU, sin copias
@@ -49,8 +48,8 @@ editor web empaquetado:
 |---|---|---|
 | Plataforma | Windows 10/11 (64 bits) | Es el sistema que se usa |
 | Tipo de app | **Nativa**, local, sin depender de internet | Rendimiento de editor profesional, VODs largos |
-| Lenguaje | **C++20** | Lenguaje de Premiere, DaVinci, Kdenlive y Shotcut; acceso directo a FFmpeg, GPU y audio |
-| Interfaz | **Qt 6.10.3** con **Qt Quick / QML** (versión fijada en todo el proyecto) | Interfaz acelerada por GPU y totalmente personalizable (Marea Nocturna); Qt es lo que usa DaVinci |
+| Lenguaje | **C++20** | El lenguaje habitual de los editores de video profesionales; acceso directo a FFmpeg, GPU y audio |
+| Interfaz | **Qt 6.10.3** con **Qt Quick / QML** (versión fijada en todo el proyecto) | Interfaz acelerada por GPU y totalmente personalizable (Marea Nocturna); muy usado en aplicaciones profesionales de video |
 | GPU / render | **QRhi** (capa gráfica de Qt) con backend **Direct3D 11** en Windows | Un solo código de render; en Windows habla D3D11 directamente; permite compilar y probar en otros sistemas con Vulkan/OpenGL |
 | Shaders | GLSL estilo Vulkan (`#version 440`), compilados con `qsb` a HLSL/SPIR-V | Se escriben una vez y Qt los traduce a cada backend |
 | Decodificación | **FFmpeg 9 (libavformat/libavcodec)** enlazado como biblioteca (build precompilada de Gyan), con **NVDEC vía D3D11VA** | Los fotogramas se decodifican directamente en texturas de la GPU |
@@ -95,7 +94,7 @@ tiempo real.
 ### Dentro del alcance
 - Línea de tiempo multipista (video, audio, texto/overlay).
 - Cortar, recortar, mover, dividir, eliminar, rizar (ripple) y cortes rápidos
-  con atajos estilo Premiere.
+  con los atajos habituales de los editores de video.
 - Proyectos largos: VODs de 40 min a varias horas sin perder fluidez.
 - Biblioteca de transiciones propias (sección 6).
 - Biblioteca de efectos de sonido con licencia libre (sección 7).
@@ -215,13 +214,13 @@ SharkCut/
 ## 6. Sistema de transiciones
 
 ### Objetivo
-Recrear desde cero el tipo de transiciones que se usan en Premiere Composer.
-**No se copia código ni recursos de Composer**: se reproducen las técnicas,
+Crear desde cero transiciones dinámicas del tipo que se usa en los videos de streamers.
+**No se copia código ni recursos de ningún producto**: se reproducen las técnicas,
 que son genéricas (transformaciones animadas, desenfoques y deformaciones).
 El resultado será muy parecido, no idéntico píxel a píxel, y totalmente
 personalizable.
 
-### Prioridad 1 — las que se usan hoy en Composer
+### Prioridad 1 — las más usadas en el contenido de stream
 
 | Transición | Técnica |
 |---|---|
@@ -273,8 +272,7 @@ personalizable.
 ## 7. Efectos de sonido
 
 ### Regla de licencias (obligatoria)
-- **Prohibido** extraer o reutilizar los sonidos de Premiere Composer u otros
-  productos de pago: tienen licencia de sus autores.
+- **Prohibido** extraer o reutilizar los sonidos de otros productos de pago: tienen licencia de sus autores.
 - Solo se incluyen sonidos con licencia que permita su uso y redistribución.
 - Cada sonido se registra en `presets/sfx/LICENCIAS.md` con: nombre del
   archivo, origen, autor y licencia.
@@ -364,7 +362,7 @@ desincronía en SharkCut, y se puede saltar a cualquier fotograma.
 - Marcas de entrada y salida (I/O) para elegir los tramos A y B dentro de un video,
   sin tener que cortar archivos aparte (la línea de tiempo completa es la fase 2).
 - Exportación de prueba de esa mezcla con NVENC.
-**Hecho cuando:** la calidad visual convence frente a Premiere Composer y el
+**Hecho cuando:** la calidad visual convence frente a las transiciones de pago y el
 resultado exportado es idéntico a la vista previa.
 
 ### Fase 2 — Editor básico ✅
@@ -374,7 +372,7 @@ resultado exportado es idéntico a la vista previa.
 - Guardar y abrir `.sharkp`.
 - Exportar a MP4 1080p60 con NVENC.
 - Interfaz con el tema Marea Profunda.
-**Hecho cuando:** se puede montar y exportar un short sencillo sin Premiere.
+**Hecho cuando:** se puede montar y exportar un short sencillo sin otro editor.
 
 ### Fase 3 — Interfaz definitiva y montaje real ✅
 Reordenada tras la fase 2 con los comentarios de Kyo (sección 14).
@@ -394,9 +392,9 @@ sin salir de la pestaña Editor.
 ### Fase 4 — Varios proyectos, uso diario y efectos
 Reordenada al cerrar la fase 3 con los comentarios de Kyo (sección 14): la app queda
 neutral (sin plantillas de marca, para compartirla con su círculo), la estructura se
-parece a su espacio de trabajo de Premiere y los efectos que usa en sus shorts se
+parece a su espacio de trabajo habitual y los efectos que usa en sus shorts se
 adelantan desde la antigua fase 5.
-- Varios proyectos abiertos a la vez y varias secuencias por proyecto, como en Premiere:
+- Varios proyectos abiertos a la vez y varias secuencias por proyecto:
   cada proyecto abierto es una pestaña del panel de medios (con sus carpetas, medios y
   secuencias) y cada secuencia abierta, de cualquier proyecto, es una pestaña de la línea
   de tiempo. Cada secuencia tiene su propio lienzo y fps ("Duplicar como vertical" pasa
@@ -406,7 +404,7 @@ adelantan desde la antigua fase 5.
   audio); el botón de la esquina pasa a ser "Exportar rápido" (última configuración).
   Panel Propiedades separado: Medios · Transiciones · Efectos | Propiedades | Programa.
   Se retiran las pestañas Origen y Transición (eran herramientas de las primeras fases).
-- Edición rápida tipo Premiere: Q/W, ripple delete, J/K/L, marcadores, crear una pista al
+- Edición rápida: Q/W, ripple delete, J/K/L, marcadores, crear una pista al
   soltar un medio en la zona vacía de la línea de tiempo.
 - Autoguardado y recuperación tras cierre inesperado.
 - Rendimiento con VODs largos: visor sin copias (textura D3D11 de NVDEC directa al
@@ -416,7 +414,7 @@ adelantan desde la antigua fase 5.
   máscaras simples, más transiciones).
 **Hecho cuando:** se edita un VOD de 40+ minutos de principio a fin con fluidez, se
 saltan proyectos y secuencias sin cerrar nada y los shorts llevan sus efectos sin
-echar de menos Premiere.
+echar de menos otro editor.
 
 ### Fase 5 — Entrega
 - Instalador, icono de los archivos .sharkp y asociación con SharkCut.
@@ -516,7 +514,7 @@ ctest --preset windows-debug
      directo, "Ver transición"). Herramienta `sharkcut_filmstrip` para revisar las
      transiciones fuera de la interfaz. Validada en el PC de Kyo con grabaciones de
      OBS (21 min + 3:35) y con clips verticales cortos (13 s y 1 min): las 7
-     transiciones se ven igual que en Premiere Composer y el audio no se corta.
+     transiciones se ven como se buscaba y el audio no se corta.
    - [x] Etapa 2: exportar la secuencia de prueba a MP4. SequenceExporter compone cada
      fotograma fuera de pantalla con el mismo Compositor (instancia QRhi propia en un
      hilo: D3D11 en Windows), lo lee de la GPU y Mp4Writer lo codifica en H.264 (NVENC,
@@ -524,7 +522,7 @@ ctest --preset windows-debug
      AAC de la mezcla A/B. Comprobado en Linux que el fotograma exportado coincide con
      la vista previa. Validada en el PC de Kyo: exporta con h264_nvenc (56 s) y el
      MP4 se ve y se oye igual que en SharkCut.
-   - **Fase 1 terminada.** Lo único que falta frente a Composer son los efectos de
+   - **Fase 1 terminada.** Lo único que falta son los efectos de
      sonido de cada transición, previstos en la fase 3 (sección 7).
 6. Fase 2: editor básico.
    - [x] Etapa 1: núcleo de la línea de tiempo, sin interfaz. Proyecto (ajustes,
@@ -547,7 +545,7 @@ ctest --preset windows-debug
      que cada fotograma exportado coincide con su origen (cortes y huecos incluidos).
    - **Fase 2 terminada.** Validada en el PC de Kyo con dos VODs largos (40 y 21 min):
      corta, mueve y reproduce sin tirones, audio perfecto, exportación con h264_nvenc.
-   - Comentarios de Kyo tras probarla (lo que echa de menos frente a Premiere), con la
+   - Comentarios de Kyo tras probarla (lo que echa de menos frente a su editor anterior), con la
      fase donde encaja cada uno según el plan actual:
      - Rediseñar la interfaz (la de ahora es provisional, para probar) → fase 3.
      - Iconos de herramientas y cursores, logo de la app e icono de los `.sharkp`
@@ -622,7 +620,7 @@ ctest --preset windows-debug
      - Arrastrar una transición de la pestaña Transiciones al corte entre dos clips
        seguidos de una pista de video (se ilumina el corte más cercano). Cambio respecto a
        lo previsto ("los clips se solapan"): la transición se centra en el corte y usa el
-       material que sobra del medio antes y después de cada clip, como en Premiere; si no
+       material que sobra del medio antes y después de cada clip; si no
        hay, repite el primer o el último fotograma. Así ningún clip se mueve y el audio y
        las demás pistas siguen sincronizados.
      - Ajustarla ahí mismo: duración arrastrando sus bordes (antes y después del corte, por
@@ -652,7 +650,7 @@ ctest --preset windows-debug
    - **Fase 3 terminada.** Se monta un short con facecam, música y transiciones sin salir
      de la pestaña Editor.
    - Comentarios de Kyo al cerrar la fase 3, con la fase donde encaja cada uno:
-     - Q y W como en Premiere: Q recorta desde el cabezal hacia atrás (quita del inicio
+     - Q y W: Q recorta desde el cabezal hacia atrás (quita del inicio
        del clip hasta el cabezal y cierra el hueco) y W desde el cabezal hacia delante →
        fase 4 (edición rápida).
      - Arrastrar un medio a la zona vacía de la línea de tiempo (encima de la pista de
@@ -663,7 +661,7 @@ ctest --preset windows-debug
    - Decisiones al planificarla: sin textos ni títulos con la marca (la app queda neutral
      para compartirla); se retiran Origen y Transición (Kyo no usaba Origen); varios
      proyectos abiertos y varias secuencias por proyecto, como en su espacio de trabajo
-     de Premiere; efectos adelantados desde la antigua fase 5 y la entrega pasa a la 5.
+     habitual; efectos adelantados desde la antigua fase 5 y la entrega pasa a la 5.
    - [x] Etapa 1: proyectos y secuencias. Núcleo: `Document` (src/core/document.h) con
      medios, carpetas (un nivel) y secuencias (cada una con su lienzo, fps y pistas); las
      operaciones de edición siguen trabajando sobre un `Project`, que es la vista de una
@@ -693,7 +691,7 @@ ctest --preset windows-debug
      con el nombre de la secuencia. Nunca se reemplaza un archivo: «nombre (2).mp4». Se
      retiran Origen, Transición y su código (Player, TransitionLab); la prueba de
      transición sigue en tools/filmstrip.
-   - [x] Etapa 3: edición rápida y trabajo seguro. Con rizo, como Premiere con bloqueo de
+   - [x] Etapa 3: edición rápida y trabajo seguro. Con rizo y bloqueo de
      sincronización (se desplaza todo lo posterior en las pistas no bloqueadas, y los
      marcadores): Q quita desde el borde anterior hasta el cabezal y W desde el cabezal
      hasta el borde siguiente; Mayús+Supr (o el menú del clip) elimina con rizo; clic
@@ -742,7 +740,7 @@ ctest --preset windows-debug
      - Pendiente: visor sin copias (textura D3D11 de NVDEC directa al compositor). Es
        código solo de Windows que no se puede compilar ni probar en la nube: se hará en
        una sesión de prueba con Kyo en su PC.
-   - [ ] Etapa 5: efectos para los shorts. Kyo usa en Premiere estos ajustes guardados
+   - [ ] Etapa 5: efectos para los shorts. Kyo usaba en su editor anterior estos ajustes guardados
      (presets con nombre, que se aplican arrastrándolos a un clip), que sirven de lista:
      - Movimiento (animaciones de posición/escala con keyframes): Acercamiento Motion
        Kyo3D, Alejamiento Motion Kyo3D, Acercamiento Reacción, Chat Motion, Disk
@@ -760,8 +758,8 @@ ctest --preset windows-debug
        .sharkp versión 5. Y lectura de videos AV1 (OBS): NVDEC si la tarjeta lo admite,
        si no dav1d por software.
      - [x] Adelantado a petición de Kyo (lo necesitaba para los shorts): subtítulos.
-       «Crear subtítulos a partir de la transcripción» (pestaña Subtítulos), como en
-       Premiere: transcribe en local con whisper.cpp (modelo grande «turbo» o pequeño,
+       «Crear subtítulos a partir de la transcripción» (pestaña Subtítulos):
+       transcribe en local con whisper.cpp (modelo grande «turbo» o pequeño,
        descargado una sola vez; sin internet después) y divide en subtítulos con una
        línea, dos o una sola palabra, caracteres por línea, duración mínima, separación y
        quitar puntuación; se puede volver a dividir sin transcribir otra vez (cada
@@ -825,14 +823,14 @@ ctest --preset windows-debug
        proyectos): en el cabezal, en las mismas pistas, sobrescribiendo.
        Después, a petición de Kyo (seguía el lag al hacer zoom): cada clip de video muestra
        solo su primer fotograma, al inicio, en vez de una tira de miniaturas.
-     - [x] Transiciones como clips (petición de Kyo, como en Premiere Composer): se
+     - [x] Transiciones como clips (petición de Kyo): se
        arrastran a la línea de tiempo y quedan como un clip en una pista libre, centradas en
        el corte más cercano, con su efecto de sonido en una pista de audio. Afectan a todo
        lo que hay debajo (también varias pistas: gameplay, facecam y textos), y se pueden
        poner al principio o al final de un clip, mover, cortar y recortar. En Propiedades:
        tipo, duración, intensidad, desenfoque y curva. Archivo .sharkp versión 9.
-     - [x] Biblioteca de efectos de sonido (pestaña Sonidos), con los que Kyo usa en
-       Premiere como guía (sin copiarlos: sintetizados, CC0): clic de ratón, clic suave,
+     - [x] Biblioteca de efectos de sonido (pestaña Sonidos), con los que Kyo usaba
+       antes como guía (sin copiarlos: sintetizados, CC0): clic de ratón, clic suave,
        pop hueco, pop de burbuja y más swooshes, además de los whoosh, impactos, glitch y
        riser de las transiciones. Se arrastran a una pista de audio o se ponen con su golpe
        en el cabezal (+).
@@ -882,7 +880,7 @@ ctest --preset windows-debug
       las bibliotecas del sistema. Cambiable sin tocar el código (`cmake/FFmpeg.cmake`).
 
 ### Decisiones pendientes
-- [ ] Atajos de teclado: copiar el mapa de Premiere tal cual o uno propio.
+- [ ] Atajos de teclado: el mapa habitual de los editores de video o uno propio.
 - [ ] Instalador: Inno Setup o NSIS (decidir al llegar a la fase 2).
 
 
@@ -895,8 +893,8 @@ destellos. Un editor se mira durante horas y necesita lo contrario: calma visual
 y neutralidad de color. Por eso la interfaz usa una variante sobria.
 
 ### Principios
-- **Base neutra:** grises carbón con un matiz azul muy leve, como DaVinci o
-  Premiere. Nada de fondos saturados.
+- **Base neutra:** grises carbón con un matiz azul muy leve, como los editores
+  profesionales. Nada de fondos saturados.
 - **El visor manda:** su entorno es casi negro y neutro (`#0B0C10`) para no
   alterar la percepción del color del video.
 - **La marca en acentos:** Bioluz suavizado para foco y selección; Bioluz puro

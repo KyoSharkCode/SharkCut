@@ -282,14 +282,14 @@ Window {
         lineaTiempo.mostrarCabezal()
     }
 
-    // Atajos de teclado (estilo Premiere)
+    // Atajos de teclado (los habituales de los editores de video)
     readonly property bool conSecuencia: !enProyectos && editor.hasSequence
     Shortcut { sequence: "Space"; enabled: ventana.conSecuencia; onActivated: editor.togglePlay() }
     Shortcut { sequence: "Left"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(-1)) }
     Shortcut { sequence: "Right"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(1)) }
     Shortcut { sequence: "Shift+Left"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(-10)) }
     Shortcut { sequence: "Shift+Right"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.step(10)) }
-    // Flechas arriba/abajo (como en Premiere): al corte anterior / siguiente.
+    // Flechas arriba/abajo: al corte anterior / siguiente.
     Shortcut { sequence: "Up"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToEdit(-1)) }
     Shortcut { sequence: "Down"; enabled: ventana.conSecuencia; onActivated: ventana.navegar(() => editor.goToEdit(1)) }
     Shortcut {
@@ -312,7 +312,7 @@ Window {
         enabled: editor.frameCount > 0 && !editor.exporting
         onActivated: editor.quickExport()
     }
-    // J/K/L (como en Premiere): atrás, pausa, adelante; otra pulsación dobla la velocidad.
+    // J/K/L: atrás, pausa, adelante; otra pulsación dobla la velocidad.
     Shortcut { sequence: "J"; enabled: ventana.conSecuencia; onActivated: editor.shuttle(-1) }
     Shortcut { sequence: "K"; enabled: ventana.conSecuencia; onActivated: editor.pause() }
     Shortcut { sequence: "L"; enabled: ventana.conSecuencia; onActivated: editor.shuttle(1) }

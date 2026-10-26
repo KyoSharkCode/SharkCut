@@ -1,8 +1,8 @@
 # Efectos de sonido de SharkCut: licencias
 
 Regla del proyecto (docs/PLAN.md, sección 7): todo sonido que se añada aquí se registra
-en esta tabla con su origen, autor y licencia. Prohibido usar sonidos de Premiere
-Composer u otros productos de pago.
+en esta tabla con su origen, autor y licencia. Prohibido usar sonidos de otros
+productos de pago.
 
 Todos los sonidos actuales están **sintetizados por código** con
 `tools/sfx/generar_sfx.py` (ruido filtrado, barridos de frecuencia y envolventes; sin

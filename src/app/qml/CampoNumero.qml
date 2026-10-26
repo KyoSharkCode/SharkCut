@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import SharkCut
 
-// Valor numérico editable, como en Premiere: arrastra a izquierda o derecha sobre el
+// Valor numérico editable: arrastra a izquierda o derecha sobre el
 // número para cambiarlo (se ve en directo; con Mayús va 10 veces más rápido y con Ctrl,
 // 10 veces más fino) o haz clic para escribirlo. `cambiando` llega durante el arrastre
 // y `cambiado` al soltar o al confirmar lo escrito (un solo paso de deshacer).

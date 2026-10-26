@@ -33,6 +33,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
 | [FB-029](#fb-029) | 2026-10-26 | Otro | Propuesta | Apartado de tutorial en la app | En el plan |
+| [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | En el plan |
 
 ---
 
@@ -439,3 +440,22 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** surgió al hablar de los atajos que nadie encuentra (FB-003) y del punto de
   anclaje confuso (FB-010).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B4)
+
+<a id="fb-030"></a>
+### FB-030 · El cabezal no llega al final exacto de los clips
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.2
+- **Área:** Línea de tiempo
+- **Tipo:** Error
+- **Qué dijo:** en la línea de tiempo no deja colocar el cabezal exactamente al final de los
+  medios; es como si los fotogramas terminaran ahí.
+- **Contexto:** secuencia vertical de 00:01:52:15; el cabezal se queda en 00:01:52:14, un
+  fotograma antes del borde final de los clips.
+- **Notas:** `Editor::seek` limita el cabezal al último fotograma (`frameCount() - 1`). Los
+  editores habituales dejan ponerlo justo después (en la duración total), donde se ve
+  negro; ahí se pegan o añaden clips a continuación. Hoy, pegar en el cabezal desde el
+  final pisaría el último fotograma.
+- **Capturas:** [FB-030-cabezal-final.png](capturas/FB-030-cabezal-final.png),
+  [FB-030-cabezal-final-detalle.png](capturas/FB-030-cabezal-final-detalle.png)
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A14)

@@ -41,6 +41,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-035](#fb-035) | 2026-10-26 | Propiedades | Propuesta | Propiedades más ancho con línea de tiempo de keyframes | En el plan |
 | [FB-036](#fb-036) | 2026-10-26 | Propiedades | Propuesta | Una pestaña en Propiedades por cada efecto del clip | En el plan |
 | [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
+| [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
 
 ---
 
@@ -571,3 +572,16 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** hoy todas las pistas tienen la misma altura fija y Ctrl + rueda hace zoom
   horizontal.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)
+
+<a id="fb-038"></a>
+### FB-038 · Acelerar o ralentizar un clip
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Línea de tiempo
+- **Tipo:** Propuesta
+- **Qué dijo:** añadir la función de aumentar o reducir la velocidad de un video.
+- **Contexto:** edición de clips en la línea de tiempo.
+- **Notas:** hoy los clips siempre se reproducen a velocidad normal: no hay ningún ajuste
+  de velocidad.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)

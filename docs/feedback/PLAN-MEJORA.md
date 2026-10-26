@@ -259,6 +259,10 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
+- **Hecho:** alejar, acercar y «Ver todo» pasan de abajo de la columna de herramientas a la
+  esquina superior derecha de la línea de tiempo, en la fila de las pestañas de secuencias.
+  Sus ayudas dicen los atajos (-, + o Ctrl + rueda, \\) y cómo se mueve la rueda (Alt +
+  rueda: entre pistas).
 
 ### M10 · Doble clic en Medios para importar · FB-024 · S
 - **Hacer:** doble clic en la zona vacía del panel Medios abre el diálogo de importar (el

@@ -22,7 +22,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-016](#fb-016) | 2026-10-22 | Otro | Propuesta | Paneles reorganizables y diseños | En el plan |
 | [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Hecho |
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | En el plan |
-| [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | En el plan |
+| [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | Hecho |
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
@@ -263,7 +263,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Usabilidad
 - **Qué dijo:** Mover los botones de acercar y alejar de la línea de tiempo a la esquina superior derecha.
 - **Contexto:** Barra de la línea de tiempo.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M9)
 
 <a id="fb-020"></a>
 ### FB-020 · El botón Proxies «a veces no sirve»; elegir la calidad de la vista previa

@@ -386,9 +386,6 @@ Rectangle {
                 onPulsado: raiz.editor.redo()
             }
             Item { Layout.fillHeight: true }
-            BotonIcono { icono: "acercar"; ayuda: "Acercar (+)"; onPulsado: raiz.acercar() }
-            BotonIcono { icono: "alejar"; ayuda: "Alejar (-)"; onPulsado: raiz.alejar() }
-            BotonIcono { icono: "ajustar"; ayuda: "Ver todo (\\)"; onPulsado: raiz.encajar() }
         }
 
         Rectangle {
@@ -436,6 +433,28 @@ Rectangle {
                     onPulsado: raiz.nuevaSecuencia()
                 }
                 Item { Layout.fillWidth: true }
+                // Zoom, en la esquina superior derecha.
+                BotonIcono {
+                    icono: "alejar"
+                    ayuda: "Alejar (- o Ctrl + rueda)"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.alejar()
+                }
+                BotonIcono {
+                    icono: "acercar"
+                    ayuda: "Acercar (+ o Ctrl + rueda)"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.acercar()
+                }
+                BotonIcono {
+                    icono: "ajustar"
+                    ayuda: "Ver todo (\\) · rueda: moverse en el tiempo · Alt + rueda: entre pistas"
+                    implicitWidth: 28
+                    implicitHeight: 26
+                    onPulsado: raiz.encajar()
+                }
             }
 
             RowLayout {

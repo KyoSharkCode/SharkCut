@@ -447,7 +447,7 @@ Item {
                             id: posicion
                             Layout.fillWidth: true
                             from: 0
-                            to: Math.max(1, pagina.editor.frameCount - 1)
+                            to: Math.max(1, pagina.editor.frameCount)
                             value: pagina.editor.currentFrame
                             onMoved: pagina.editor.seek(Math.round(value))
                             background: Rectangle {

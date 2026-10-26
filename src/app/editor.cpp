@@ -3956,8 +3956,8 @@ void Editor::play() {
     if (frameCount() <= 0 || m_playing) {
         return;
     }
-    if (m_currentFrame >= frameCount() - 1) {
-        seek(0);
+    if (m_currentFrame >= frameCount()) {
+        seek(0); // desde el final: vuelve a empezar
     }
     m_speed = 1;
     m_pendingFrame = -1;
@@ -3977,8 +3977,8 @@ void Editor::pause() {
 }
 
 void Editor::shuttle(int direction) {
-    const qint64 last = frameCount() - 1;
-    if (last < 0 || direction == 0) {
+    const qint64 last = frameCount(); // el cabezal llega hasta el final exacto
+    if (last <= 0 || direction == 0) {
         return;
     }
     int speed = direction > 0 ? 1 : -1;
@@ -4024,7 +4024,9 @@ void Editor::seek(qint64 frame) {
         emit compositionChanged();
         return;
     }
-    frame = std::clamp<qint64>(frame, 0, total - 1);
+    // Hasta el final exacto (`total`, justo después del último fotograma): ahí no hay nada
+    // que ver y se pega o se añade a continuación, sin pisar el último.
+    frame = std::clamp<qint64>(frame, 0, total);
     setCurrentFrame(frame);
     requestFrames(frame);
     if (m_playing && m_speed == 1) {
@@ -4088,7 +4090,7 @@ void Editor::advance() {
         return;
     }
     qint64 target = sharkcut::microsecondsToFrame(m_clock.nowUs(), rate);
-    const qint64 last = frameCount() - 1;
+    const qint64 last = frameCount(); // se para en el final exacto
     const bool reachedEnd = target >= last;
     target = std::min(target, last);
 
@@ -4108,7 +4110,7 @@ void Editor::advanceShuttle(sharkcut::FrameRate rate) {
     const double fps = static_cast<double>(rate.num) / static_cast<double>(rate.den);
     const double elapsed = static_cast<double>(m_shuttleTimer.elapsed()) / 1000.0;
     qint64 target = m_shuttleFrom + std::llround(elapsed * fps * m_speed);
-    const qint64 last = frameCount() - 1;
+    const qint64 last = frameCount();
     const bool reachedEnd = target >= last || target <= 0;
     target = std::clamp<qint64>(target, 0, last);
     if (m_speed > 0) {

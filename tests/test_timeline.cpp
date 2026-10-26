@@ -1096,3 +1096,22 @@ TEST_CASE("The nearest clip is found for tiny clips", "[timeline]") {
     CHECK(p.nearestClip(kVideoTrack, 200, 1000)->id == second);
     CHECK(p.nearestClip(99, 100, 5) == nullptr); // pista que no existe
 }
+
+TEST_CASE("Edits at the exact end of the sequence", "[timeline]") {
+    Project p;
+    const ObjectId vod = addMedia(p, media("vod.mp4", 60, true, true));
+    REQUIRE(placeClip(p, vod, 0, 0, 300) != 0);
+    const std::int64_t end = p.length();
+    REQUIRE(end == 300);
+    // En el final exacto no hay nada que dividir ni que recortar hacia delante.
+    CHECK_FALSE(splitAt(p, end));
+    CHECK_FALSE(rippleTrimNext(p, end));
+    // Pegar ahí deja el clip a continuación, sin pisar el último fotograma.
+    const Clipboard copied = copyClips(p, {video(p).front().id});
+    const auto pasted = pasteClips(p, copied, end);
+    REQUIRE_FALSE(pasted.empty());
+    REQUIRE(video(p).size() == 2);
+    CHECK(video(p)[0].end() == 300);
+    CHECK(video(p)[1].start == 300);
+    CHECK(p.length() == 600);
+}

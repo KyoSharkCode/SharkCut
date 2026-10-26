@@ -300,7 +300,7 @@ Window {
     Shortcut {
         sequence: "End"
         enabled: ventana.conSecuencia
-        onActivated: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount - 1) })
+        onActivated: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount) })
     }
     Shortcut { sequences: [StandardKey.Open]; onActivated: dialogoAbrirProyecto.open() }
     Shortcut { sequences: [StandardKey.New]; onActivated: dialogoNuevo.open() }
@@ -611,7 +611,7 @@ Window {
                                 BotonIcono {
                                     icono: "final"
                                     ayuda: "Al final (Fin)"
-                                    onPulsado: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount - 1) })
+                                    onPulsado: ventana.navegar(() => { editor.pause(); editor.seek(editor.frameCount) })
                                 }
                                 Item { implicitWidth: 8 }
                                 BotonIcono {

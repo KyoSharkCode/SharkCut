@@ -227,6 +227,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   la exportación por tramo.
 - **Hecho cuando:** el cabezal se puede dejar justo en el borde final de los clips y pegar
   ahí deja el clip a continuación, sin pisar el último fotograma.
+- **Hecho:** `Editor::seek` deja el cabezal en `frameCount()` (justo después del último
+  fotograma), y ahí el visor muestra el lienzo vacío. Fin y el botón de ir al final lo
+  llevan ahí, y el imán y ↓ con el final de los clips también. La reproducción se para ahí y
+  vuelve a empezar desde el principio si se reproduce desde el final; J/L llegan hasta el
+  final, y el control de posición de Exportar y «hasta el cabezal» también. Lo que usa el
+  cabezal en el final: pegar lo deja a continuación, dividir y W no hacen nada, y sonidos,
+  marcadores y transiciones se ponen ahí. Test del núcleo; comprobado con Xvfb (Fin y
+  Ctrl+V en el final).
 
 ---
 

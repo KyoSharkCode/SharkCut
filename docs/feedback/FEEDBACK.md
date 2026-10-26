@@ -33,7 +33,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
 | [FB-029](#fb-029) | 2026-10-26 | Otro | Propuesta | Apartado de tutorial en la app | En el plan |
-| [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | En el plan |
+| [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | Hecho |
 | [FB-031](#fb-031) | 2026-10-26 | Efectos | Propuesta | Clic en una transición la pone en el cabezal | En el plan |
 | [FB-032](#fb-032) | 2026-10-26 | Línea de tiempo | Propuesta | Cabezal con forma de aleta de tiburón | En el plan |
 | [FB-033](#fb-033) | 2026-10-26 | Exportación | Propuesta | Preset de exportación para TikTok | En el plan |
@@ -461,7 +461,7 @@ Formato y estados: ver [README.md](README.md).
   final pisaría el último fotograma.
 - **Capturas:** [FB-030-cabezal-final.png](capturas/FB-030-cabezal-final.png),
   [FB-030-cabezal-final-detalle.png](capturas/FB-030-cabezal-final-detalle.png)
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A14)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A14)
 
 <a id="fb-031"></a>
 ### FB-031 · Clic en una transición la pone en el cabezal

@@ -5,7 +5,7 @@ Formato y estados: ver [README.md](README.md).
 | ID | Fecha | Área | Tipo | Resumen | Estado |
 |----|-------|------|------|---------|--------|
 | [FB-001](#fb-001) | 2026-10-22 | Marca/logo | Usabilidad | El logo parece un pincho de Geometry Dash, no una aleta | En el plan |
-| [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
+| [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | Hecho |
 | [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | Hecho |
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
 | [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
@@ -67,7 +67,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Si es posible, optimizar el tiempo que tardan en generarse los picos de audio (ondas).
 - **Contexto:** Al importar medios y verlos en la línea de tiempo.
 - **Notas:** Las ondas se calculan con `waveform.h` y se guardan en la caché del proyecto (`<proyecto>.sharkp.cache/`); la segunda vez deberían salir de la caché. Conviene medir con VODs largos para saber dónde se va el tiempo.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A6)
 
 <a id="fb-003"></a>
 ### FB-003 · Atajo para cortar en el cabezal (ej. Alt+C)

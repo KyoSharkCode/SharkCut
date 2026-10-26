@@ -35,7 +35,10 @@ struct Waveform {
 
 // Decodifica todo el audio del archivo (UTF-8). Lanza MediaError si no tiene audio o
 // no se puede leer. Con `cancel` a true se abandona (y también lanza MediaError).
-Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel = nullptr);
+// `parts`: en cuántos tramos se reparte, cada uno en su hilo; 0 = según la duración (un
+// tramo por minuto, como mucho 4 y no más que núcleos), 1 = todo seguido.
+Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel = nullptr,
+                         int parts = 0);
 
 // Caché en disco. Se escribe con un temporal que se renombra al terminar.
 bool saveWaveform(const Waveform& waveform, const std::filesystem::path& file);

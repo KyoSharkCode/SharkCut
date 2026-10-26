@@ -29,7 +29,8 @@ std::filesystem::path cacheFile(const QString& directory, const QString& mediaPa
 // --- WaveformCache -------------------------------------------------------------------
 
 WaveformCache::WaveformCache(QObject* parent) : QObject(parent) {
-    // Decodificar el audio de un VOD entero lleva unos segundos: pocos a la vez.
+    // Decodificar el audio de un VOD entero lleva unos segundos (y cada onda ya se reparte
+    // en varios hilos): pocas a la vez.
     m_pool.setMaxThreadCount(2);
 }
 

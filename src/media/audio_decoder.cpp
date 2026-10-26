@@ -45,8 +45,9 @@ struct AudioDecoder::Impl {
     int swrRate = 0;
     int swrFormat = -1;
 
-    std::vector<float> pending;    // muestras convertidas aún no entregadas
-    std::size_t pendingOffset = 0; // en floats
+    std::vector<float> pending;       // muestras convertidas aún no entregadas
+    std::vector<float> convertBuffer; // salida de swr_convert (se reutiliza)
+    std::size_t pendingOffset = 0;    // en floats
 
     bool aligning = true; // la próxima trama se alinea con `alignTarget`
     std::int64_t alignTarget = 0;
@@ -158,14 +159,18 @@ struct AudioDecoder::Impl {
         configureResampler(frame.get());
 
         const int capacity = swr_get_out_samples(swr.get(), frame->nb_samples);
-        std::vector<float> converted(static_cast<std::size_t>(std::max(capacity, 0)) *
-                                     kAudioChannels);
-        auto* outPtr = reinterpret_cast<std::uint8_t*>(converted.data());
+        // Se reutiliza (sin volver a reservar ni a poner a cero en cada trama).
+        const std::size_t needed = static_cast<std::size_t>(std::max(capacity, 0)) * kAudioChannels;
+        if (convertBuffer.size() < needed) {
+            convertBuffer.resize(needed);
+        }
+        auto* outPtr = reinterpret_cast<std::uint8_t*>(convertBuffer.data());
         const int produced =
             swr_convert(swr.get(), &outPtr, capacity,
                         const_cast<const std::uint8_t**>(frame->extended_data), frame->nb_samples);
         ff::check(produced, "Error al convertir el audio");
-        converted.resize(static_cast<std::size_t>(produced) * kAudioChannels);
+        const float* converted = convertBuffer.data();
+        std::size_t convertedCount = static_cast<std::size_t>(produced) * kAudioChannels;
 
         if (aligning) {
             std::int64_t pts = frame->best_effort_timestamp;
@@ -185,8 +190,8 @@ struct AudioDecoder::Impl {
                 if (start < alignTarget) {
                     const auto skip =
                         static_cast<std::size_t>(alignTarget - start) * kAudioChannels;
-                    converted.erase(converted.begin(),
-                                    converted.begin() + static_cast<std::ptrdiff_t>(skip));
+                    converted += skip;
+                    convertedCount -= skip;
                 } else if (start > alignTarget) {
                     const std::int64_t pad = std::min(start - alignTarget, kMaxPadding);
                     pending.insert(pending.end(), static_cast<std::size_t>(pad) * kAudioChannels,
@@ -194,7 +199,7 @@ struct AudioDecoder::Impl {
                 }
             }
         }
-        pending.insert(pending.end(), converted.begin(), converted.end());
+        pending.insert(pending.end(), converted, converted + convertedCount);
     }
 
     std::size_t read(float* out, std::size_t frames) {

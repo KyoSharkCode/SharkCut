@@ -1,6 +1,6 @@
 #pragma once
 
-// Ajustes guardados de clips (presets), como los de Premiere: el aspecto de un clip con
+// Ajustes guardados de clips (presets): el aspecto de un clip con
 // nombre (colocación, opacidad, recorte, efectos, pantalla verde y su animación) para
 // aplicarlo a otros arrastrándolo. La animación se guarda en tiempo relativo al inicio o
 // al final del clip, en microsegundos: vale para clips de cualquier duración y fps.

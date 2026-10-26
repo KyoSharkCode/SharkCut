@@ -277,7 +277,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Usabilidad (con una propuesta)
 - **Qué dijo:** no se entiende por qué a veces el botón «Proxies» no funciona. Si los proxies
   son una vista previa de baja calidad en el visor, sería ideal elegir cuánta calidad se
-  quiere: completa, 3/4, 1/2… como en Premiere.
+  quiere: completa, 3/4, 1/2…
 - **Contexto:** botón «Proxies» de la barra del visor.
 - **Notas:** según el código (`Main.qml`, `Editor::decodePath`), el botón:
   1. está desactivado mientras el proyecto no está guardado (los proxies van en su caché);
@@ -358,7 +358,7 @@ Formato y estados: ver [README.md](README.md).
   ventana de importar sin tener que pulsar el botón Importar.
 - **Contexto:** panel Medios (PanelBiblioteca).
 - **Notas:** hoy el doble clic solo abre carpetas y secuencias; en la zona vacía no hace
-  nada. Es lo que hace Premiere.
+  nada. Es lo habitual en los editores de video.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
 
 <a id="fb-025"></a>

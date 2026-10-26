@@ -203,7 +203,7 @@ struct Clip {
     ClipAnimation animation{}; // solo clips de video
     double volumeDb = 0.0;     // solo clips de audio
     // Transición como clip (pistas de video, sin medio: media = 0): en su tramo se aplica
-    // a todo lo que hay debajo (como una capa de ajuste de Premiere). Su efecto dura
+    // a todo lo que hay debajo (como una capa de ajuste). Su efecto dura
     // effect->durationFrames y avanza con `in`, como un medio: al cortarla o recortarla,
     // cada trozo sigue donde iba.
     std::optional<TransitionParams> effect{};
@@ -221,7 +221,7 @@ struct Clip {
 // justo donde empieza B). Ocupa [corte − before, corte + after): en ese tramo A sigue
 // más allá de su final y B empieza antes de su inicio, con el material que sobra del
 // medio (si no hay, se repite su último o su primer fotograma). Ningún clip se mueve,
-// así que el audio y las demás pistas siguen sincronizados (como en Premiere).
+// así que el audio y las demás pistas siguen sincronizados.
 struct Transition {
     ObjectId id = 0;
     ObjectId from = 0;       // clip saliente (A)

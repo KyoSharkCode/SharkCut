@@ -116,8 +116,8 @@ Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
 **Editar** (con la herramienta **Selección**, tecla `V`):
 
 - [ ] Clic en un clip lo selecciona (también su audio); `Ctrl`/`Mayús` + clic suma clips.
-- [ ] Arrastrar un clip lo mueve. Si cae encima de otro, lo **sobrescribe** (como en
-  Premiere). El hueco que deja no se cierra solo (la eliminación con rizo llega en la fase 4).
+- [ ] Arrastrar un clip lo mueve. Si cae encima de otro, lo **sobrescribe**. El
+  hueco que deja no se cierra solo (la eliminación con rizo llega en la fase 4).
 - [ ] Arrastrar el **borde** izquierdo o derecho de un clip lo recorta. No deja pasar del
   principio o final del video ni pisar el clip vecino.
 - [ ] Con el **Imán** (`S`) activado, los clips y los recortes se pegan a los bordes de
@@ -152,13 +152,13 @@ Las pestañas **2 · Origen** y **3 · Transición** siguen como antes.
 - [ ] Exporta la línea de tiempo entera a MP4. El panel derecho muestra el progreso, se
   puede cancelar y al final dice el tiempo y el códec (**h264_nvenc**).
 - [ ] El MP4 se ve y se oye igual que en SharkCut: cortes, huecos en negro y audio en su sitio.
-- [ ] Monta un short sencillo de principio a fin sin abrir Premiere. ¿Qué echas de menos?
+- [ ] Monta un short sencillo de principio a fin sin abrir otro editor. ¿Qué echas de menos?
 
 ### Fase 1: laboratorio de transiciones y exportación (validada)
 
 Pestañas **2 · Origen** y **3 · Transición** (antes 1 y 2).
 
-**Marcas de entrada y salida (como el monitor de origen de Premiere).** En vez de cortar
+**Marcas de entrada y salida (monitor de origen).** En vez de cortar
 los videos en archivos separados, eliges un tramo dentro de un video:
 
 1. En **Origen**, abre un video y lleva el cabezal al punto donde quieres que empiece
@@ -186,7 +186,7 @@ Atajo: `SharkCut.exe a.mp4 b.mp4` importa los videos y los coloca en la línea d
 - [ ] **Exportar prueba a MP4…** guarda la secuencia. El mensaje final indica el tiempo y
   el códec: debe ser **h264_nvenc** (tu RTX 3060). Ábrelo en otro reproductor y comprueba
   que se ve igual que en SharkCut, con el audio.
-- [ ] Compara con Composer: anota qué transiciones se parecen y cuáles no, y qué cambiarías
+- [ ] Compara con las transiciones que usas hoy: anota cuáles se parecen y cuáles no, y qué cambiarías
   (más rápida, más desenfoque, otra curva…). ¡Capturas o videos del móvil ayudan mucho!
 
 ### Fase 0, etapa 3: audio sincronizado (validada)
@@ -217,7 +217,7 @@ Usa un clip de OBS en el que se te vea hablar (o con sonidos claros, como palmad
    - [ ] **Espacio** reproduce y pausa; el video va fluido y a velocidad real.
    - [ ] **← / →** avanzan o retroceden un fotograma; **Mayús + ← / →**, diez.
    - [ ] Al hacer clic en la barra salta a ese punto al instante.
-   - [ ] Los colores se ven igual que en Premiere u OBS (ni lavados ni saturados).
+   - [ ] Los colores se ven igual que en tu reproductor o en OBS (ni lavados ni saturados).
 4. Envía una captura con el panel **Clip** visible.
 
 ### Fase 0, etapa 1: ventana y diagnóstico (validada)

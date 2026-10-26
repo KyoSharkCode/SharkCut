@@ -8,8 +8,8 @@
 //
 // Reglas comunes:
 // - Los clips enlazados (video + audio del mismo tramo) se editan siempre juntos.
-// - Colocar o mover un clip sobrescribe lo que hubiera debajo (como el modo
-//   "sobrescribir" de Premiere): los clips tapados se recortan, se parten o se quitan.
+// - Colocar o mover un clip sobrescribe lo que hubiera debajo (modo "sobrescribir"):
+//   los clips tapados se recortan, se parten o se quitan.
 //   Si un clip enlazado queda tapado solo en una de sus pistas, deja de estar enlazado.
 // - Quitar o mover un clip deja un hueco; no se desplaza el resto. Las operaciones
 //   "con rizo" (rippleTrim*, rippleDelete, closeGap) sí cierran el hueco.
@@ -179,7 +179,7 @@ bool linkEffectSound(Project& project, ObjectId effect, ObjectId sound);
 
 // --- Edición con rizo ---
 //
-// Como en Premiere con "bloqueo de sincronización": al cerrar un hueco se desplaza todo
+// Con "bloqueo de sincronización": al cerrar un hueco se desplaza todo
 // lo que hay después en todas las pistas no bloqueadas (así el audio y la facecam siguen
 // sincronizados con el video). Las bloqueadas no se mueven. Los marcadores también se
 // desplazan.

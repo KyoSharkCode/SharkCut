@@ -1,8 +1,8 @@
 #pragma once
 
 // Documento de SharkCut: un proyecto con su biblioteca de medios (con carpetas) y una o
-// varias secuencias, como en Premiere. Cada secuencia tiene su lienzo, sus fps y sus
-// pistas; los medios son del proyecto y los comparten todas.
+// varias secuencias. Cada secuencia tiene su lienzo, sus fps y sus pistas; los medios son
+// del proyecto y los comparten todas.
 //
 // Las operaciones de edición (edit.h) trabajan sobre un Project, que es la vista de una
 // secuencia: sus ajustes y pistas más la biblioteca y el contador de ids del documento.

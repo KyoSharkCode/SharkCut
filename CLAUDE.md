@@ -79,7 +79,7 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Se aplican desde la pestaña Efectos (Editor::applyEffect; a todos los clips de video
   seleccionados si el clip es uno de ellos) y se ajustan en Propiedades. Selección por
   cuadro en LineaTiempo (marcoSeleccion → Editor::selectArea).
-  Transiciones como clips (como Premiere Composer): Clip::effect (TransitionParams, sin
+  Transiciones como clips: Clip::effect (TransitionParams, sin
   medio, media = 0) en una pista de video; afecta a todo lo de debajo en su tramo. El
   compositor (CompositorLayer::adjust) copia el lienzo dibujado hasta ahí y le aplica la
   transición con A = B = esa copia. Su efecto avanza con `in` (dura durationFrames, como
@@ -197,7 +197,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.
   Proxies, miniaturas, ondas y remux van a la carpeta de caché del proyecto.
-- No copiar código ni recursos de Premiere Composer ni de otros productos de pago.
+- No copiar código ni recursos de otros productos de pago. En código, comentarios y
+  documentos no se nombran otros programas de edición: se describe el comportamiento.
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.
 - Respetar las fases del plan; no adelantar funciones de fases posteriores.
 - Comentarios y textos de la interfaz en español. Excepción: nombres de

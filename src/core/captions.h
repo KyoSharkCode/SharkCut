@@ -1,8 +1,7 @@
 #pragma once
 
-// Subtítulos: división de una transcripción en subtítulos (como «Crear subtítulos» de
-// Premiere: caracteres por línea, una o dos líneas o una sola palabra, duración mínima y
-// separación) y archivos .srt.
+// Subtítulos: división de una transcripción en subtítulos (caracteres por línea, una o
+// dos líneas o una sola palabra, duración mínima y separación) y archivos .srt.
 
 #include "core/project.h"
 #include "core/time.h"

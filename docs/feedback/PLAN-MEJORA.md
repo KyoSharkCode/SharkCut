@@ -297,8 +297,8 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M11 · Caché en una carpeta común y limpieza · FB-027 · M
 - **Problema:** cada proyecto deja una carpeta `<nombre>.sharkp.cache` a su lado, y la
   carpeta de proyectos se llena de carpetas que no se sabe para qué son.
-- **Hacer:** guardar la caché (ondas y proxies) en una carpeta común, como la caché de
-  medios de Premiere (por defecto en los datos de la app, cambiable en ajustes), con una
+- **Hacer:** guardar la caché (ondas y proxies) en una carpeta común de caché de medios
+  (por defecto en los datos de la app, cambiable en ajustes), con una
   subcarpeta por proyecto; botón para ver cuánto ocupa y limpiarla. Seguir leyendo las
   carpetas `.sharkp.cache` que ya existen.
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se

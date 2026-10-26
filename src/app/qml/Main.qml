@@ -392,16 +392,19 @@ Window {
             Item { implicitWidth: 12 }
             Pestana {
                 texto: "Proyectos"
+                ayuda: "Proyectos (1)"
                 activa: ventana.enProyectos
                 onPulsada: ventana.irA("proyectos")
             }
             Pestana {
                 texto: "Editor"
+                ayuda: "Editor (2)"
                 activa: ventana.enEditor
                 onPulsada: ventana.irA("editor")
             }
             Pestana {
                 texto: "Exportar"
+                ayuda: "Exportar (3 o Ctrl+M)"
                 activa: ventana.enExportar
                 onPulsada: ventana.irA("exportar")
             }
@@ -596,15 +599,15 @@ Window {
                                 spacing: 6
 
                                 BotonIcono { icono: "inicio"; ayuda: "Al inicio (Inicio)"; onPulsado: ventana.navegar(() => { editor.pause(); editor.seek(0) }) }
-                                BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←)"; onPulsado: ventana.navegar(() => editor.step(-1)) }
+                                BotonIcono { icono: "anterior"; ayuda: "Fotograma anterior (←) · Mayús+←: 10 atrás · ↑: corte anterior"; onPulsado: ventana.navegar(() => editor.step(-1)) }
                                 BotonIcono {
                                     icono: editor.playing ? "pausa" : "reproducir"
-                                    ayuda: "Reproducir / pausa (Espacio)"
+                                    ayuda: "Reproducir / pausa (Espacio) · J / K / L: atrás, pausa, adelante (otra vez: más rápido)"
                                     acentuado: true
                                     implicitWidth: 52
                                     onPulsado: editor.togglePlay()
                                 }
-                                BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→)"; onPulsado: ventana.navegar(() => editor.step(1)) }
+                                BotonIcono { icono: "siguiente"; ayuda: "Fotograma siguiente (→) · Mayús+→: 10 adelante · ↓: corte siguiente"; onPulsado: ventana.navegar(() => editor.step(1)) }
                                 BotonIcono {
                                     icono: "final"
                                     ayuda: "Al final (Fin)"

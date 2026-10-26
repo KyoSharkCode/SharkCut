@@ -74,12 +74,28 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   herramienta que lo tenga (p. ej. «Cuchilla (C)», «Cortar en el cabezal (Ctrl+K)»). En
   los textos no se nombran otros productos.
 - **Hecho cuando:** todos los botones con atajo lo muestran en su ayuda.
+- **Hecho:** repasados todos los botones y menús con atajo. Ya lo decían las herramientas
+  (V, C, S), Dividir (Ctrl+K), Quitar (Supr), Deshacer/Rehacer, Inicio/Fin, Reproducir
+  (Espacio), Importar (Ctrl+I), Nuevo/Abrir/Guardar y Exportar rápido (Ctrl+E). Se añadió
+  en las pestañas Proyectos/Editor/Exportar (1, 2, 3 o Ctrl+M, con ayuda nueva en
+  `Pestana.qml`), los botones de fotograma anterior/siguiente (Mayús+←/→ y ↑/↓ entre
+  cortes), Reproducir (J/K/L), los botones de zoom (-, +, Ctrl + rueda, \\, Alt + rueda),
+  la ayuda de los marcadores (M, Mayús+M, Ctrl+Mayús+M) y el menú del clip («Dividir en el
+  cabezal (Ctrl+K)», «Quitar, dejando el hueco (Supr)»). No se añadió Alt+C y ningún texto
+  nombra otros productos.
 
 ### A5 · Alt + rueda para desplazar en vertical · FB-005 · S
 - **Problema:** se pidió como función nueva, pero el código ya lo hace.
 - **Hacer:** reproducirlo en Windows con el ratón de quien lo probó (zona de las
   cabeceras de pista, encima de los clips, ratones que mandan el giro en horizontal) y
   corregir donde no funcione; mencionarlo en la lista de atajos (A4).
+- **Hecho:** reproducido también en Linux: con Alt, Qt cambia el eje del giro (la rueda
+  normal llega como horizontal) y el `WheelHandler` de la línea de tiempo solo atendía la
+  vertical, así que Alt + rueda no llegaba en ninguna zona (solo funcionaba Alt + la rueda
+  horizontal). Ahora hay un manejador por orientación con la misma función (`rueda`), y el
+  desplazamiento horizontal de los touchpads también llega. Comprobado con Xvfb encima de los
+  clips, en las cabeceras de pista y en la regla, hacia arriba y hacia abajo, con la rueda
+  normal y con la horizontal. Alt + rueda se menciona en la ayuda de los botones de zoom.
 
 ### A6 · Ondas de audio más rápidas · FB-002 · M
 - **Hacer:** primero medir con un VOD largo (tools/bench) cuánto tarda y dónde se va el
@@ -91,14 +107,31 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### A7 · Escuchar los sonidos antes de usarlos · FB-006 · S
 - **Hacer:** en la pestaña Sonidos, un clic en el icono reproduce el sonido; otro clic lo
   detiene.
+- **Hecho:** cada sonido de la pestaña Sonidos tiene un botón ▶ (■ mientras suena): un
+  clic lo escucha y otro lo para; al acabar vuelve a ▶. `SoundPreview` (src/audio, sin Qt)
+  tiene su propia salida de audio, aparte de la secuencia, y decodifica el efecto entero con
+  FFmpeg (miniaudio sigue compilado solo con la API de dispositivos). El editor lo carga en
+  un hilo aparte (`Editor::toggleSoundPreview`). Test con la salida muda; comprobado con
+  Xvfb.
 
 ### A8 · Explicar el punto de anclaje · FB-010 · S
 - **Hacer:** texto corto de ayuda en la sección (qué hace y para qué sirve: pegar algo a
   un objeto que se mueve), con pasos; valorar un nombre más claro.
+- **Hecho:** debajo de «Punto de anclaje», una frase dice qué hace y para qué sirve (pegar el
+  clip a algo que se mueve en otro video: un texto, un emoji o un desenfoque que sigan a
+  alguien). El botón ⓘ despliega los pasos (pista por encima, cabezal donde se vea, «Seguir
+  en» y «Marcar lo que se sigue», recuadro en el visor) y qué se obtiene (keyframes de
+  posición retocables). Se mantiene el nombre: la frase ya lo explica y el título largo no
+  cabía en el panel.
 
 ### A9 · Aviso de descarga del modelo solo si hace falta · FB-017 · S
 - **Hacer:** que el selector de modelo de DialogoSubtitulos diga «descargado» si el
   archivo ya está en la carpeta de modelos, y «descarga de ~X MB» solo si no.
+- **Hecho:** `isSpeechModelDownloaded` (src/speech, sin Qt: el archivo existe y mide lo que
+  debe) y `Editor::checkSpeechModels`, que lo mira en otro hilo al abrir el diálogo y tras
+  descargar un modelo (`speechModels`). El selector dice «descargado» o «descarga de ~X MB»
+  según el caso. Comprobado con Xvfb con un modelo rápido presente y el alto sin
+  descargar.
 
 ### A10 · Cortar sin tirón mientras se reproduce · FB-023 · M
 - **Problema:** al cortar con la reproducción en marcha se nota un pequeño tirón.
@@ -249,10 +282,17 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
+- **Hecho:** alejar, acercar y «Ver todo» pasan de abajo de la columna de herramientas a la
+  esquina superior derecha de la línea de tiempo, en la fila de las pestañas de secuencias.
+  Sus ayudas dicen los atajos (-, + o Ctrl + rueda, \\) y cómo se mueve la rueda (Alt +
+  rueda: entre pistas).
 
 ### M10 · Doble clic en Medios para importar · FB-024 · S
 - **Hacer:** doble clic en la zona vacía del panel Medios abre el diálogo de importar (el
   doble clic sobre una carpeta o secuencia sigue abriéndola).
+- **Hecho:** un `TapHandler` en la lista y en la cuadrícula de Medios abre «Importar» con un
+  doble clic en un hueco; sobre una carpeta, secuencia o medio sigue haciendo lo suyo (sus
+  zonas se quedan el clic). Los textos de ayuda del panel lo mencionan. Comprobado con Xvfb.
 
 ### M11 · Caché en una carpeta común y limpieza · FB-027 · M
 - **Problema:** cada proyecto deja una carpeta `<nombre>.sharkp.cache` a su lado, y la

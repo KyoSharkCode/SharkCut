@@ -1,6 +1,7 @@
 #include "audio/audio_output.h"
 #include "audio/audio_worker.h"
 #include "audio/ring_buffer.h"
+#include "audio/sound_preview.h"
 #include "core/edit.h"
 #include "core/sfx.h"
 #include "media/audio_decoder.h"
@@ -17,7 +18,9 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <numeric>
 #include <thread>
@@ -419,4 +422,56 @@ TEST_CASE("Sound effects in the catalog exist and match their duration", "[audio
         CHECK((id.empty() || soundEffect(id) != nullptr));
     }
     CHECK(soundEffect("no-existe") == nullptr);
+}
+
+namespace {
+
+// WAV PCM de 16 bits, mono, 48 kHz, con `seconds` segundos de un tono.
+std::filesystem::path writeToneWav(const std::string& name, double seconds) {
+    const std::filesystem::path path = tempClipPath(name);
+    const auto samples = static_cast<std::uint32_t>(seconds * 48000);
+    std::ofstream out(path, std::ios::binary);
+    auto u32 = [&out](std::uint32_t v) { out.write(reinterpret_cast<const char*>(&v), 4); };
+    auto u16 = [&out](std::uint16_t v) { out.write(reinterpret_cast<const char*>(&v), 2); };
+    out.write("RIFF", 4);
+    u32(36 + samples * 2);
+    out.write("WAVEfmt ", 8);
+    u32(16);
+    u16(1);         // PCM
+    u16(1);         // mono
+    u32(48000);     // muestras por segundo
+    u32(48000 * 2); // bytes por segundo
+    u16(2);
+    u16(16);
+    out.write("data", 4);
+    u32(samples * 2);
+    for (std::uint32_t i = 0; i < samples; ++i) {
+        u16(static_cast<std::uint16_t>(
+            static_cast<std::int16_t>(8000 * std::sin(2 * 3.14159265 * 440 * i / 48000.0))));
+    }
+    return path;
+}
+
+} // namespace
+
+TEST_CASE("SoundPreview plays a sound until it ends or is stopped", "[audio]") {
+    const std::filesystem::path wav = writeToneWav("escucha.wav", 0.3);
+    SoundPreview preview(AudioOutput::Device::Null);
+    CHECK_FALSE(preview.playing());
+    preview.play(wav.string());
+    CHECK(preview.playing());
+    // Termina solo (la salida muda avanza a velocidad real).
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (preview.playing() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    CHECK_FALSE(preview.playing());
+    // Otra vez, y se corta antes de acabar.
+    preview.play(wav.string());
+    CHECK(preview.playing());
+    preview.stop();
+    CHECK_FALSE(preview.playing());
+    CHECK_THROWS(preview.play((wav.parent_path() / "no-existe.wav").string()));
+    CHECK_FALSE(preview.playing());
+    std::filesystem::remove(wav);
 }

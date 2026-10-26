@@ -26,6 +26,7 @@ QtObject {
         "anterior": "M15 6l-6 6 6 6",
         "reproducir": "M7 5l12 7-12 7z",
         "pausa": "M7 5h3v14H7zM14 5h3v14h-3z",
+        "detener": "M7 7h10v10H7z",
         "siguiente": "M9 6l6 6-6 6",
         "final": "M18 5v14M6 6l8 6-8 6z",
         "sonido": "M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6",

@@ -41,6 +41,11 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// El modelo ya está descargado en `folder` (ruta UTF-8): su archivo existe y mide lo que
+// debe (una descarga cortada se queda en un temporal). Mira el disco: fuera del hilo de
+// la interfaz.
+bool isSpeechModelDownloaded(const std::string& folder, const SpeechModel& model);
+
 // El procesador tiene lo que necesita la transcripción (AVX2, FMA y F16C, con soporte del
 // sistema operativo). Sin ello, whisper se cerraría con «instrucción no válida».
 bool speechCpuSupported();

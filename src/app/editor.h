@@ -1,5 +1,6 @@
 #pragma once
 
+#include "audio/sound_preview.h"
 #include "compositionsource.h"
 #include "core/captions.h"
 #include "core/document.h"
@@ -140,6 +141,10 @@ class Editor : public CompositionSource {
     Q_PROPERTY(bool transcribing READ transcribing NOTIFY transcriptionChanged)
     Q_PROPERTY(double transcribeProgress READ transcribeProgress NOTIFY transcriptionChanged)
     Q_PROPERTY(QString transcribeMessage READ transcribeMessage NOTIFY transcriptionChanged)
+    // Modelos de transcripción [alta, rápida]: {downloaded, megabytes}. Vacía hasta que
+    // checkSpeechModels() mira la carpeta de modelos (en otro hilo).
+    Q_PROPERTY(QVariantList speechModels READ speechModels NOTIFY speechModelsChanged)
+    Q_PROPERTY(QString previewSound READ previewSound NOTIFY previewSoundChanged)
     // Lienzo del proyecto: "16:9", "9:16", "1:1"… y si lo fija el primer clip
     Q_PROPERTY(QString canvasLabel READ canvasLabel NOTIFY projectChanged)
     Q_PROPERTY(QSize canvas READ canvasSize NOTIFY projectChanged)
@@ -527,6 +532,8 @@ public:
     // --- Transcripción (editor_transcription.cpp) ---
     bool transcribing() const { return m_transcription != nullptr; }
     double transcribeProgress() const { return m_transcribeProgress; }
+    QVariantList speechModels() const { return m_speechModels; }
+    Q_INVOKABLE void checkSpeechModels();
     QString transcribeMessage() const { return m_transcribeMessage; }
     // Transcribe el audio de la secuencia activa y crea con lo dicho una pista de
     // subtítulos nueva (un paso de deshacer). Las opciones son las del diálogo de
@@ -574,6 +581,11 @@ public:
     Q_INVOKABLE void addSound(const QString& id, int track, qint64 frame);
     // Con su golpe (lo más fuerte del whoosh, el chasquido del clic…) en el cabezal.
     Q_INVOKABLE void addSoundAtPlayhead(const QString& id);
+    // Escuchar un efecto de la pestaña Sonidos: suena (en su propia salida, aparte de la
+    // secuencia); con el mismo id otra vez, se para. previewSound: el que suena ("" = nada).
+    Q_INVOKABLE void toggleSoundPreview(const QString& id);
+    Q_INVOKABLE void stopSoundPreview();
+    QString previewSound() const { return m_previewSound; }
     // Valores de una transición-clip: typeIndex (de transitionNames), intensity y blur
     // (0–1), easingIndex (de easingNames), length (fotogramas). Solo las claves que vengan.
     Q_INVOKABLE void setEffectClip(qint64 clipId, const QVariantMap& values);
@@ -636,6 +648,8 @@ signals:
     void anchorChanged();
     void clipboardChanged();
     void transcriptionChanged();
+    void speechModelsChanged();
+    void previewSoundChanged();
     void captionsCreated(int count);
     void captionsExported(const QString& path);
     void keyColorDetected(bool found);
@@ -888,6 +902,15 @@ private:
     struct Transcription;
     std::shared_ptr<Transcription> m_transcription;
     double m_transcribeProgress = 0.0;
+    QVariantList m_speechModels;
+    // Escucha de los sonidos: su salida (se abre la primera vez), un hilo para decodificar
+    // en orden, el que suena y si ya empezó (la pide `m_previewRequest`).
+    std::shared_ptr<sharkcut::SoundPreview> m_soundPreview;
+    QThreadPool m_previewPool;
+    QTimer m_previewTimer;
+    QString m_previewSound;
+    quint64 m_previewRequest = 0;
+    bool m_previewStarted = false;
     QString m_transcribeMessage;
     void setTranscribeState(double progress, const QString& message);
     // Al cerrar: cancela la transcripción y espera a que pare la descarga.

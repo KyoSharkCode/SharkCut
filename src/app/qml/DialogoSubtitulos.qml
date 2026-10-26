@@ -20,7 +20,16 @@ Popup {
 
     function crear() {
         modo = "crear"
+        dialogo.editor.checkSpeechModels() // ¿qué modelos están ya descargados?
         open()
+    }
+
+    // Texto de cada precisión: «descargado» o lo que se descargaría la primera vez.
+    function textoModelo(indice, nombre) {
+        const m = dialogo.editor.speechModels[indice]
+        if (!m)
+            return nombre
+        return nombre + (m.downloaded ? "; descargado" : "; descarga de ~" + m.megabytes + " MB")
     }
     function dividir(indice) {
         modo = "dividir"
@@ -103,8 +112,8 @@ Popup {
         Selector {
             visible: dialogo.modo === "crear"
             etiqueta: "Precisión"
-            model: ["Alta (recomendada; descarga de ~550 MB la primera vez)",
-                    "Rápida (menos precisa; ~190 MB)"]
+            model: [dialogo.textoModelo(0, "Alta (recomendada") + ")",
+                    dialogo.textoModelo(1, "Rápida (menos precisa") + ")"]
             indice: recuerdo.calidad
             onElegido: (i) => recuerdo.calidad = i
         }

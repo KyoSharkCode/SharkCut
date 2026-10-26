@@ -11,7 +11,6 @@
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QFileInfo>
 #include <QPointer>
 #include <QStandardPaths>
 #include <QThread>
@@ -48,6 +47,30 @@ QString megabytes(double bytes) {
 }
 
 } // namespace
+
+void Editor::checkSpeechModels() {
+    // Mirar el disco: fuera del hilo de la interfaz.
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self] {
+        const std::string folder = modelsFolder().toStdString();
+        QVariantList models;
+        for (const sharkcut::SpeechModel& model :
+             {sharkcut::kSpeechModelAccurate, sharkcut::kSpeechModelFast}) {
+            models.append(QVariantMap{
+                {QStringLiteral("downloaded"), sharkcut::isSpeechModelDownloaded(folder, model)},
+                {QStringLiteral("megabytes"), megabytes(static_cast<double>(model.size))}});
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, models] {
+                if (self && self->m_speechModels != models) {
+                    self->m_speechModels = models;
+                    emit self->speechModelsChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
 
 void Editor::setTranscribeState(double progress, const QString& message) {
     m_transcribeProgress = progress;
@@ -97,7 +120,8 @@ void Editor::createCaptions(const QVariantMap& options) {
     // ¿Está ya el modelo? (en otro hilo: nada de disco en el de la interfaz)
     QPointer<Editor> self(this);
     QThreadPool::globalInstance()->start([self, job] {
-        const bool present = QFileInfo(job->modelPath).size() == job->model.size;
+        const bool present =
+            sharkcut::isSpeechModelDownloaded(modelsFolder().toStdString(), job->model);
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
             [self, job, present] {
@@ -158,6 +182,7 @@ void Editor::startDownload(const std::shared_ptr<Transcription>& job) {
 void Editor::startTranscription(const std::shared_ptr<Transcription>& job) {
     qInfo("Subtítulos: transcribiendo con %s", qPrintable(job->modelPath));
     setTranscribeState(0.0, QStringLiteral("Transcribiendo el audio…"));
+    checkSpeechModels(); // si se acaba de descargar, el diálogo ya lo dice
     QPointer<Editor> self(this);
     QThreadPool::globalInstance()->start([self, job] {
         std::vector<sharkcut::TimedWord> words;

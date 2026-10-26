@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import SharkCut
 
 // Pestaña de la barra superior.
@@ -6,6 +7,7 @@ Rectangle {
     id: pestana
 
     property string texto
+    property string ayuda // al pasar el ratón (con su atajo)
     property bool activa: false
     signal pulsada()
 
@@ -28,5 +30,21 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         onClicked: pestana.pulsada()
+    }
+    ToolTip {
+        id: ayudaEmergente
+        visible: pestana.ayuda.length > 0 && zona.containsMouse
+        delay: 500
+        text: pestana.ayuda
+        contentItem: Text {
+            text: ayudaEmergente.text
+            color: Theme.texto
+            font.pixelSize: Theme.tamTextoPequeno
+        }
+        background: Rectangle {
+            color: Theme.panelElevado
+            border.color: Theme.borde
+            radius: 4
+        }
     }
 }

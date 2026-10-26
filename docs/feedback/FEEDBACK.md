@@ -6,28 +6,28 @@ Formato y estados: ver [README.md](README.md).
 |----|-------|------|------|---------|--------|
 | [FB-001](#fb-001) | 2026-10-22 | Marca/logo | Usabilidad | El logo parece un pincho de Geometry Dash, no una aleta | En el plan |
 | [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
-| [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | En el plan |
+| [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | Hecho |
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
-| [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | En el plan |
-| [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | En el plan |
+| [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
+| [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
 | [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
 | [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | En el plan |
-| [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | En el plan |
+| [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
 | [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | En el plan |
 | [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | En el plan |
 | [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | En el plan |
 | [FB-016](#fb-016) | 2026-10-22 | Otro | Propuesta | Paneles reorganizables y diseños | En el plan |
-| [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | En el plan |
+| [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Hecho |
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | En el plan |
-| [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | En el plan |
+| [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | Hecho |
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
-| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | En el plan |
+| [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | Hecho |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | Hecho |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
@@ -80,7 +80,7 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** Hoy ya existe Ctrl+K para cortar en el cabezal (`Main.qml`), pero no se descubrió: falta que los atajos se vean (menú, tooltips o una lista de atajos). Considerar atajos configurables.
 - **Decisión (Kyo, 2026-10-26):** no se cambian los atajos ni se añade Alt+C; los atajos se
   mostrarán en la ayuda al pasar el ratón por cada herramienta (A4).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A4)
 
 <a id="fb-004"></a>
 ### FB-004 · La transición y su sonido se separan al moverlas
@@ -104,7 +104,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Que Alt + rueda del ratón desplace verticalmente la línea de tiempo.
 - **Contexto:** Navegación entre pistas.
 - **Notas:** En el código ya existe (WheelHandler de `LineaTiempo.qml`: Alt + rueda desplaza entre pistas). Revisar por qué no les funcionó (versión probada, zona donde está el ratón, ratón/sistema que manda el giro distinto) o si no lo conocían.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A5)
 
 <a id="fb-006"></a>
 ### FB-006 · Escuchar la vista previa de un sonido con un clic
@@ -115,7 +115,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** En la pestaña Sonidos, al hacer clic en el icono de audio, reproducir una vista previa del sonido.
 - **Contexto:** Elegir efectos de sonido en PanelMedios → Sonidos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A7)
 
 <a id="fb-007"></a>
 ### FB-007 · Transiciones dentro del clip, al principio o al final
@@ -162,7 +162,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** El apartado de punto de anclaje es algo confuso para quien no lo conoce; habría que explicar mejor su uso.
 - **Contexto:** Sección «Punto de anclaje» en PanelPropiedades (seguimiento de movimiento).
 - **Notas:** Posibles vías: texto de ayuda, tooltip, mini tutorial o un nombre más claro (p. ej. «Seguir un objeto»).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A8)
 
 <a id="fb-011"></a>
 ### FB-011 · Carpetas vinculadas de medios frecuentes, entre proyectos
@@ -243,7 +243,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Si ya se descargó el modelo de transcripción (o algo parecido), que deje de aparecer el aviso de «descarga la primera vez».
 - **Contexto:** Diálogo de subtítulos.
 - **Notas:** El texto del selector de modelo en `DialogoSubtitulos.qml` es fijo («descarga de ~550 MB la primera vez») aunque el modelo ya esté en <datos de la app>/modelos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A9)
 
 <a id="fb-018"></a>
 ### FB-018 · Descargas opcionales desde el instalador
@@ -266,7 +266,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Usabilidad
 - **Qué dijo:** Mover los botones de acercar y alejar de la línea de tiempo a la esquina superior derecha.
 - **Contexto:** Barra de la línea de tiempo.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M9)
 
 <a id="fb-020"></a>
 ### FB-020 · El botón Proxies «a veces no sirve»; elegir la calidad de la vista previa
@@ -359,7 +359,7 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** panel Medios (PanelBiblioteca).
 - **Notas:** hoy el doble clic solo abre carpetas y secuencias; en la zona vacía no hace
   nada. Es lo que hace Premiere.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M10)
 
 <a id="fb-025"></a>
 ### FB-025 · Clips muy cortos no se seleccionan con la línea de tiempo alejada

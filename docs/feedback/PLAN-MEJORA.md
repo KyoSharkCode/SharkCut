@@ -264,6 +264,20 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
   mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
 
+### M12 · Poner una transición en el cabezal con un clic · FB-031 · S
+- **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
+  transición la pone en la línea de tiempo centrada en el cabezal, con su sonido, como el
+  botón + de los sonidos (`addSoundAtPlayhead`). Arrastrarla sigue funcionando igual.
+- **Por decidir:** si se centra exactamente en el cabezal o en el corte más cercano al
+  cabezal (como al soltarla arrastrando, `Editor::addEffectClip`). Kyo pidió «centrada
+  justo donde esté el cabezal».
+
+### M13 · Cabezal con forma de aleta de tiburón · FB-032 · S
+- **Hacer:** cambiar el tirador del cabezal (el cuadrito de la regla) por una aleta de
+  tiburón, con el color del cabezal del tema (`Theme.cabezal`) y el mismo tamaño para
+  agarrarlo. Icono nuevo en `Trazos.qml`.
+- **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -298,5 +312,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
+| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032 |
 | Baja | B1–B4 | FB-011, 016, 018, 029 |

@@ -319,6 +319,9 @@ public:
     Q_INVOKABLE void showLastExport() const;
     // Resoluciones que se ofrecen para una secuencia: {width, height, scale, label}
     Q_INVOKABLE QVariantList exportSizes(qint64 sequenceId) const;
+    // Preset de Exportar ("youtube" o "tiktok") para esa secuencia: {scale, codec, quality,
+    // fps, note (para qué sirve), warning ("" o un aviso, p. ej. si no es vertical)}.
+    Q_INVOKABLE QVariantMap exportPreset(qint64 sequenceId, const QString& name) const;
     // Tasa de video recomendada (Mbps) para una calidad (0–2) y códec ("h264"/"h265").
     Q_INVOKABLE double recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
                                        const QString& codec) const;

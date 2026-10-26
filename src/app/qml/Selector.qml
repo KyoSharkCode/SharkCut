@@ -27,6 +27,9 @@ ColumnLayout {
         Layout.fillWidth: true
         currentIndex: raiz.indice
         onActivated: (index) => raiz.elegido(index)
+        // Con otra lista, el ComboBox vuelve al primer elemento sin mirar `indice`: se
+        // vuelve a enlazar (p. ej. las resoluciones al cargar la secuencia en Exportar).
+        onModelChanged: Qt.callLater(() => control.currentIndex = Qt.binding(() => raiz.indice))
 
         contentItem: Text {
             leftPadding: 10

@@ -2042,6 +2042,56 @@ QVariantList Editor::exportSizes(qint64 sequenceId) const {
     return list;
 }
 
+QVariantMap Editor::exportPreset(qint64 sequenceId, const QString& name) const {
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return {};
+    }
+    const sharkcut::ProjectSettings& s = sequence->settings;
+    const bool tiktok = name == QLatin1String("tiktok");
+    const sharkcut::ExportPresetChoice choice = sharkcut::exportPreset(
+        tiktok ? sharkcut::ExportPreset::TikTok : sharkcut::ExportPreset::YouTube, s.width,
+        s.height, s.frameRate);
+    const sharkcut::ExportSize size = sharkcut::exportSize(s.width, s.height, choice.scale);
+    const QString fps = choice.fps > 0 ? QString::number(choice.fps) : fpsText(s.frameRate);
+    QString note;
+    QString warning;
+    if (tiktok) {
+        note = QStringLiteral("Para TikTok: %1×%2 en H.264, calidad Alta, a %3 fps.")
+                   .arg(size.width)
+                   .arg(size.height)
+                   .arg(fps);
+        if (choice.notVertical) {
+            warning = QStringLiteral("La secuencia no es vertical (%1×%2): se exporta tal cual, "
+                                     "sin recortar. Para TikTok, haz una versión vertical (clic "
+                                     "derecho en la secuencia → «Duplicar como vertical "
+                                     "(9:16)»).")
+                          .arg(s.width)
+                          .arg(s.height);
+        }
+    } else {
+        note = std::min(s.width, s.height) >= 1440
+                   ? QStringLiteral("Para YouTube: %1×%2, calidad Alta. La secuencia ya es de "
+                                    "1440p o más, así que se exporta a su tamaño.")
+                         .arg(size.width)
+                         .arg(size.height)
+                   : QStringLiteral("Para YouTube: %1×%2, calidad Alta. Subir en 1440p aunque el "
+                                    "lienzo sea más pequeño (p. ej. 1080p) mejora el resultado: "
+                                    "YouTube da más calidad a los videos de 1440p o más al "
+                                    "recomprimirlos.")
+                         .arg(size.width)
+                         .arg(size.height);
+    }
+    return {{QStringLiteral("scale"), choice.scale},
+            {QStringLiteral("codec"), choice.codec == sharkcut::VideoCodec::H265
+                                          ? QStringLiteral("h265")
+                                          : QStringLiteral("h264")},
+            {QStringLiteral("quality"), choice.quality},
+            {QStringLiteral("fps"), choice.fps},
+            {QStringLiteral("note"), note},
+            {QStringLiteral("warning"), warning}};
+}
+
 double Editor::recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
                                const QString& codec) const {
     const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));

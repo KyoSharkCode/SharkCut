@@ -281,6 +281,17 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
     resultado tras la recompresión).
   - «TikTok»: vertical 1080×1920, H.264, calidad Alta, a los fps de la secuencia (30 o 60).
     Con una secuencia horizontal, avisar de que no es vertical (no recortar por su cuenta).
+- **Hecho:** «Preparar para» en Exportar, con los botones YouTube y TikTok. Aplican sus
+  ajustes (`exportPreset` en export_settings.h, con tests; `Editor::exportPreset` añade los
+  textos) y una línea explica cada uno mientras no se cambien a mano:
+  - YouTube: la escala ofrecida más pequeña que llega a 1440 líneas (desde 1080p, el 133 %:
+    2560×1440), H.264 y calidad Alta, con la explicación de la recompresión. Con un lienzo de
+    1440p o más, a su tamaño.
+  - TikTok: el tamaño con 1080 de ancho (1080×1920 desde un lienzo vertical), H.264, calidad
+    Alta, a los fps de la secuencia si son 30 o 60 (si no, el más cercano de los dos). Con
+    una secuencia horizontal avisa (en color de aviso) y la exporta a su tamaño, sin recortar.
+  Además se arregló `Selector.qml`: al cambiar su lista volvía al primer elemento sin mirar
+  `indice` (Exportar mostraba «200 %» al abrir aunque se fuera a exportar al 100 %).
 
 ### M7 · Ver qué aceleración por hardware se usa · FB-021 · S–M
 - **Hacer:** apartado de información (GPU detectada, decodificador y codificador en uso,

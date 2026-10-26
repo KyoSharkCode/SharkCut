@@ -863,12 +863,47 @@ Rectangle {
                 }
 
                 // --- Punto de anclaje: el clip sigue algo que se mueve en otro clip ---
-                Text {
+                RowLayout {
                     Layout.topMargin: 6
-                    text: "PUNTO DE ANCLAJE"
+                    Layout.fillWidth: true
+                    Text {
+                        Layout.fillWidth: true
+                        text: "PUNTO DE ANCLAJE"
+                        color: Theme.textoDesactivado
+                        font.pixelSize: Theme.tamTextoPequeno
+                        font.letterSpacing: 0.6
+                        elide: Text.ElideRight
+                    }
+                    BotonIcono {
+                        id: ayudaAncla
+                        property bool abierta: false
+                        icono: "info"
+                        implicitWidth: 24
+                        implicitHeight: 22
+                        activo: abierta
+                        ayuda: abierta ? "Ocultar la explicación" : "¿Qué es y cómo se usa?"
+                        onPulsado: abierta = !abierta
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Pega este clip a algo que se mueve en otro video (una mano, una cara, "
+                          + "un objeto…) para que lo acompañe solo: un texto, un emoji o un "
+                          + "desenfoque que siga a alguien."
+                          + (ayudaAncla.abierta
+                             ? "\n\n1. Pon este clip en una pista por encima del video.\n"
+                               + "2. Lleva el cabezal a un momento en que se vea lo que quieres "
+                               + "seguir.\n"
+                               + "3. Elige en «Seguir en» el video y pulsa «Marcar lo que se "
+                               + "sigue».\n"
+                               + "4. Dibuja en el visor un recuadro sobre ello.\n\n"
+                               + "SharkCut lo sigue desde el cabezal hacia delante y pone "
+                               + "keyframes de posición (◆), que puedes retocar como cualquier "
+                               + "otro. Funciona mejor con algo que tenga textura y contraste."
+                             : "")
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
-                    font.letterSpacing: 0.6
                 }
                 Selector {
                     id: selectorAncla

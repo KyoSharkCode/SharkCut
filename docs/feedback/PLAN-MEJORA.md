@@ -130,6 +130,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   FFmpeg (miniaudio sigue compilado solo con la API de dispositivos). El editor lo carga en
   un hilo aparte (`Editor::toggleSoundPreview`). Test con la salida muda; comprobado con
   Xvfb.
+- **Hecho:** debajo de «Punto de anclaje», una frase dice qué hace y para qué sirve (pegar el
+  clip a algo que se mueve en otro video: un texto, un emoji o un desenfoque que sigan a
+  alguien). El botón ⓘ despliega los pasos (pista por encima, cabezal donde se vea, «Seguir
+  en» y «Marcar lo que se sigue», recuadro en el visor) y qué se obtiene (keyframes de
+  posición retocables). Se mantiene el nombre: la frase ya lo explica y el título largo no
+  cabía en el panel.
 
 ### A11 · Seleccionar clips muy cortos con la línea de tiempo alejada · FB-025 · M
 - **Problema:** con la línea de tiempo muy alejada, los cortes pequeños no se pueden

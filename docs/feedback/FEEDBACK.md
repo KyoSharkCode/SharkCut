@@ -13,7 +13,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
 | [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
 | [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | En el plan |
-| [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | En el plan |
+| [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
 | [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | En el plan |
@@ -159,7 +159,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** El apartado de punto de anclaje es algo confuso para quien no lo conoce; habría que explicar mejor su uso.
 - **Contexto:** Sección «Punto de anclaje» en PanelPropiedades (seguimiento de movimiento).
 - **Notas:** Posibles vías: texto de ayuda, tooltip, mini tutorial o un nombre más claro (p. ej. «Seguir un objeto»).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A8)
 
 <a id="fb-011"></a>
 ### FB-011 · Carpetas vinculadas de medios frecuentes, entre proyectos

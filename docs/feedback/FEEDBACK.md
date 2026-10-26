@@ -40,6 +40,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-034](#fb-034) | 2026-10-26 | Efectos | Propuesta | Máscaras con formas simples | En el plan |
 | [FB-035](#fb-035) | 2026-10-26 | Propiedades | Propuesta | Propiedades más ancho con línea de tiempo de keyframes | En el plan |
 | [FB-036](#fb-036) | 2026-10-26 | Propiedades | Propuesta | Una pestaña en Propiedades por cada efecto del clip | En el plan |
+| [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
 
 ---
 
@@ -538,7 +539,10 @@ Formato y estados: ver [README.md](README.md).
   hay keyframes y permita moverlos ahí mismo.
 - **Contexto:** panel Propiedades con un clip de video seleccionado; hoy cada valor tiene el
   botón ⏱ y los keyframes se ven como ◆ sobre los clips de la línea de tiempo.
-- **Capturas:** [FB-035-propiedades.png](capturas/FB-035-propiedades.png)
+- **Detalles (Kyo):** el panel va desde donde está hoy hasta donde está ahora el botón
+  «Proxies» del visor; los paneles se pueden ensanchar arrastrando su borde.
+- **Capturas:** [FB-035-propiedades.png](capturas/FB-035-propiedades.png),
+  [FB-035-ancho-propiedades.png](capturas/FB-035-ancho-propiedades.png)
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M15)
 
 <a id="fb-036"></a>
@@ -553,3 +557,17 @@ Formato y estados: ver [README.md](README.md).
   máscaras serían un efecto más, con su pestaña.
 - **Contexto:** hoy Propiedades muestra todo seguido en una sola columna.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M14)
+
+<a id="fb-037"></a>
+### FB-037 · Pistas más altas o más bajas a gusto
+- **Fecha:** 2026-10-26
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Línea de tiempo
+- **Tipo:** Propuesta
+- **Qué dijo:** que las pistas de la línea de tiempo se puedan hacer más altas a gusto,
+  con un atajo (cree recordar Ctrl + rueda) o con el ratón sobre la pista.
+- **Contexto:** al hablar del tamaño de los paneles (FB-035).
+- **Notas:** hoy todas las pistas tienen la misma altura fija y Ctrl + rueda hace zoom
+  horizontal.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)

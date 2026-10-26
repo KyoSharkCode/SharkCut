@@ -359,9 +359,20 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** dar más ancho al panel Propiedades y usar el espacio extra para una pequeña
   línea de tiempo del clip seleccionado, al lado de cada valor, que muestre sus keyframes
   (◆) y permita moverlos arrastrando, con el cabezal sincronizado.
-- **Por decidir:** cuánto ancho se le quita al visor (Programa), y si el panel se puede
-  ensanchar arrastrando su borde (relacionado con B1, paneles reorganizables).
+- **Decidido con Kyo (2026-10-26):** el panel ocupa desde donde empieza hoy hasta donde está
+  ahora el botón «Proxies» del visor (aprox. el doble de ancho; el visor se estrecha). Su
+  borde se puede arrastrar para ensancharlo o estrecharlo, y el ancho se recuerda
+  (adelanta una parte de B1, paneles reorganizables).
 - **Depende de:** M14 (cada pestaña tendría su propia franja de keyframes).
+
+### M17 · Altura de las pistas ajustable · FB-037 · M
+- **Hacer:** que cada pista de la línea de tiempo se pueda hacer más alta o más baja:
+  arrastrando el borde inferior de su cabecera, y con la rueda y un modificador con el
+  ratón sobre la cabecera (Ctrl + rueda ya es el zoom horizontal; usar otro, p. ej.
+  Mayús + rueda, o dejar Ctrl + rueda solo sobre las cabeceras). Atajo para hacer
+  todas las pistas más altas o más bajas. La altura se guarda en el proyecto.
+- **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
+  con más altura se ven mejor las ondas y las miniaturas.
 
 ### M16 · Máscaras con formas simples · FB-034 · M–L
 - **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
@@ -407,5 +418,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M16 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036 |
+| Media | M1–M17 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037 |
 | Baja | B1–B4 | FB-011, 016, 018, 029 |

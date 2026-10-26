@@ -214,6 +214,20 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   ve, la vista no se mueve; los clics y arrastres en la regla no la llaman. Comprobado con
   Xvfb: con el zoom puesto, ↓ repetido mantiene siempre el cabezal a la vista.
 
+### A14 · El cabezal puede ir hasta el final exacto de la secuencia · FB-030 · S–M
+- **Problema:** el cabezal no llega al final de los clips: se queda en el último fotograma
+  (p. ej. 00:01:52:14 con una duración de 00:01:52:15), un fotograma antes del borde.
+- **Causa:** `Editor::seek` limita el cabezal a `frameCount() - 1`, igual que Fin, el botón
+  de ir al final y el final de la reproducción.
+- **Hacer:** permitir el cabezal en `frameCount()` (justo después del último fotograma),
+  como en los editores habituales: el visor muestra el lienzo vacío (negro) y Fin, el botón
+  de ir al final y el imán con el final de los clips lo llevan ahí. Revisar lo que usa el
+  cabezal: pegar (Ctrl+V), poner sonidos en el cabezal, dividir (en el final no divide
+  nada), Q/W, marcadores, reproducir desde el final (vuelve al principio o no hace nada) y
+  la exportación por tramo.
+- **Hecho cuando:** el cabezal se puede dejar justo en el borde final de los clips y pegar
+  ahí deja el clip a continuación, sin pisar el último fotograma.
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -290,6 +304,21 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
   mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
 
+### M12 · Poner una transición en el cabezal con un clic · FB-031 · S
+- **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
+  transición la pone en la línea de tiempo centrada en el cabezal, con su sonido, como el
+  botón + de los sonidos (`addSoundAtPlayhead`). Arrastrarla sigue funcionando igual.
+- **Decidido con Kyo (2026-10-26):** se mantienen las dos formas. Con un clic, la
+  transición se centra exactamente en el cabezal (su punto medio, el del cambio, queda en
+  el cabezal), haya un corte ahí o no. Arrastrándola, sigue como hoy: se centra en el corte
+  más cercano al punto donde se suelta.
+
+### M13 · Cabezal con forma de aleta de tiburón · FB-032 · S
+- **Hacer:** cambiar el tirador del cabezal (el cuadrito de la regla) por una aleta de
+  tiburón, con el color del cabezal del tema (`Theme.cabezal`) y el mismo tamaño para
+  agarrarlo. Icono nuevo en `Trazos.qml`.
+- **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -323,6 +352,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A13 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028 |
-| Media | M1–M11 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027 |
+| Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
+| Media | M1–M13 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032 |
 | Baja | B1–B4 | FB-011, 016, 018, 029 |

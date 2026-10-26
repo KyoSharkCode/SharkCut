@@ -131,9 +131,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
   proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás). Con
   «Proxies» activado, ProxyManager::setAutoCreate crea solos los que falten.
-  src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC),
-  TimelineAudioSource (mezcla de las pistas de audio) y waveform.h (onda del audio y su
-  caché en disco).
+  src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC;
+  probeVideoEncoder dice cuál usaría), TimelineAudioSource (mezcla de las pistas de audio)
+  y waveform.h (onda del audio, repartida en tramos que se decodifican en paralelo, y su
+  caché en disco; sharkcut_bench --solo-onda la mide).
   src/app también: Editor (proyectos abiertos con su historial, pestañas de secuencias,
   herramientas, reproducción de la secuencia activa, exportación y recientes; los
   ajustes de la app van en QSettings). Interfaz: pestañas superiores Proyectos
@@ -155,6 +156,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
   añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
+  Hardware y codificadores (botón en Proyectos, qml/DialogoSistema.qml): la GPU del visor
+  (CompositionSource::setRenderDevice), la decodificación y los codificadores
+  (editor_hardware.cpp, probeHwDecodeDevice y probeVideoEncoder en segundo plano).
   src/render también: SequenceExporter (exportación en un hilo con su propio QRhi).
   tools/filmstrip: sharkcut_filmstrip, hoja de contactos de las transiciones sin interfaz
   (útil para revisar cambios en transition.frag); con --export exporta como la app y

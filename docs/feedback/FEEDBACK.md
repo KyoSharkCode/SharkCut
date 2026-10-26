@@ -476,6 +476,8 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** los sonidos tienen un botón + que los pone en el cabezal
   (`addSoundAtPlayhead`). Al arrastrar, la transición se centra en el corte más cercano
   (`Editor::addEffectClip`), que puede no coincidir con el cabezal.
+- **Decisión (Kyo, 2026-10-26):** las dos formas conviven: clic → centrada exactamente en
+  el cabezal; arrastrar → centrada en el corte más cercano a donde se suelta (como hoy).
 - **Capturas:** [FB-031-transiciones.png](capturas/FB-031-transiciones.png)
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M12)
 

@@ -268,9 +268,10 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
   transición la pone en la línea de tiempo centrada en el cabezal, con su sonido, como el
   botón + de los sonidos (`addSoundAtPlayhead`). Arrastrarla sigue funcionando igual.
-- **Por decidir:** si se centra exactamente en el cabezal o en el corte más cercano al
-  cabezal (como al soltarla arrastrando, `Editor::addEffectClip`). Kyo pidió «centrada
-  justo donde esté el cabezal».
+- **Decidido con Kyo (2026-10-26):** se mantienen las dos formas. Con un clic, la
+  transición se centra exactamente en el cabezal (su punto medio, el del cambio, queda en
+  el cabezal), haya un corte ahí o no. Arrastrándola, sigue como hoy: se centra en el corte
+  más cercano al punto donde se suelta.
 
 ### M13 · Cabezal con forma de aleta de tiburón · FB-032 · S
 - **Hacer:** cambiar el tirador del cabezal (el cuadrito de la regla) por una aleta de

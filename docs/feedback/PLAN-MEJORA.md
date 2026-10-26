@@ -323,6 +323,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   transición se centra exactamente en el cabezal (su punto medio, el del cambio, queda en
   el cabezal), haya un corte ahí o no. Arrastrándola, sigue como hoy: se centra en el corte
   más cercano al punto donde se suelta.
+- **Hecho:** el cuadrado de la flecha de cada transición es ahora un botón: un clic llama a
+  `Editor::addEffectClipAtPlayhead`, que la pone desde V1 hacia arriba (en la primera pista
+  libre) con su punto medio en el cabezal (`effectStartCenteredAt`) y su sonido enlazado
+  con el golpe ahí. La colocación y el sonido se comparten con el arrastre
+  (`placeEffectWithSound`), que sigue centrándose en el corte más cercano. Test del núcleo;
+  comprobado con Xvfb con el cabezal a mitad de un clip.
 
 ### M13 · Cabezal con forma de aleta de tiburón · FB-032 · S
 - **Hacer:** cambiar el tirador del cabezal (el cuadrito de la regla) por una aleta de

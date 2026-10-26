@@ -3302,11 +3302,8 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
     ObjectId created = 0;
     edit(QStringLiteral("Añadir transición"), [&](Project& p) {
-        sharkcut::TransitionParams params = info.defaults;
-        // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+        const sharkcut::TransitionParams params = effectParams(p, info);
         const sharkcut::FrameRate rate = p.settings.frameRate;
-        params.durationFrames = std::max<std::int64_t>(
-            2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
         std::size_t target = 0;
         if (track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
             p.tracks[static_cast<std::size_t>(track)].kind == sharkcut::TrackKind::Video) {
@@ -3338,27 +3335,64 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         const std::int64_t start = best >= 0
                                        ? std::max<std::int64_t>(0, best - params.durationFrames / 2)
                                        : std::max<std::int64_t>(0, frame);
-        created = sharkcut::placeEffect(p, target, start, params);
-        if (created == 0) {
-            return false;
-        }
-        // Su efecto de sonido, con el golpe en la mitad de la transición y enlazado a ella
-        // (se mueven y se quitan juntos).
-        if (const sharkcut::SoundEffect* sound =
-                sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type))) {
-            const std::int64_t hit =
-                sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds, rate.frameDuration());
-            const ObjectId soundClip = sharkcut::placeSoundHit(
-                p, soundMedia(p, *sound), start + params.durationFrames / 2, hit, kSoundVolumeDb);
-            if (soundClip != 0) {
-                sharkcut::linkEffectSound(p, created, soundClip);
-            }
-        }
-        return true;
+        created = placeEffectWithSound(p, target, start, params);
+        return created != 0;
     });
     if (created != 0) {
         select(static_cast<qint64>(created), false);
     }
+}
+
+void Editor::addEffectClipAtPlayhead(int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        const sharkcut::TransitionParams params = effectParams(p, info);
+        // Su punto medio (el del cambio) en el cabezal, haya un corte ahí o no.
+        const std::int64_t start =
+            sharkcut::effectStartCenteredAt(m_currentFrame, params.durationFrames);
+        const std::size_t v1 = p.trackIndex(sharkcut::TrackKind::Video, 0).value_or(0);
+        created = placeEffectWithSound(p, v1, start, params);
+        return created != 0;
+    });
+    if (created != 0) {
+        select(static_cast<qint64>(created), false);
+    }
+}
+
+sharkcut::TransitionParams Editor::effectParams(const Project& p,
+                                                const sharkcut::TransitionInfo& info) {
+    sharkcut::TransitionParams params = info.defaults;
+    // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+    const sharkcut::FrameRate rate = p.settings.frameRate;
+    params.durationFrames = std::max<std::int64_t>(
+        2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+    return params;
+}
+
+ObjectId Editor::placeEffectWithSound(Project& p, std::size_t track, std::int64_t start,
+                                      const sharkcut::TransitionParams& params) {
+    const ObjectId created = sharkcut::placeEffect(p, track, start, params);
+    if (created == 0) {
+        return 0;
+    }
+    // Su efecto de sonido, con el golpe en la mitad de la transición y enlazado a ella
+    // (se mueven y se quitan juntos).
+    if (const sharkcut::SoundEffect* sound =
+            sharkcut::soundEffect(sharkcut::defaultSoundFor(params.type))) {
+        const std::int64_t hit = sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds,
+                                                   p.settings.frameRate.frameDuration());
+        const ObjectId soundClip = sharkcut::placeSoundHit(
+            p, soundMedia(p, *sound), start + params.durationFrames / 2, hit, kSoundVolumeDb);
+        if (soundClip != 0) {
+            sharkcut::linkEffectSound(p, created, soundClip);
+        }
+    }
+    return created;
 }
 
 QVariantList Editor::soundLibrary() const {

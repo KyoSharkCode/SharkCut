@@ -575,6 +575,9 @@ public:
     // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
     // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.
     Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex);
+    // Con un clic (botón de cada transición): su punto medio exactamente en el cabezal, con
+    // su sonido, aunque ahí no haya un corte.
+    Q_INVOKABLE void addEffectClipAtPlayhead(int typeIndex);
     QVariantList soundLibrary() const;
     // Efecto de sonido de la biblioteca soltado en la pista `track` en `frame` (empieza
     // ahí; si no es una pista de audio, en la primera libre). Queda seleccionado.
@@ -753,6 +756,13 @@ private:
     std::optional<Need> upcoming(std::size_t track, std::int64_t frame) const;
     int slotFor(std::size_t track, const sharkcut::Clip& clip, int avoid);
     int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
+    // Transición-clip del catálogo: sus valores a los fps de la secuencia, y ponerla en
+    // `start` (pista libre desde `track`) con su sonido enlazado.
+    static sharkcut::TransitionParams effectParams(const sharkcut::Project& p,
+                                                   const sharkcut::TransitionInfo& info);
+    sharkcut::ObjectId placeEffectWithSound(sharkcut::Project& p, std::size_t track,
+                                            std::int64_t start,
+                                            const sharkcut::TransitionParams& params);
     bool continueSlot(std::size_t track, int slot, const Need& need);
     void placeSlot(std::size_t track, int slot, std::int64_t index, bool force);
     // Coloca los hilos de la pista para `frame`. `seeking`: tras un salto (no avanzando).

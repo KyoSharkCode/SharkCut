@@ -211,3 +211,26 @@ TEST_CASE("The link between an effect clip and its sound is saved", "[effects]")
     CHECK(back.clip(t.effect)->link == t.sound);
     CHECK(back.clip(t.sound)->link == t.effect);
 }
+
+TEST_CASE("An effect clip can be centred exactly on the playhead", "[effects]") {
+    TwoCuts t;
+    const TransitionParams params = t.zoom(31);
+    // El cabezal a mitad de un clip, lejos del corte: su punto medio queda ahí.
+    const std::int64_t playhead = 140;
+    const std::int64_t start = effectStartCenteredAt(playhead, params.durationFrames);
+    CHECK(start + params.durationFrames / 2 == playhead);
+    const ObjectId id = placeEffect(t.p, kVideoTrack, start, params);
+    REQUIRE(id != 0);
+    CHECK(t.p.clip(id)->start == 125);
+    // Con el sonido: su golpe en el mismo fotograma.
+    MediaItem whoosh;
+    whoosh.path = "/sfx/whoosh.wav";
+    whoosh.durationUs = 1'000'000;
+    whoosh.hasAudio = true;
+    const ObjectId media = addMedia(t.p, whoosh);
+    const ObjectId sound = placeSoundHit(t.p, media, playhead, 20, 0.0);
+    REQUIRE(sound != 0);
+    CHECK(t.p.clip(sound)->start + 20 == playhead);
+    // Al principio de la secuencia no empieza antes del 0.
+    CHECK(effectStartCenteredAt(5, 30) == 0);
+}

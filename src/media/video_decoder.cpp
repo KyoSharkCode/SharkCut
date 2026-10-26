@@ -559,4 +559,15 @@ std::vector<VideoFrame> VideoDecoder::takeKeptFrames() {
     return std::exchange(d->kept, {});
 }
 
+std::string probeHwDecodeDevice() {
+    for (const AVHWDeviceType type : preferredHwDevices()) {
+        AVBufferRef* device = nullptr;
+        if (av_hwdevice_ctx_create(&device, type, nullptr, nullptr, 0) >= 0) {
+            av_buffer_unref(&device);
+            return av_hwdevice_get_type_name(type);
+        }
+    }
+    return {};
+}
+
 } // namespace sharkcut

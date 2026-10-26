@@ -11,6 +11,7 @@
 #include "media/chroma_key.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
+#include "media/mp4_writer.h"
 #include "media/timeline_audio.h"
 #include "media/video_decoder.h"
 #include "render/sequence_exporter.h"
@@ -1992,7 +1993,10 @@ void Editor::startExport(const Project& sequence, const QVariantMap& settings,
     callbacks.finished = [post, timer](bool ok, const std::string& message,
                                        const std::string& encoder, const std::string& written) {
         const QString text = QString::fromStdString(message);
-        const QString codecName = QString::fromStdString(encoder);
+        QString codecName = QString::fromStdString(encoder);
+        if (sharkcut::isSoftwareEncoder(encoder)) {
+            codecName += QStringLiteral(" (por software: la GPU no estaba disponible)");
+        }
         const QString file = QString::fromStdString(written);
         const double seconds = static_cast<double>(timer->elapsed()) / 1000.0;
         post([ok, text, codecName, file, seconds](Editor& editor) {

@@ -18,6 +18,12 @@ public:
     // Resolución del lienzo (proyecto).
     virtual QSize canvasSize() const = 0;
 
+    // El visor avisa de la GPU con la que dibuja (en el hilo de la interfaz).
+    virtual void setRenderDevice(const QString& device, const QString& api) {
+        Q_UNUSED(device);
+        Q_UNUSED(api);
+    }
+
 signals:
     void compositionChanged(); // hay algo nuevo que dibujar
 };

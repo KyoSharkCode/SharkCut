@@ -119,6 +119,8 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString projectName READ projectName NOTIFY fileChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
+    // Apartado de información: GPU, decodificador y codificadores (refreshHardwareInfo).
+    Q_PROPERTY(QVariantMap hardwareInfo READ hardwareInfo NOTIFY hardwareInfoChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
     Q_PROPERTY(bool detectingKey READ detectingKey NOTIFY detectingKeyChanged)
     // Subtítulos. Pistas {index, name ("S1"), hidden, locked, count}; subtítulos
@@ -267,6 +269,13 @@ public:
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
+    void setRenderDevice(const QString& device, const QString& api) override;
+
+    // {gpu, api, decoder, decoderGpu (bool), h264, h264Software, h265, h265Software,
+    // probing}: "" mientras no se sabe.
+    QVariantMap hardwareInfo() const;
+    // Comprueba en segundo plano qué decodificación y codificadores hay en el equipo.
+    Q_INVOKABLE void refreshHardwareInfo();
 
     // --- Proyectos (lectura y escritura en segundo plano) ---
     // Abre un proyecto nuevo (sin cerrar los demás) con una secuencia. `width`/`height`
@@ -665,6 +674,7 @@ signals:
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
+    void hardwareInfoChanged();
     void exportSettingsChanged();
     void recentProjectsChanged();
     void recoveryChanged();
@@ -866,6 +876,14 @@ private:
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
+    // Apartado de información (hardwareInfo).
+    QString m_renderDevice;
+    QString m_renderApi;
+    QString m_hwDecodeDevice; // lo que se podría usar ("d3d11va"…, "" = solo software)
+    QString m_encoderH264;
+    QString m_encoderH265;
+    bool m_hardwareProbed = false;
+    bool m_probingHardware = false;
 
     std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
     std::unique_ptr<sharkcut::SequenceExporter> m_exporter;

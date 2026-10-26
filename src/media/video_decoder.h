@@ -16,6 +16,11 @@ enum class HwAccel {
     None, // Solo CPU (resultados reproducibles, p. ej. en tests).
 };
 
+// Aceleración por hardware que usaría la decodificación en este equipo (p. ej.
+// "d3d11va"), o cadena vacía si solo se puede por software. Crea el dispositivo para
+// comprobarlo: no llamar desde el hilo de interfaz.
+std::string probeHwDecodeDevice();
+
 // Decodifica el flujo de video de un archivo, fotograma a fotograma y en orden de
 // presentación. Los fotogramas se entregan en NV12 en memoria.
 //

@@ -296,6 +296,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M7 · Ver qué aceleración por hardware se usa · FB-021 · S–M
 - **Hacer:** apartado de información (GPU detectada, decodificador y codificador en uso,
   si hay respaldo por software) y, quizá, forzar el modo por software para diagnosticar.
+- **Hecho:** botón «Hardware y codificadores» en Proyectos (qml/DialogoSistema.qml): la GPU con la que dibuja el visor (QRhi driverInfo), la decodificación (por la GPU en uso, la que se podría usar, o el respaldo por software) y el codificador que usaría la exportación en H.264 y H.265 (probeVideoEncoder, en segundo plano), con lo que va por software en amarillo. Al terminar una exportación por software, el mensaje lo dice.
 
 ### M8 · Logo más reconocible · FB-001 · M
 - **Hacer:** rediseñar el icono para que se lea como aleta de tiburón (curva trasera

@@ -24,6 +24,14 @@ struct EncoderSettings {
     std::vector<std::string> videoEncoders;
 };
 
+// Codificador de video que usaría la exportación con ese códec: el primero de los
+// predeterminados (por hardware NVIDIA, AMD, Intel; si no, x264 o x265) que se puede abrir
+// en este equipo. Vacío si no hay ninguno. Abre codificadores: tarda (fuera del hilo de la
+// interfaz).
+std::string probeVideoEncoder(VideoCodec codec);
+// El respaldo por software (x264 o x265), sin GPU.
+bool isSoftwareEncoder(const std::string& name);
+
 // Escribe un MP4 (H.264 o H.265 + AAC) a partir de fotogramas RGBA y audio float estéreo.
 // Prueba los codificadores por hardware y usa el primero que funcione.
 //

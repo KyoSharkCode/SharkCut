@@ -92,6 +92,10 @@ std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, s
 
 // --- Transiciones como clips ---
 
+// Inicio de una transición-clip de `duration` fotogramas con su punto medio en `center`
+// (su mitad, durationFrames / 2, como el golpe de su sonido). Nunca antes del 0.
+std::int64_t effectStartCenteredAt(std::int64_t center, std::int64_t duration);
+
 // Pone una transición-clip (ver Clip::effect) de params.durationFrames fotogramas a partir
 // de `start`, en la pista de video `track` o, si ahí hay clips en ese tramo, en la
 // primera de encima que esté libre (o en una nueva). Nunca tapa clips. Devuelve su id.

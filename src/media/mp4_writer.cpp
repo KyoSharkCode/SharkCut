@@ -24,6 +24,10 @@ std::vector<std::string> defaultVideoEncoders(VideoCodec codec) {
     return {"h264_nvenc", "h264_amf", "h264_qsv", "libx264"};
 }
 
+AVPixelFormat encoderPixelFormat(const std::string& name) {
+    return name == "h264_qsv" || name == "hevc_qsv" ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
+}
+
 void configureEncoder(AVCodecContext* enc, const std::string& name, std::int64_t bitrate) {
     enc->bit_rate = bitrate;
     enc->rc_max_rate = bitrate * 3 / 2;
@@ -48,6 +52,31 @@ void configureEncoder(AVCodecContext* enc, const std::string& name, std::int64_t
 }
 
 } // namespace
+
+std::string probeVideoEncoder(VideoCodec codec) {
+    for (const std::string& name : defaultVideoEncoders(codec)) {
+        const AVCodec* encoder = avcodec_find_encoder_by_name(name.c_str());
+        if (!encoder) {
+            continue;
+        }
+        // Como al exportar, pero pequeño: solo se mira si se abre.
+        ff::CodecContextPtr enc(avcodec_alloc_context3(encoder));
+        enc->width = 640;
+        enc->height = 360;
+        enc->time_base = {1, 30};
+        enc->framerate = {30, 1};
+        enc->pix_fmt = encoderPixelFormat(name);
+        configureEncoder(enc.get(), name, 4'000'000);
+        if (avcodec_open2(enc.get(), encoder, nullptr) >= 0) {
+            return name;
+        }
+    }
+    return {};
+}
+
+bool isSoftwareEncoder(const std::string& name) {
+    return name == "libx264" || name == "libx265";
+}
 
 struct Mp4Writer::Impl {
     ff::FormatContextPtr out; // se libera con avformat_free_context (ver destructor)
@@ -101,8 +130,7 @@ struct Mp4Writer::Impl {
         enc->height = settings.height;
         enc->time_base = {static_cast<int>(settings.rate.den), static_cast<int>(settings.rate.num)};
         enc->framerate = {static_cast<int>(settings.rate.num), static_cast<int>(settings.rate.den)};
-        enc->pix_fmt =
-            name == "h264_qsv" || name == "hevc_qsv" ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
+        enc->pix_fmt = encoderPixelFormat(name);
         enc->gop_size = static_cast<int>(settings.rate.nominal() * 2); // clave cada 2 s
         enc->max_b_frames = 2;
         enc->colorspace = AVCOL_SPC_BT709;

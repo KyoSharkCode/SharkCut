@@ -119,6 +119,8 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QString projectName READ projectName NOTIFY fileChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY fileChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
+    // Apartado de información: GPU, decodificador y codificadores (refreshHardwareInfo).
+    Q_PROPERTY(QVariantMap hardwareInfo READ hardwareInfo NOTIFY hardwareInfoChanged)
     Q_PROPERTY(bool fileBusy READ fileBusy NOTIFY fileBusyChanged)
     Q_PROPERTY(bool detectingKey READ detectingKey NOTIFY detectingKeyChanged)
     // Subtítulos. Pistas {index, name ("S1"), hidden, locked, count}; subtítulos
@@ -267,6 +269,13 @@ public:
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
+    void setRenderDevice(const QString& device, const QString& api) override;
+
+    // {gpu, api, decoder, decoderGpu (bool), h264, h264Software, h265, h265Software,
+    // probing}: "" mientras no se sabe.
+    QVariantMap hardwareInfo() const;
+    // Comprueba en segundo plano qué decodificación y codificadores hay en el equipo.
+    Q_INVOKABLE void refreshHardwareInfo();
 
     // --- Proyectos (lectura y escritura en segundo plano) ---
     // Abre un proyecto nuevo (sin cerrar los demás) con una secuencia. `width`/`height`
@@ -319,6 +328,9 @@ public:
     Q_INVOKABLE void showLastExport() const;
     // Resoluciones que se ofrecen para una secuencia: {width, height, scale, label}
     Q_INVOKABLE QVariantList exportSizes(qint64 sequenceId) const;
+    // Preset de Exportar ("youtube" o "tiktok") para esa secuencia: {scale, codec, quality,
+    // fps, note (para qué sirve), warning ("" o un aviso, p. ej. si no es vertical)}.
+    Q_INVOKABLE QVariantMap exportPreset(qint64 sequenceId, const QString& name) const;
     // Tasa de video recomendada (Mbps) para una calidad (0–2) y códec ("h264"/"h265").
     Q_INVOKABLE double recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
                                        const QString& codec) const;
@@ -575,6 +587,9 @@ public:
     // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
     // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.
     Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex);
+    // Con un clic (botón de cada transición): su punto medio exactamente en el cabezal, con
+    // su sonido, aunque ahí no haya un corte.
+    Q_INVOKABLE void addEffectClipAtPlayhead(int typeIndex);
     QVariantList soundLibrary() const;
     // Efecto de sonido de la biblioteca soltado en la pista `track` en `frame` (empieza
     // ahí; si no es una pista de audio, en la primera libre). Queda seleccionado.
@@ -659,6 +674,7 @@ signals:
     void saved(bool ok);
     void opened(bool ok);
     void exportChanged();
+    void hardwareInfoChanged();
     void exportSettingsChanged();
     void recentProjectsChanged();
     void recoveryChanged();
@@ -753,6 +769,13 @@ private:
     std::optional<Need> upcoming(std::size_t track, std::int64_t frame) const;
     int slotFor(std::size_t track, const sharkcut::Clip& clip, int avoid);
     int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
+    // Transición-clip del catálogo: sus valores a los fps de la secuencia, y ponerla en
+    // `start` (pista libre desde `track`) con su sonido enlazado.
+    static sharkcut::TransitionParams effectParams(const sharkcut::Project& p,
+                                                   const sharkcut::TransitionInfo& info);
+    sharkcut::ObjectId placeEffectWithSound(sharkcut::Project& p, std::size_t track,
+                                            std::int64_t start,
+                                            const sharkcut::TransitionParams& params);
     bool continueSlot(std::size_t track, int slot, const Need& need);
     void placeSlot(std::size_t track, int slot, std::int64_t index, bool force);
     // Coloca los hilos de la pista para `frame`. `seeking`: tras un salto (no avanzando).
@@ -853,6 +876,14 @@ private:
     bool m_busy = false;
     bool m_muted = false;
     QString m_errorString;
+    // Apartado de información (hardwareInfo).
+    QString m_renderDevice;
+    QString m_renderApi;
+    QString m_hwDecodeDevice; // lo que se podría usar ("d3d11va"…, "" = solo software)
+    QString m_encoderH264;
+    QString m_encoderH265;
+    bool m_hardwareProbed = false;
+    bool m_probingHardware = false;
 
     std::unique_ptr<QOffscreenSurface> m_exportSurface; // solo OpenGL
     std::unique_ptr<sharkcut::SequenceExporter> m_exporter;

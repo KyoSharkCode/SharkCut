@@ -404,6 +404,32 @@ TEST_CASE("Waveform peaks follow the audio and survive the disk cache", "[audio]
     CHECK_THROWS_AS(computeWaveform(clip.path.string(), &cancel), MediaError);
 }
 
+TEST_CASE("Waveform split in parallel parts matches the sequential one", "[audio][waveform]") {
+    // AAC en MP4 fragmentado, como el de OBS: idéntica.
+    ClipOptions o;
+    o.frames = 240;
+    o.audio = ClipOptions::Audio::Aac;
+    o.fragmented = true;
+    TempClip aac(o, "onda-aac.mp4");
+    const Waveform whole = computeWaveform(aac.path.string(), nullptr, 1);
+    REQUIRE(whole.peaks.size() > 700);
+    CHECK(computeWaveform(aac.path.string(), nullptr, 4) == whole);
+    CHECK(computeWaveform(aac.path.string(), nullptr, 3) == whole);
+    CHECK(computeWaveform(aac.path.string()) == whole); // automático: corto, un tramo
+
+    // PCM en Matroska con el audio empezando tarde: Matroska guarda los tiempos en ms, así
+    // que un tramo puede empezar una muestra más allá; el pico, como mucho, un paso.
+    TempClip pcm(pcmClip(10), "onda-pcm.mkv");
+    const Waveform pcmWhole = computeWaveform(pcm.path.string(), nullptr, 1);
+    const Waveform pcmParts = computeWaveform(pcm.path.string(), nullptr, 4);
+    REQUIRE(pcmParts.peaks.size() == pcmWhole.peaks.size());
+    int worst = 0;
+    for (std::size_t i = 0; i < pcmWhole.peaks.size(); ++i) {
+        worst = std::max(worst, std::abs(pcmWhole.peaks[i] - pcmParts.peaks[i]));
+    }
+    CHECK(worst <= 2);
+}
+
 TEST_CASE("Sound effects in the catalog exist and match their duration", "[audio][sfx]") {
     const std::filesystem::path folder =
         std::filesystem::path(SHARKCUT_SOURCE_DIR) / "presets" / "sfx";

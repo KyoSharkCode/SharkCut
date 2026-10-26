@@ -1,7 +1,9 @@
 // sharkcut_bench: mide lo que más pesa con VODs largos, sin interfaz.
 //
 // Uso: sharkcut_bench <video> [--cpu] [--fotogramas N] [--saltos N] [--sin-onda]
-//                      [--guardar proyecto.sharkp] [--proxy proxy.mp4]
+//                      [--solo-onda] [--guardar proyecto.sharkp] [--proxy proxy.mp4]
+// Con --solo-onda calcula solo la onda, tres veces (la primera lee el archivo del disco;
+// las otras, normalmente, de la caché del sistema).
 // Con --proxy crea antes el proxy del video (y dice cuánto tarda) y mide el proxy.
 //   - Análisis del archivo (probeMedia).
 //   - Decodificación seguida (fotogramas por segundo).
@@ -156,6 +158,7 @@ int main(int argc, char* argv[]) {
     int frames = 600;
     int seeks = 30;
     bool wave = true;
+    bool onlyWave = false;
     std::string savePath;
     std::string proxyPath;
     for (int i = 2; i < argc; ++i) {
@@ -168,6 +171,8 @@ int main(int argc, char* argv[]) {
             seeks = std::atoi(argv[++i]);
         } else if (option == "--sin-onda") {
             wave = false;
+        } else if (option == "--solo-onda") {
+            onlyWave = true;
         } else if (option == "--proxy" && i + 1 < argc) {
             proxyPath = argv[++i];
         } else if (option == "--guardar" && i + 1 < argc) {
@@ -176,6 +181,15 @@ int main(int argc, char* argv[]) {
     }
 
     try {
+        if (onlyWave) {
+            for (int run = 1; run <= 3; ++run) {
+                const auto t0 = Clock::now();
+                const Waveform w = computeWaveform(path);
+                std::printf("Onda del audio entero (%d): %.0f ms · %zu bloques\n", run, msSince(t0),
+                            w.peaks.size());
+            }
+            return 0;
+        }
         if (!proxyPath.empty()) {
             const auto start = Clock::now();
             writeProxy(path, proxyPath, [](std::int64_t done, std::int64_t total) {

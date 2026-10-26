@@ -11,6 +11,7 @@
 #include "media/chroma_key.h"
 #include "media/media_error.h"
 #include "media/media_info.h"
+#include "media/mp4_writer.h"
 #include "media/timeline_audio.h"
 #include "media/video_decoder.h"
 #include "render/sequence_exporter.h"
@@ -1992,7 +1993,10 @@ void Editor::startExport(const Project& sequence, const QVariantMap& settings,
     callbacks.finished = [post, timer](bool ok, const std::string& message,
                                        const std::string& encoder, const std::string& written) {
         const QString text = QString::fromStdString(message);
-        const QString codecName = QString::fromStdString(encoder);
+        QString codecName = QString::fromStdString(encoder);
+        if (sharkcut::isSoftwareEncoder(encoder)) {
+            codecName += QStringLiteral(" (por software: la GPU no estaba disponible)");
+        }
         const QString file = QString::fromStdString(written);
         const double seconds = static_cast<double>(timer->elapsed()) / 1000.0;
         post([ok, text, codecName, file, seconds](Editor& editor) {
@@ -2040,6 +2044,56 @@ QVariantList Editor::exportSizes(qint64 sequenceId) const {
         list.append(entry);
     }
     return list;
+}
+
+QVariantMap Editor::exportPreset(qint64 sequenceId, const QString& name) const {
+    const sharkcut::Sequence* sequence = document().sequence(static_cast<ObjectId>(sequenceId));
+    if (!sequence) {
+        return {};
+    }
+    const sharkcut::ProjectSettings& s = sequence->settings;
+    const bool tiktok = name == QLatin1String("tiktok");
+    const sharkcut::ExportPresetChoice choice = sharkcut::exportPreset(
+        tiktok ? sharkcut::ExportPreset::TikTok : sharkcut::ExportPreset::YouTube, s.width,
+        s.height, s.frameRate);
+    const sharkcut::ExportSize size = sharkcut::exportSize(s.width, s.height, choice.scale);
+    const QString fps = choice.fps > 0 ? QString::number(choice.fps) : fpsText(s.frameRate);
+    QString note;
+    QString warning;
+    if (tiktok) {
+        note = QStringLiteral("Para TikTok: %1×%2 en H.264, calidad Alta, a %3 fps.")
+                   .arg(size.width)
+                   .arg(size.height)
+                   .arg(fps);
+        if (choice.notVertical) {
+            warning = QStringLiteral("La secuencia no es vertical (%1×%2): se exporta tal cual, "
+                                     "sin recortar. Para TikTok, haz una versión vertical (clic "
+                                     "derecho en la secuencia → «Duplicar como vertical "
+                                     "(9:16)»).")
+                          .arg(s.width)
+                          .arg(s.height);
+        }
+    } else {
+        note = std::min(s.width, s.height) >= 1440
+                   ? QStringLiteral("Para YouTube: %1×%2, calidad Alta. La secuencia ya es de "
+                                    "1440p o más, así que se exporta a su tamaño.")
+                         .arg(size.width)
+                         .arg(size.height)
+                   : QStringLiteral("Para YouTube: %1×%2, calidad Alta. Subir en 1440p aunque el "
+                                    "lienzo sea más pequeño (p. ej. 1080p) mejora el resultado: "
+                                    "YouTube da más calidad a los videos de 1440p o más al "
+                                    "recomprimirlos.")
+                         .arg(size.width)
+                         .arg(size.height);
+    }
+    return {{QStringLiteral("scale"), choice.scale},
+            {QStringLiteral("codec"), choice.codec == sharkcut::VideoCodec::H265
+                                          ? QStringLiteral("h265")
+                                          : QStringLiteral("h264")},
+            {QStringLiteral("quality"), choice.quality},
+            {QStringLiteral("fps"), choice.fps},
+            {QStringLiteral("note"), note},
+            {QStringLiteral("warning"), warning}};
 }
 
 double Editor::recommendedMbps(qint64 sequenceId, double scale, int fps, int quality,
@@ -3302,11 +3356,8 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
     ObjectId created = 0;
     edit(QStringLiteral("Añadir transición"), [&](Project& p) {
-        sharkcut::TransitionParams params = info.defaults;
-        // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+        const sharkcut::TransitionParams params = effectParams(p, info);
         const sharkcut::FrameRate rate = p.settings.frameRate;
-        params.durationFrames = std::max<std::int64_t>(
-            2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
         std::size_t target = 0;
         if (track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
             p.tracks[static_cast<std::size_t>(track)].kind == sharkcut::TrackKind::Video) {
@@ -3338,27 +3389,64 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         const std::int64_t start = best >= 0
                                        ? std::max<std::int64_t>(0, best - params.durationFrames / 2)
                                        : std::max<std::int64_t>(0, frame);
-        created = sharkcut::placeEffect(p, target, start, params);
-        if (created == 0) {
-            return false;
-        }
-        // Su efecto de sonido, con el golpe en la mitad de la transición y enlazado a ella
-        // (se mueven y se quitan juntos).
-        if (const sharkcut::SoundEffect* sound =
-                sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type))) {
-            const std::int64_t hit =
-                sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds, rate.frameDuration());
-            const ObjectId soundClip = sharkcut::placeSoundHit(
-                p, soundMedia(p, *sound), start + params.durationFrames / 2, hit, kSoundVolumeDb);
-            if (soundClip != 0) {
-                sharkcut::linkEffectSound(p, created, soundClip);
-            }
-        }
-        return true;
+        created = placeEffectWithSound(p, target, start, params);
+        return created != 0;
     });
     if (created != 0) {
         select(static_cast<qint64>(created), false);
     }
+}
+
+void Editor::addEffectClipAtPlayhead(int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        const sharkcut::TransitionParams params = effectParams(p, info);
+        // Su punto medio (el del cambio) en el cabezal, haya un corte ahí o no.
+        const std::int64_t start =
+            sharkcut::effectStartCenteredAt(m_currentFrame, params.durationFrames);
+        const std::size_t v1 = p.trackIndex(sharkcut::TrackKind::Video, 0).value_or(0);
+        created = placeEffectWithSound(p, v1, start, params);
+        return created != 0;
+    });
+    if (created != 0) {
+        select(static_cast<qint64>(created), false);
+    }
+}
+
+sharkcut::TransitionParams Editor::effectParams(const Project& p,
+                                                const sharkcut::TransitionInfo& info) {
+    sharkcut::TransitionParams params = info.defaults;
+    // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
+    const sharkcut::FrameRate rate = p.settings.frameRate;
+    params.durationFrames = std::max<std::int64_t>(
+        2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+    return params;
+}
+
+ObjectId Editor::placeEffectWithSound(Project& p, std::size_t track, std::int64_t start,
+                                      const sharkcut::TransitionParams& params) {
+    const ObjectId created = sharkcut::placeEffect(p, track, start, params);
+    if (created == 0) {
+        return 0;
+    }
+    // Su efecto de sonido, con el golpe en la mitad de la transición y enlazado a ella
+    // (se mueven y se quitan juntos).
+    if (const sharkcut::SoundEffect* sound =
+            sharkcut::soundEffect(sharkcut::defaultSoundFor(params.type))) {
+        const std::int64_t hit = sharkcut::rescale(sound->hitUs, sharkcut::kMicroseconds,
+                                                   p.settings.frameRate.frameDuration());
+        const ObjectId soundClip = sharkcut::placeSoundHit(
+            p, soundMedia(p, *sound), start + params.durationFrames / 2, hit, kSoundVolumeDb);
+        if (soundClip != 0) {
+            sharkcut::linkEffectSound(p, created, soundClip);
+        }
+    }
+    return created;
 }
 
 QVariantList Editor::soundLibrary() const {
@@ -3956,8 +4044,8 @@ void Editor::play() {
     if (frameCount() <= 0 || m_playing) {
         return;
     }
-    if (m_currentFrame >= frameCount() - 1) {
-        seek(0);
+    if (m_currentFrame >= frameCount()) {
+        seek(0); // desde el final: vuelve a empezar
     }
     m_speed = 1;
     m_pendingFrame = -1;
@@ -3977,8 +4065,8 @@ void Editor::pause() {
 }
 
 void Editor::shuttle(int direction) {
-    const qint64 last = frameCount() - 1;
-    if (last < 0 || direction == 0) {
+    const qint64 last = frameCount(); // el cabezal llega hasta el final exacto
+    if (last <= 0 || direction == 0) {
         return;
     }
     int speed = direction > 0 ? 1 : -1;
@@ -4024,7 +4112,9 @@ void Editor::seek(qint64 frame) {
         emit compositionChanged();
         return;
     }
-    frame = std::clamp<qint64>(frame, 0, total - 1);
+    // Hasta el final exacto (`total`, justo después del último fotograma): ahí no hay nada
+    // que ver y se pega o se añade a continuación, sin pisar el último.
+    frame = std::clamp<qint64>(frame, 0, total);
     setCurrentFrame(frame);
     requestFrames(frame);
     if (m_playing && m_speed == 1) {
@@ -4088,7 +4178,7 @@ void Editor::advance() {
         return;
     }
     qint64 target = sharkcut::microsecondsToFrame(m_clock.nowUs(), rate);
-    const qint64 last = frameCount() - 1;
+    const qint64 last = frameCount(); // se para en el final exacto
     const bool reachedEnd = target >= last;
     target = std::min(target, last);
 
@@ -4108,7 +4198,7 @@ void Editor::advanceShuttle(sharkcut::FrameRate rate) {
     const double fps = static_cast<double>(rate.num) / static_cast<double>(rate.den);
     const double elapsed = static_cast<double>(m_shuttleTimer.elapsed()) / 1000.0;
     qint64 target = m_shuttleFrom + std::llround(elapsed * fps * m_speed);
-    const qint64 last = frameCount() - 1;
+    const qint64 last = frameCount();
     const bool reachedEnd = target >= last || target <= 0;
     target = std::clamp<qint64>(target, 0, last);
     if (m_speed > 0) {

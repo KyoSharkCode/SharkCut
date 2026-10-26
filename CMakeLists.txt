@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(SharkCut
-    VERSION 0.1.3
+    VERSION 0.1.4
     DESCRIPTION "Editor de video nativo para Windows"
     LANGUAGES C CXX) # C: miniaudio
 

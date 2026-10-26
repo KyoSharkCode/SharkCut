@@ -34,6 +34,25 @@ Item {
     property url carpeta
     property int tramo: 0 // 0 secuencia completa, 1 personalizado
 
+    // Preset aplicado ("youtube", "tiktok" o ""): sigue marcado mientras no se cambien sus
+    // ajustes a mano.
+    property string preset: ""
+    property var valoresPreset: ({})
+    readonly property bool presetVigente: preset !== ""
+        && codec === valoresPreset.codec && Math.abs(escala - valoresPreset.scale) < 1e-6
+        && calidad === valoresPreset.quality && fps === valoresPreset.fps
+    function aplicarPreset(nombre) {
+        const p = editor.exportPreset(idSecuencia, nombre)
+        if (p.scale === undefined)
+            return
+        codec = p.codec
+        escala = p.scale
+        calidad = p.quality
+        fps = p.fps
+        valoresPreset = p
+        preset = nombre
+    }
+
     function cargar() {
         const a = editor.exportSettings
         codec = a.codec
@@ -51,6 +70,7 @@ Item {
         ultimaSecuencia = idSecuencia
         nombre.text = secuencia ? secuencia.name : editor.projectName
         tramo = 0
+        preset = ""
         desde.text = editor.sequenceTimecode(idSecuencia, 0)
         hasta.text = editor.sequenceTimecode(idSecuencia, secuencia ? secuencia.frames : 0)
         // Una escala que esta secuencia no ofrece (p. ej. 200 % de un lienzo 4K): la suya.
@@ -290,6 +310,45 @@ Item {
                         font.pixelSize: Theme.tamTextoPequeno
                     }
 
+                    // Presets para subir a una plataforma
+                    Separador {}
+                    Etiqueta { texto: "Preparar para" }
+                    RowLayout {
+                        Layout.topMargin: -8
+                        Layout.fillWidth: true
+                        spacing: 6
+                        BotonIcono {
+                            Layout.fillWidth: true
+                            texto: "YouTube"
+                            activo: pagina.presetVigente && pagina.preset === "youtube"
+                            ayuda: "1440p y calidad Alta"
+                            onPulsado: pagina.aplicarPreset("youtube")
+                        }
+                        BotonIcono {
+                            Layout.fillWidth: true
+                            texto: "TikTok"
+                            activo: pagina.presetVigente && pagina.preset === "tiktok"
+                            ayuda: "Vertical 1080×1920, H.264, calidad Alta"
+                            onPulsado: pagina.aplicarPreset("tiktok")
+                        }
+                    }
+                    Text {
+                        visible: pagina.presetVigente
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: pagina.valoresPreset.note || ""
+                        color: Theme.textoSecundario
+                        font.pixelSize: Theme.tamTextoPequeno
+                    }
+                    Text {
+                        visible: pagina.presetVigente && (pagina.valoresPreset.warning || "") !== ""
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: pagina.valoresPreset.warning || ""
+                        color: Theme.aviso
+                        font.pixelSize: Theme.tamTextoPequeno
+                    }
+
                     // Video
                     Separador {}
                     Etiqueta { texto: "Códec de video" }
@@ -447,7 +506,7 @@ Item {
                             id: posicion
                             Layout.fillWidth: true
                             from: 0
-                            to: Math.max(1, pagina.editor.frameCount - 1)
+                            to: Math.max(1, pagina.editor.frameCount)
                             value: pagina.editor.currentFrame
                             onMoved: pagina.editor.seek(Math.round(value))
                             background: Rectangle {

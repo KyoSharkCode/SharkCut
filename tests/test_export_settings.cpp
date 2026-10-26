@@ -104,3 +104,38 @@ TEST_CASE("recommendedBitrate escala con pixeles fps y codec", "[export]") {
     CHECK(recommendedBitrate(1920, 1080, r60, 1, VideoCodec::H265) == 10'500'000);
     CHECK(recommendedBitrate(16, 16, r60, 0, VideoCodec::H264) == 1'000'000);
 }
+
+TEST_CASE("The YouTube preset exports 1440p from a 1080p canvas", "[export]") {
+    const ExportPresetChoice hd = exportPreset(ExportPreset::YouTube, 1920, 1080, {60, 1});
+    CHECK(hd.scale == 4.0 / 3.0);
+    CHECK(exportSize(1920, 1080, hd.scale).height == 1440);
+    CHECK(hd.codec == VideoCodec::H264);
+    CHECK(hd.quality == 1);
+    CHECK(hd.fps == 0);
+    // 720p: el doble. Ya en 1440p o 4K: tal cual.
+    CHECK(exportPreset(ExportPreset::YouTube, 1280, 720, {30, 1}).scale == 2.0);
+    CHECK(exportPreset(ExportPreset::YouTube, 2560, 1440, {30, 1}).scale == 1.0);
+    CHECK(exportPreset(ExportPreset::YouTube, 3840, 2160, {30, 1}).scale == 1.0);
+    // Vertical 1080×1920: 1440×2560.
+    CHECK(exportPreset(ExportPreset::YouTube, 1080, 1920, {30, 1}).scale == 4.0 / 3.0);
+}
+
+TEST_CASE("The TikTok preset exports vertical 1080x1920", "[export]") {
+    const ExportPresetChoice vertical = exportPreset(ExportPreset::TikTok, 1080, 1920, {60, 1});
+    CHECK(vertical.scale == 1.0);
+    CHECK_FALSE(vertical.notVertical);
+    CHECK(vertical.codec == VideoCodec::H264);
+    CHECK(vertical.quality == 1);
+    CHECK(vertical.fps == 0); // 60: los de la secuencia
+    CHECK(exportPreset(ExportPreset::TikTok, 1080, 1920, {30000, 1001}).fps == 0);
+    CHECK(exportPreset(ExportPreset::TikTok, 1080, 1920, {25, 1}).fps == 30);
+    CHECK(exportPreset(ExportPreset::TikTok, 1080, 1920, {50, 1}).fps == 60);
+    // Un lienzo vertical más grande se reduce a 1080 de ancho.
+    const ExportPresetChoice big = exportPreset(ExportPreset::TikTok, 2160, 3840, {30, 1});
+    CHECK(exportSize(2160, 3840, big.scale).width == 1080);
+    // Horizontal: se avisa y se exporta a su tamaño, sin recortar.
+    const ExportPresetChoice wide = exportPreset(ExportPreset::TikTok, 1920, 1080, {60, 1});
+    CHECK(wide.notVertical);
+    CHECK(wide.scale == 1.0);
+    CHECK(exportPreset(ExportPreset::TikTok, 1280, 720, {30, 1}).scale == 1.0);
+}

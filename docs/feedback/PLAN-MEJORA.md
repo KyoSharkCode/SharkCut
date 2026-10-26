@@ -103,6 +103,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   (p. ej. dibujar una onda aproximada mientras se calcula la completa, o repartir el
   cálculo en varios hilos).
 - **Hecho cuando:** hay cifras de antes y después con el mismo VOD.
+- **Hecho:** medido con `sharkcut_bench <video> --solo-onda` (compilación Release, Linux, Xeon de 4 núcleos a 2,1 GHz) con un video de prueba de 1 h generado con FFmpeg (1280×720 a 30 fps en H.264, 1,3 GB, audio AAC estéreo a 48 kHz), con el archivo en la caché del sistema. **Antes: 2,6 s** (mediana de 6; entre 2,5 y 3,4 s). Dónde se iba el tiempo: decodificar el AAC ≈ 1,7 s (65 %, en un solo hilo), leer el contenedor ≈ 0,3 s (con el audio intercalado fotograma a fotograma hay que leer el archivo entero) y el resto en nuestro código (una reserva y puesta a cero de memoria por trama en AudioDecoder y el bucle de picos muestra a muestra); la conversión a 48 kHz no pesa. Cambios: computeWaveform reparte el audio en tramos (uno por minuto, como mucho 4 y no más que núcleos) que se decodifican a la vez en hilos y se juntan en orden, cada uno empezando 0,1 s antes para que el decodificador se asiente (la onda sale idéntica bloque a bloque: comprobado con el VOD de 1 h y en el test); AudioDecoder reutiliza su memoria de conversión, y los picos se calculan por bloques. **Después: 0,63 s** (mediana de 6; entre 0,60 y 0,69 s), unas 4 veces menos; en un solo tramo, 2,4 s. Con un disco duro mecánico lo que manda es leer el archivo, y eso no cambia.
 
 ### A7 · Escuchar los sonidos antes de usarlos · FB-006 · S
 - **Hacer:** en la pestaña Sonidos, un clic en el icono reproduce el sonido; otro clic lo
@@ -227,6 +228,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   la exportación por tramo.
 - **Hecho cuando:** el cabezal se puede dejar justo en el borde final de los clips y pegar
   ahí deja el clip a continuación, sin pisar el último fotograma.
+- **Hecho:** `Editor::seek` deja el cabezal en `frameCount()` (justo después del último
+  fotograma), y ahí el visor muestra el lienzo vacío. Fin y el botón de ir al final lo
+  llevan ahí, y el imán y ↓ con el final de los clips también. La reproducción se para ahí y
+  vuelve a empezar desde el principio si se reproduce desde el final; J/L llegan hasta el
+  final, y el control de posición de Exportar y «hasta el cabezal» también. Lo que usa el
+  cabezal en el final: pegar lo deja a continuación, dividir y W no hacen nada, y sonidos,
+  marcadores y transiciones se ponen ahí. Test del núcleo; comprobado con Xvfb (Fin y
+  Ctrl+V en el final).
 
 ---
 
@@ -273,10 +282,22 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
     resultado tras la recompresión).
   - «TikTok»: vertical 1080×1920, H.264, calidad Alta, a los fps de la secuencia (30 o 60).
     Con una secuencia horizontal, avisar de que no es vertical (no recortar por su cuenta).
+- **Hecho:** «Preparar para» en Exportar, con los botones YouTube y TikTok. Aplican sus
+  ajustes (`exportPreset` en export_settings.h, con tests; `Editor::exportPreset` añade los
+  textos) y una línea explica cada uno mientras no se cambien a mano:
+  - YouTube: la escala ofrecida más pequeña que llega a 1440 líneas (desde 1080p, el 133 %:
+    2560×1440), H.264 y calidad Alta, con la explicación de la recompresión. Con un lienzo de
+    1440p o más, a su tamaño.
+  - TikTok: el tamaño con 1080 de ancho (1080×1920 desde un lienzo vertical), H.264, calidad
+    Alta, a los fps de la secuencia si son 30 o 60 (si no, el más cercano de los dos). Con
+    una secuencia horizontal avisa (en color de aviso) y la exporta a su tamaño, sin recortar.
+  Además se arregló `Selector.qml`: al cambiar su lista volvía al primer elemento sin mirar
+  `indice` (Exportar mostraba «200 %» al abrir aunque se fuera a exportar al 100 %).
 
 ### M7 · Ver qué aceleración por hardware se usa · FB-021 · S–M
 - **Hacer:** apartado de información (GPU detectada, decodificador y codificador en uso,
   si hay respaldo por software) y, quizá, forzar el modo por software para diagnosticar.
+- **Hecho:** botón «Hardware y codificadores» en Proyectos (qml/DialogoSistema.qml): la GPU con la que dibuja el visor (QRhi driverInfo), la decodificación (por la GPU en uso, la que se podría usar, o el respaldo por software) y el codificador que usaría la exportación en H.264 y H.265 (probeVideoEncoder, en segundo plano), con lo que va por software en amarillo. Al terminar una exportación por software, el mensaje lo dice.
 
 ### M8 · Logo más reconocible · FB-001 · M
 - **Hacer:** rediseñar el icono para que se lea como aleta de tiburón (curva trasera
@@ -315,6 +336,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   transición se centra exactamente en el cabezal (su punto medio, el del cambio, queda en
   el cabezal), haya un corte ahí o no. Arrastrándola, sigue como hoy: se centra en el corte
   más cercano al punto donde se suelta.
+- **Hecho:** el cuadrado de la flecha de cada transición es ahora un botón: un clic llama a
+  `Editor::addEffectClipAtPlayhead`, que la pone desde V1 hacia arriba (en la primera pista
+  libre) con su punto medio en el cabezal (`effectStartCenteredAt`) y su sonido enlazado
+  con el golpe ahí. La colocación y el sonido se comparten con el arrastre
+  (`placeEffectWithSound`), que sigue centrándose en el corte más cercano. Test del núcleo;
+  comprobado con Xvfb con el cabezal a mitad de un clip.
 
 ### M13 · Cabezal con forma de aleta de tiburón · FB-032 · S
 - **Hacer:** cambiar el tirador del cabezal (el cuadrito de la regla) por una aleta de

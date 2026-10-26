@@ -90,8 +90,9 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Arrastra una transición a la línea de tiempo: se pone como un clip, "
-                      + "centrada en el corte más cercano, y afecta a todo lo que hay debajo. "
+                text: "Pulsa la flecha para ponerla centrada en el cabezal, o arrastra la "
+                      + "transición a la línea de tiempo: se centra en el corte más cercano. Va "
+                      + "como un clip y afecta a todo lo que hay debajo. "
                       + "Se mueve, se corta y se recorta como cualquier clip, también al principio "
                       + "o al final de un clip. Lleva su efecto de sonido en una pista de audio."
                 color: Theme.textoSecundario
@@ -120,17 +121,32 @@ Rectangle {
                             anchors.leftMargin: 10
                             anchors.rightMargin: 8
                             spacing: 10
+                            // Botón: ponerla con su punto medio en el cabezal.
                             Rectangle {
                                 implicitWidth: 32
                                 implicitHeight: 32
                                 radius: 5
-                                color: Theme.clipTransicion
+                                color: zonaPoner.containsMouse ? Qt.lighter(Theme.clipTransicion, 1.25)
+                                                               : Theme.clipTransicion
+                                border.color: zonaPoner.containsMouse ? Theme.texto : "transparent"
+                                opacity: panel.editor.hasSequence ? 1 : 0.5
                                 Icono {
                                     anchors.centerIn: parent
                                     nombre: "transicion"
                                     tam: 18
                                     color: Theme.texto
                                 }
+                                MouseArea {
+                                    id: zonaPoner
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: panel.editor.hasSequence
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: panel.editor.addEffectClipAtPlayhead(tarjeta.index)
+                                }
+                                ToolTip.visible: zonaPoner.containsMouse
+                                ToolTip.delay: 500
+                                ToolTip.text: "En el cabezal (su centro, con su sonido)"
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
@@ -155,6 +171,7 @@ Rectangle {
                         ArrastreTransicion {
                             id: arrastreTransicion
                             anchors.fill: parent
+                            anchors.leftMargin: 46 // el botón de ponerla en el cabezal
                             indice: tarjeta.index
                             nombre: tarjeta.modelData
                             fantasma: panel.fantasma

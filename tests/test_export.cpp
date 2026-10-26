@@ -135,3 +135,15 @@ TEST_CASE("Mp4Writer escribe H.265 sin audio", "[export]") {
     CHECK(info.video->frameCount == 30);
     CHECK(info.audio.empty());
 }
+
+TEST_CASE("probeVideoEncoder finds the encoder the export would use", "[export]") {
+    const std::string h264 = probeVideoEncoder(VideoCodec::H264);
+    // En CI no hay GPU: el respaldo por software (si FFmpeg trae x264).
+    if (h264.empty()) {
+        SKIP("FFmpeg sin codificador H.264");
+    }
+    CHECK((h264 == "h264_nvenc" || h264 == "h264_amf" || h264 == "h264_qsv" || h264 == "libx264"));
+    CHECK(isSoftwareEncoder("libx264"));
+    CHECK(isSoftwareEncoder("libx265"));
+    CHECK_FALSE(isSoftwareEncoder("h264_nvenc"));
+}

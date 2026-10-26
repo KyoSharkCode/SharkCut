@@ -50,6 +50,28 @@ std::vector<ExportSize> exportSizes(int canvasWidth, int canvasHeight);
 // Tamaño exportado con una escala del lienzo (lados pares).
 ExportSize exportSize(int canvasWidth, int canvasHeight, double scale);
 
+// Ajustes preparados en Exportar para subir a una plataforma.
+enum class ExportPreset {
+    YouTube, // 1440p (desde un lienzo 1080p): tras su recompresión se ve mejor
+    TikTok,  // vertical 1080×1920, a 30 o 60 fps
+};
+
+struct ExportPresetChoice {
+    double scale = 1.0; // una de las escalas de exportSizes()
+    VideoCodec codec = VideoCodec::H264;
+    int quality = 1;          // Alta
+    int fps = 0;              // 0 = los de la secuencia
+    bool notVertical = false; // TikTok con una secuencia que no es vertical (no se recorta)
+};
+
+// Los ajustes de un preset para un lienzo y sus fps. YouTube: la escala ofrecida más
+// pequeña cuyo lado corto llega a 1440 (si ninguna llega, la mayor; con 1440 o más, la
+// del lienzo). TikTok: la escala con el ancho más cercano a 1080 (si la secuencia no es
+// vertical, la suya), con los fps de la secuencia si son 30 o 60 (o 29,97/59,94) y si
+// no, 30 o 60, lo más cercano.
+ExportPresetChoice exportPreset(ExportPreset preset, int canvasWidth, int canvasHeight,
+                                FrameRate rate);
+
 // Tasa de bits recomendada (bits por segundo) para una calidad (0 Ligera, 1 Alta,
 // 2 Máxima): 8, 16 y 40 Mbps en H.264 a 1080p60, y proporcional a los píxeles y (más
 // suave) a los fps. H.265 necesita un tercio menos para verse igual.

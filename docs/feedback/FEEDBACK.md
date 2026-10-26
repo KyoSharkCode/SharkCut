@@ -5,7 +5,7 @@ Formato y estados: ver [README.md](README.md).
 | ID | Fecha | Área | Tipo | Resumen | Estado |
 |----|-------|------|------|---------|--------|
 | [FB-001](#fb-001) | 2026-10-22 | Marca/logo | Usabilidad | El logo parece un pincho de Geometry Dash, no una aleta | En el plan |
-| [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | En el plan |
+| [FB-002](#fb-002) | 2026-10-22 | Rendimiento | Propuesta | Ondas más rápidas | Hecho |
 | [FB-003](#fb-003) | 2026-10-22 | Línea de tiempo | Propuesta | Atajo Alt+C para cortar en el cabezal | Hecho |
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
 | [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
@@ -24,8 +24,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | En el plan |
 | [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | Hecho |
 | [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
-| [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | En el plan |
-| [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | En el plan |
+| [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | Hecho |
+| [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | Hecho |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | Hecho |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | Hecho |
@@ -33,10 +33,10 @@ Formato y estados: ver [README.md](README.md).
 | [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
 | [FB-029](#fb-029) | 2026-10-26 | Otro | Propuesta | Apartado de tutorial en la app | En el plan |
-| [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | En el plan |
-| [FB-031](#fb-031) | 2026-10-26 | Efectos | Propuesta | Clic en una transición la pone en el cabezal | En el plan |
+| [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | Hecho |
+| [FB-031](#fb-031) | 2026-10-26 | Efectos | Propuesta | Clic en una transición la pone en el cabezal | Hecho |
 | [FB-032](#fb-032) | 2026-10-26 | Línea de tiempo | Propuesta | Cabezal con forma de aleta de tiburón | En el plan |
-| [FB-033](#fb-033) | 2026-10-26 | Exportación | Propuesta | Preset de exportación para TikTok | En el plan |
+| [FB-033](#fb-033) | 2026-10-26 | Exportación | Propuesta | Preset de exportación para TikTok | Hecho |
 
 ---
 
@@ -67,7 +67,7 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Si es posible, optimizar el tiempo que tardan en generarse los picos de audio (ondas).
 - **Contexto:** Al importar medios y verlos en la línea de tiempo.
 - **Notas:** Las ondas se calculan con `waveform.h` y se guardan en la caché del proyecto (`<proyecto>.sharkp.cache/`); la segunda vez deberían salir de la caché. Conviene medir con VODs largos para saber dónde se va el tiempo.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A6)
 
 <a id="fb-003"></a>
 ### FB-003 · Atajo para cortar en el cabezal (ej. Alt+C)
@@ -306,7 +306,7 @@ Formato y estados: ver [README.md](README.md).
   al terminar una exportación y el registro de la sesión). Idea: un apartado de
   Configuración/Información con la GPU detectada, el decodificador y el codificador en uso,
   y quizá poder forzar el camino por software si da problemas.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M7)
 
 <a id="fb-022"></a>
 ### FB-022 · ¿El códec de exportación aguanta la recompresión de YouTube?
@@ -331,7 +331,7 @@ Formato y estados: ver [README.md](README.md).
   visitas); desde 1440p suele usar VP9/AV1 con más tasa. YouTube no lo documenta, es lo
   que se observa. En SharkCut ya se puede: Exportar → resolución 133 % (2560×1440 desde un
   lienzo 1080p), calidad «Alta» (~28 Mbps).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M6)
 
 <a id="fb-023"></a>
 ### FB-023 · Tirón al cortar durante la reproducción
@@ -461,7 +461,7 @@ Formato y estados: ver [README.md](README.md).
   final pisaría el último fotograma.
 - **Capturas:** [FB-030-cabezal-final.png](capturas/FB-030-cabezal-final.png),
   [FB-030-cabezal-final-detalle.png](capturas/FB-030-cabezal-final-detalle.png)
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A14)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A14)
 
 <a id="fb-031"></a>
 ### FB-031 · Clic en una transición la pone en el cabezal
@@ -480,7 +480,7 @@ Formato y estados: ver [README.md](README.md).
 - **Decisión (Kyo, 2026-10-26):** las dos formas conviven: clic → centrada exactamente en
   el cabezal; arrastrar → centrada en el corte más cercano a donde se suelta (como hoy).
 - **Capturas:** [FB-031-transiciones.png](capturas/FB-031-transiciones.png)
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M12)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M12)
 
 <a id="fb-032"></a>
 ### FB-032 · Cabezal con forma de aleta de tiburón
@@ -504,4 +504,4 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** que además del preset para YouTube haya uno de exportación para TikTok.
 - **Contexto:** al preparar M6 (preset «YouTube», FB-022).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M6)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M6)

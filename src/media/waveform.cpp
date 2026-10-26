@@ -2,14 +2,18 @@
 
 #include "media/audio_decoder.h"
 #include "media/media_error.h"
+#include "media/media_info.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
+#include <limits>
 #include <system_error>
+#include <thread>
 
 namespace sharkcut {
 
@@ -61,34 +65,159 @@ double Waveform::level(std::uint8_t value, double gainDb) {
     return std::clamp(std::sqrt(std::pow(10.0, db / 20.0)), 0.0, 1.0);
 }
 
-Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel) {
+namespace {
+
+// Cada tramo empieza a decodificar un poco antes (0,1 s) y lo descarta, para que el
+// decodificador se asiente (AAC necesita la trama anterior) y el pico no cambie.
+constexpr std::int64_t kPreroll = kAudioSampleRate / 10;
+// Tramos de un minuto o más: abrir el archivo y saltar cuesta poco frente a eso.
+constexpr std::int64_t kMinPartSamples = 60LL * kAudioSampleRate;
+constexpr int kMaxParts = 4;
+
+// Pico de `samples` muestras estéreo intercaladas (los dos canales juntos). Ocho
+// acumuladores para que la CPU haga varias comparaciones a la vez.
+float peakOf(const float* data, std::size_t samples) {
+    const std::size_t count = samples * kAudioChannels;
+    std::array<float, 8> acc{};
+    std::size_t i = 0;
+    for (; i + 8 <= count; i += 8) {
+        for (std::size_t k = 0; k < 8; ++k) {
+            acc[k] = std::max(acc[k], std::abs(data[i + k]));
+        }
+    }
+    float peak = *std::max_element(acc.begin(), acc.end());
+    for (; i < count; ++i) {
+        peak = std::max(peak, std::abs(data[i]));
+    }
+    return peak;
+}
+
+struct PartResult {
+    std::vector<std::uint8_t> peaks;
+    bool reachedEnd = false; // el audio terminó dentro de este tramo
+};
+
+// Picos de los bloques [firstBlock, lastBlock) (lastBlock < 0: hasta el final del audio).
+PartResult computePart(const std::string& path, std::int64_t firstBlock, std::int64_t lastBlock,
+                       const std::atomic<bool>* cancel) {
     AudioDecoder decoder(path);
-    Waveform waveform;
+    constexpr std::size_t kBlock = Waveform::kBlockSamples;
     constexpr std::size_t kChunkBlocks = 200; // un segundo por lectura
     std::vector<float> buffer(kChunkBlocks * Waveform::kBlockSamples * kAudioChannels);
+
+    const std::int64_t start = firstBlock * Waveform::kBlockSamples;
+    if (start > 0) {
+        const std::int64_t from = std::max<std::int64_t>(0, start - kPreroll);
+        decoder.seekToSample(from);
+        auto skip = static_cast<std::size_t>(start - from);
+        while (skip > 0) {
+            const std::size_t got =
+                decoder.read(buffer.data(), std::min(skip, kChunkBlocks * Waveform::kBlockSamples));
+            if (got == 0) {
+                return {{}, true};
+            }
+            skip -= got;
+        }
+    }
+
+    PartResult result;
+    std::int64_t remaining = lastBlock < 0 ? std::numeric_limits<std::int64_t>::max()
+                                           : (lastBlock - firstBlock) * Waveform::kBlockSamples;
+    if (lastBlock >= 0) {
+        result.peaks.reserve(static_cast<std::size_t>(lastBlock - firstBlock));
+    }
     float peak = 0.0f;
-    int inBlock = 0;
-    for (;;) {
+    std::size_t inBlock = 0;
+    while (remaining > 0) {
         if (cancel && cancel->load(std::memory_order_relaxed)) {
             throw MediaError("Cancelado");
         }
-        const std::size_t got = decoder.read(buffer.data(), kChunkBlocks * Waveform::kBlockSamples);
+        const auto wanted = static_cast<std::size_t>(std::min<std::int64_t>(
+            remaining, static_cast<std::int64_t>(kChunkBlocks * Waveform::kBlockSamples)));
+        const std::size_t got = decoder.read(buffer.data(), wanted);
         if (got == 0) {
+            result.reachedEnd = true;
             break;
         }
-        for (std::size_t i = 0; i < got; ++i) {
-            const float l = std::abs(buffer[i * kAudioChannels]);
-            const float r = std::abs(buffer[i * kAudioChannels + 1]);
-            peak = std::max(peak, std::max(l, r));
-            if (++inBlock == Waveform::kBlockSamples) {
-                waveform.peaks.push_back(Waveform::encode(peak));
+        remaining -= static_cast<std::int64_t>(got);
+        std::size_t i = 0;
+        while (i < got) {
+            const std::size_t n = std::min(got - i, kBlock - inBlock);
+            peak = std::max(peak, peakOf(buffer.data() + i * kAudioChannels, n));
+            i += n;
+            inBlock += n;
+            if (inBlock == kBlock) {
+                result.peaks.push_back(Waveform::encode(peak));
                 peak = 0.0f;
                 inBlock = 0;
             }
         }
     }
     if (inBlock > 0) {
-        waveform.peaks.push_back(Waveform::encode(peak));
+        result.peaks.push_back(Waveform::encode(peak));
+    }
+    return result;
+}
+
+} // namespace
+
+Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel, int parts) {
+    // Decodificar el audio es lo que más tarda (y va en un solo hilo): un VOD largo se
+    // reparte en tramos que se decodifican a la vez y se juntan en orden.
+    std::int64_t totalBlocks = 0;
+    if (parts != 1) {
+        const std::int64_t durationUs = probeMedia(path).durationUs;
+        const std::int64_t samples = durationUs * kAudioSampleRate / 1'000'000;
+        totalBlocks = samples / Waveform::kBlockSamples;
+        if (parts <= 0) {
+            const auto cores = static_cast<std::int64_t>(std::thread::hardware_concurrency());
+            parts = static_cast<int>(std::clamp<std::int64_t>(
+                std::min<std::int64_t>(samples / kMinPartSamples, std::max<std::int64_t>(cores, 1)),
+                1, kMaxParts));
+        }
+        if (totalBlocks < parts) {
+            parts = 1;
+        }
+    }
+    if (parts <= 1) {
+        Waveform waveform;
+        waveform.peaks = computePart(path, 0, -1, cancel).peaks;
+        return waveform;
+    }
+
+    std::vector<PartResult> results(static_cast<std::size_t>(parts));
+    std::vector<std::exception_ptr> errors(static_cast<std::size_t>(parts));
+    auto run = [&](int part) {
+        const std::int64_t first = totalBlocks * part / parts;
+        const std::int64_t last = part + 1 == parts ? -1 : totalBlocks * (part + 1) / parts;
+        try {
+            results[static_cast<std::size_t>(part)] = computePart(path, first, last, cancel);
+        } catch (...) {
+            errors[static_cast<std::size_t>(part)] = std::current_exception();
+        }
+    };
+    std::vector<std::thread> threads;
+    threads.reserve(static_cast<std::size_t>(parts - 1));
+    for (int part = 1; part < parts; ++part) {
+        threads.emplace_back(run, part);
+    }
+    run(0);
+    for (std::thread& thread : threads) {
+        thread.join();
+    }
+    for (const std::exception_ptr& error : errors) {
+        if (error) {
+            std::rethrow_exception(error);
+        }
+    }
+
+    Waveform waveform;
+    waveform.peaks.reserve(static_cast<std::size_t>(totalBlocks) + kMaxParts);
+    for (const PartResult& result : results) {
+        waveform.peaks.insert(waveform.peaks.end(), result.peaks.begin(), result.peaks.end());
+        if (result.reachedEnd) {
+            break; // el archivo dura menos de lo que decía: lo que sigue está vacío
+        }
     }
     return waveform;
 }

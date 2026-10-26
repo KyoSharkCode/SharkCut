@@ -482,6 +482,10 @@ std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, s
     return pasted;
 }
 
+std::int64_t effectStartCenteredAt(std::int64_t center, std::int64_t duration) {
+    return std::max<std::int64_t>(0, center - duration / 2);
+}
+
 ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
                      TransitionParams params) {
     if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||

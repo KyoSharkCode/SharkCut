@@ -165,6 +165,13 @@ Item {
                 }
                 BotonIcono {
                     Layout.fillWidth: true
+                    icono: "info"
+                    texto: "Hardware y codificadores"
+                    ayuda: "La GPU detectada, cómo se decodifica y con qué se exporta"
+                    onPulsado: sistema.open()
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
                     icono: "carpeta"
                     texto: "Abrir la carpeta de registros"
                     ayuda: "Lo que pasó en cada sesión (y si se cerró por un fallo), para enviarlo"
@@ -397,6 +404,7 @@ Item {
     }
 
     DialogoAcercaDe { id: acercaDe }
+    DialogoSistema { id: sistema; editor: pagina.editor }
 
     component Etiqueta: Text {
         property string texto

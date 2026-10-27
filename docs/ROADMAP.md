@@ -22,6 +22,7 @@ actualizar también esa página.
 | M3 | Efecto de tinte de color y un selector de color completo en todas las muestras de color (efectos, pantalla verde, subtítulos). | Medio |
 | M22 | Crear un color sólido desde Medios (clic derecho en un hueco), para fondos y rellenos. | Medio |
 | A17 | Corregir los clips que a veces no aparecen al reproducir y las imágenes congeladas antes de una transición (con lo que diga el rastro de A16). | Medio |
+| M23 | Girar un clip 90° con un botón y que se ajuste solo al lienzo (p. ej. un video horizontal en una secuencia vertical). | Pequeño |
 
 ### 0.1.7 · Texto y audio de las grabaciones
 | Punto | Qué trae | Tamaño |

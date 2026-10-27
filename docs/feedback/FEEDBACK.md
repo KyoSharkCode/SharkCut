@@ -51,6 +51,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
 | [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | En el plan |
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | En el plan |
+| [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | En el plan |
 
 ---
 
@@ -775,3 +776,19 @@ Formato y estados: ver [README.md](README.md).
 - **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
   en la 0.1.6.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
+
+<a id="fb-048"></a>
+### FB-048 · Girar 90° un video horizontal y ajustarlo al lienzo vertical
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.5
+- **Área:** Propiedades
+- **Tipo:** Usabilidad
+- **Qué dijo:** que un video en horizontal se pueda rotar 90 grados y ajustar al lienzo
+  vertical; ahora se le hace complejo.
+- **Contexto:** shorts en vertical a partir de grabaciones horizontales.
+- **Notas:** la rotación existe (Propiedades, en grados), pero «Ajustar» y «Rellenar»
+  (Editor::fitClip) calculan la escala sin tener en cuenta el giro: un 16:9 girado 90° en
+  un lienzo 9:16 se queda pequeño y hay que escalarlo a mano (×1,78).
+- **Decisión (Kyo):** para la 0.1.6.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M23)

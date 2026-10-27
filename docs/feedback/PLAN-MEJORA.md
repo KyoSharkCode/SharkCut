@@ -536,6 +536,20 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   texto de M21).
 - **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
+### M23 · Girar 90° y ajustar al lienzo · FB-048 · S
+- **Problema:** girar un video horizontal para un lienzo vertical obliga a escalarlo a
+  mano: «Ajustar» y «Rellenar» (Editor::fitClip, con canvasBox) no tienen en cuenta la
+  rotación del clip.
+- **Hacer:** «Ajustar» y «Rellenar» usan la caja del clip ya girado (con 90° o 270°, ancho
+  y alto intercambiados; con otros ángulos, el rectángulo que lo contiene). Botones
+  «Girar 90° ↺» y «Girar 90° ↻» en Propiedades (junto a Ajustar y Rellenar) y en el menú
+  del clip de la línea de tiempo: giran el clip y lo vuelven a ajustar al lienzo en un
+  solo paso de deshacer (rellenando si ya rellenaba). Con la rotación animada, el giro se
+  guarda como keyframe en el cabezal, como el resto de cambios.
+- **Hecho cuando:** un clip 1920×1080 en una secuencia 1080×1920 queda a pantalla
+  completa con un clic en «Girar 90°».
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -598,5 +612,5 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A17 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044, 046, 047 |
-| Media | M1–M22 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
+| Media | M1–M23 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

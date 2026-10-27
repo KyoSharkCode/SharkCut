@@ -49,6 +49,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
+| [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Registrado |
 
 ---
 
@@ -709,3 +710,26 @@ Formato y estados: ver [README.md](README.md).
 - **Decisión (Kyo):** para la 0.1.5, junto con el tinte y el selector de color (FB-013,
   FB-014) y las pistas de audio de los MKV (FB-009).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M22)
+
+<a id="fb-046"></a>
+### FB-046 · La vista previa se congela un momento antes de una transición
+- **Fecha:** 2026-10-27
+- **Quién:** Mina
+- **Versión:** 0.1.4
+- **Área:** Visor
+- **Tipo:** Error
+- **Qué dijo:** «al editor como que aún le cuesta procesar cuando uno pone una transición:
+  se queda congelada la imagen un segundo antes de hacer la animación en la
+  pre-visualización»; en la vista previa tarda un poco en procesar o mostrar una
+  transición.
+- **Contexto:** reproduciendo en el visor un tramo con una transición, sin proxies. A Kyo
+  no le pasa.
+- **Notas:** al reproducir, si un fotograma no llega a tiempo se sigue viendo el anterior
+  (la imagen «se congela») mientras el audio avanza. Posibles causas por comprobar: el
+  video a resolución completa sin proxies en un equipo con menos GPU (lo aliviaría M5,
+  resolución del visor), el clip siguiente que no se prepara a tiempo en el corte, o el
+  primer uso de la transición (se crean sus texturas). Falta saber: si pasa siempre o solo
+  la primera vez, si pasa también con «Proxies» activado, qué tipo de transición, y el
+  video (resolución, fps) y la tarjeta gráfica (lo dice «Hardware y codificadores» en
+  Proyectos).
+- **Estado:** Registrado

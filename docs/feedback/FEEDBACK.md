@@ -50,6 +50,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
 | [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Registrado |
+| [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Registrado |
 
 ---
 
@@ -732,4 +733,23 @@ Formato y estados: ver [README.md](README.md).
   la primera vez, si pasa también con «Proxies» activado, qué tipo de transición, y el
   video (resolución, fps) y la tarjeta gráfica (lo dice «Hardware y codificadores» en
   Proyectos).
+- **Estado:** Registrado
+
+<a id="fb-047"></a>
+### FB-047 · A veces un clip no aparece en el visor hasta mover el cabezal
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Visor
+- **Tipo:** Error
+- **Qué dijo:** de vez en cuando un clip no aparece en el visor; hay que mover el cabezal a
+  otra parte para que se muestre. Sin proxies. Le pasaba también en otros editores, sobre
+  todo con la pantalla verde, así que lo ve como algo normal de los editores.
+- **Contexto:** edición normal (en pausa o reproduciendo, por confirmar).
+- **Notas:** no debería pasar: si el visor no muestra un clip que está en el cabezal, algo
+  no pidió o no recogió su fotograma (p. ej. tras mover, recortar o cambiar un clip, o al
+  cambiar de clip en una pista). Falta saber: si estaba en pausa o reproduciendo, qué se
+  acababa de hacer (mover, recortar, deshacer, aplicar la pantalla verde…), si el clip está
+  en una pista superior y si es un video, una imagen o un clip con pantalla verde. Puede
+  estar relacionado con FB-046 (fotogramas que no llegan a tiempo).
 - **Estado:** Registrado

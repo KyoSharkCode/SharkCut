@@ -316,6 +316,20 @@ bool setCaptionText(Project& project, ObjectId caption, std::string text);
 bool moveCaption(Project& project, ObjectId caption, std::int64_t start);
 // Nuevo tramo [start, end), limitado por los vecinos (al menos un fotograma).
 bool trimCaption(Project& project, ObjectId caption, std::int64_t start, std::int64_t end);
+// Hasta dónde puede ir cada borde del subtítulo con trimCaptionEdge: el del vecino si hay
+// hueco, o casi el otro borde del vecino si van pegados. `high` = INT64_MAX si no hay
+// nada después.
+std::pair<std::int64_t, std::int64_t> captionEdgeRoom(const Project& project, ObjectId caption);
+// Mueve un borde del subtítulo (`end`: el final) a `frame`. Si va pegado a un vecino por
+// ese lado, el borde de los dos se mueve a la vez (uno se alarga y el otro se acorta, al
+// menos un fotograma cada uno); si no, se alarga hasta el hueco que haya.
+bool trimCaptionEdge(Project& project, ObjectId caption, bool end, std::int64_t frame);
+// Parte en dos los subtítulos que contienen `frame` (sin contar su primer fotograma).
+// Con `captions` vacío, los de todas las pistas sin bloquear; si no, solo esos. Cada
+// mitad se queda con sus palabras: las de la transcripción según su momento y, si no lo
+// tienen, el texto se reparte por palabras en proporción a su longitud.
+bool splitCaptionsAt(Project& project, std::int64_t frame,
+                     const std::vector<ObjectId>& captions = {});
 // Estilo propio de unos subtítulos (std::nullopt: vuelven al de su pista).
 bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,
                      const std::optional<CaptionStyle>& style);

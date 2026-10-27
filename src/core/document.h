@@ -21,6 +21,9 @@ namespace sharkcut {
 struct Folder {
     ObjectId id = 0;
     std::string name;
+    // La de los recursos de SharkCut (efectos de sonido que se añaden solos). Se reconoce
+    // por esta marca, no por su nombre; si se le cambia el nombre la pierde.
+    bool resources = false;
 
     friend bool operator==(const Folder&, const Folder&) = default;
 };
@@ -87,6 +90,8 @@ bool renameFolder(Document& document, ObjectId folder, std::string name);
 bool removeFolder(Document& document, ObjectId folder);
 // Mueve medios y secuencias a la carpeta (0 = raíz).
 bool moveToFolder(Document& document, const std::vector<ObjectId>& items, ObjectId folder);
+// La carpeta de los recursos de SharkCut; si no hay ninguna, la crea con `name`.
+ObjectId resourceFolder(Document& document, std::string name);
 
 // --- Medios ---
 // Quita el medio de la biblioteca y sus clips de todas las secuencias.

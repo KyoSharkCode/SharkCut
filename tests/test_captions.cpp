@@ -183,6 +183,81 @@ TEST_CASE("Caption edits respect their neighbours", "[captions]") {
     CHECK_FALSE(removeCaptions(p, {first}));
 }
 
+TEST_CASE("The blade splits captions by their words", "[captions]") {
+    Project p;
+    const std::size_t track = addCaptionTrack(p);
+    // Transcrita: cada palabra va a la mitad donde cae su centro.
+    REQUIRE(setCaptions(p, track, layoutCaptions(spoken({"uno", "dos", "tres", "cuatro"}), {}, k60)));
+    REQUIRE(p.captionTracks[track].captions.size() == 1);
+    const Caption whole = p.captionTracks[track].captions.front();
+    REQUIRE(whole.text == "uno dos tres cuatro");
+    CHECK_FALSE(splitCaptionsAt(p, whole.start)); // en su primer fotograma no se divide
+    REQUIRE(splitCaptionsAt(p, whole.start + 45));
+    const std::vector<Caption>& halves = p.captionTracks[track].captions;
+    REQUIRE(halves.size() == 2);
+    CHECK(texts(halves) == std::vector<std::string>{"uno dos", "tres cuatro"});
+    CHECK(halves[0].end() == halves[1].start);
+    CHECK(halves[1].end() == whole.end());
+    REQUIRE(halves[1].words.size() == 2);
+    CHECK(halves[1].words[0].text == "tres");
+    CHECK(halves[1].words[0].start == 3); // 48 − 45: sigue en su sitio
+    checkNoOverlap(halves);
+
+    // Escrito a mano: el texto se reparte en proporción, con los saltos de línea.
+    const ObjectId manual = addCaption(p, track, 1000, 100, "hola\na todos");
+    REQUIRE(manual != 0);
+    REQUIRE(splitCaptionsAt(p, 1030, {manual}));
+    CHECK(p.caption(manual)->text == "hola");
+    const Caption* rest = p.captionAt(track, 1030);
+    REQUIRE(rest != nullptr);
+    CHECK(rest->text == "a todos");
+    CHECK(rest->length == 70);
+
+    // Una sola palabra: las dos mitades la llevan.
+    const ObjectId one = addCaption(p, track, 2000, 100, "¡Hola!");
+    REQUIRE(splitCaptionsAt(p, 2050, {one}));
+    CHECK(p.captionAt(track, 2000)->text == "¡Hola!");
+    CHECK(p.captionAt(track, 2050)->text == "¡Hola!");
+
+    // Bloqueada: nada.
+    REQUIRE(setCaptionTrackLocked(p, track, true));
+    CHECK_FALSE(splitCaptionsAt(p, 2020));
+}
+
+TEST_CASE("Dragging the edge between touching captions moves both", "[captions]") {
+    Project p;
+    const std::size_t track = addCaptionTrack(p);
+    const ObjectId a = addCaption(p, track, 0, 60, "a");
+    const ObjectId b = addCaption(p, track, 60, 60, "b");
+    const ObjectId c = addCaption(p, track, 200, 60, "c");
+    REQUIRE((a != 0 && b != 0 && c != 0));
+
+    // Pegados: «a» se alarga y «b» se acorta, y al revés.
+    CHECK(captionEdgeRoom(p, a).second == 119);
+    REQUIRE(trimCaptionEdge(p, a, true, 90));
+    CHECK(p.caption(a)->end() == 90);
+    CHECK(p.caption(b)->start == 90);
+    CHECK(p.caption(b)->end() == 120);
+    REQUIRE(trimCaptionEdge(p, b, false, 30));
+    CHECK(p.caption(a)->end() == 30);
+    CHECK(p.caption(b)->start == 30);
+    // Cada uno se queda con al menos un fotograma.
+    REQUIRE(trimCaptionEdge(p, a, true, 500));
+    CHECK(p.caption(b)->length == 1);
+    CHECK(p.caption(a)->end() == 119);
+
+    // Un borde libre se alarga hasta el hueco que haya.
+    CHECK(captionEdgeRoom(p, b).second == 200);
+    REQUIRE(trimCaptionEdge(p, b, true, 500));
+    CHECK(p.caption(b)->end() == 200);
+    // Y ahora «b» y «c» van pegados.
+    CHECK(captionEdgeRoom(p, c).first == 120);
+    REQUIRE(trimCaptionEdge(p, c, false, 150));
+    CHECK(p.caption(b)->end() == 150);
+    CHECK(p.caption(c)->start == 150);
+    checkNoOverlap(p.captionTracks[track].captions);
+}
+
 TEST_CASE("Ripple edits move and cut captions", "[captions]") {
     Project p;
     const std::size_t track = addCaptionTrack(p);

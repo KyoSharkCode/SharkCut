@@ -131,6 +131,23 @@ QString soundFolder() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
 }
 
+// Los efectos de sonido que una edición acaba de añadir a la biblioteca (ids desde
+// `firstNew`) van a la carpeta de los recursos de SharkCut, que se crea si no está.
+void fileNewResources(sharkcut::Document& document, ObjectId firstNew) {
+    const std::string folder = QDir(soundFolder()).absolutePath().toStdString();
+    std::vector<ObjectId> added;
+    for (const MediaItem& item : document.media) {
+        if (item.id >= firstNew && item.folder == 0 &&
+            QFileInfo(QString::fromStdString(item.path)).absolutePath().toStdString() == folder) {
+            added.push_back(item.id);
+        }
+    }
+    if (!added.empty()) {
+        sharkcut::moveToFolder(document, added,
+                               sharkcut::resourceFolder(document, "Recursos de SharkCut"));
+    }
+}
+
 // Medio de la biblioteca para un efecto de sonido (se añade si no está).
 ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
     const std::string path = QDir(soundFolder()).filePath(fromView(effect.file)).toStdString();
@@ -2346,7 +2363,12 @@ bool Editor::edit(const QString& label, const std::function<bool(Project&)>& cha
         return false;
     }
     if (!current().history.apply(label.toStdString(), [&](sharkcut::Document& d) {
-            return sharkcut::edit(d, sequence, change);
+            const ObjectId firstNew = d.nextId;
+            if (!sharkcut::edit(d, sequence, change)) {
+                return false;
+            }
+            fileNewResources(d, firstNew);
+            return true;
         })) {
         return false;
     }
@@ -2442,7 +2464,10 @@ void Editor::addMedia(qint64 mediaId, qint64 frame, int track) {
 
 void Editor::splitAtPlayhead() {
     const std::int64_t frame = m_currentFrame;
-    edit(QStringLiteral("Dividir"), [frame](Project& p) { return sharkcut::splitAt(p, frame); });
+    edit(QStringLiteral("Dividir"), [frame](Project& p) {
+        const bool clips = sharkcut::splitAt(p, frame);
+        return sharkcut::splitCaptionsAt(p, frame) || clips;
+    });
 }
 
 void Editor::splitClip(qint64 clipId, qint64 frame) {

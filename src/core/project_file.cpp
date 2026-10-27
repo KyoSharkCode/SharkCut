@@ -687,7 +687,11 @@ std::string documentToJson(const Document& document, const std::filesystem::path
 
     json folders = json::array();
     for (const Folder& folder : document.folders) {
-        folders.push_back({{"id", folder.id}, {"name", folder.name}});
+        json entry{{"id", folder.id}, {"name", folder.name}};
+        if (folder.resources) {
+            entry["resources"] = true;
+        }
+        folders.push_back(std::move(entry));
     }
     root["folders"] = std::move(folders);
 
@@ -777,8 +781,9 @@ LoadedDocument documentFromJson(std::string_view text, const std::filesystem::pa
             document.sequences.push_back(std::move(sequence));
         } else {
             for (const json& entry : root.value("folders", json::array())) {
-                document.folders.push_back(
-                    {entry.at("id").get<ObjectId>(), entry.value("name", std::string())});
+                document.folders.push_back({entry.at("id").get<ObjectId>(),
+                                            entry.value("name", std::string()),
+                                            entry.value("resources", false)});
             }
             for (const json& entry : root.at("sequences")) {
                 Sequence sequence;

@@ -1,6 +1,7 @@
 #include "core/edit.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <map>
@@ -1780,6 +1781,192 @@ bool trimCaption(Project& project, ObjectId id, std::int64_t start, std::int64_t
     c.start = start;
     c.length = length;
     return true;
+}
+
+namespace {
+
+// Las palabras del subtítulo que van a cada lado de `offset` (fotogramas desde su
+// inicio): las de la izquierda, en orden. Con tiempos, por el centro de cada palabra; sin
+// ellos (o si no cuadran con el texto), en proporción a su longitud, con al menos una
+// palabra a cada lado.
+std::size_t wordsBefore(const Caption& c, const std::vector<std::string_view>& words,
+                        std::int64_t offset) {
+    if (!c.words.empty() && c.words.size() == words.size()) {
+        std::size_t count = 0;
+        for (const CaptionWord& w : c.words) {
+            if (w.start + w.end <= 2 * offset) {
+                ++count;
+            }
+        }
+        return count;
+    }
+    if (words.size() < 2) {
+        return words.size();
+    }
+    std::int64_t total = 0;
+    for (const std::string_view w : words) {
+        total += static_cast<std::int64_t>(utf8Length(w)) + 1;
+    }
+    std::size_t count = 0;
+    std::int64_t done = 0;
+    for (const std::string_view w : words) {
+        const std::int64_t size = static_cast<std::int64_t>(utf8Length(w)) + 1;
+        // La palabra va a la izquierda si su centro queda antes del corte.
+        if ((2 * done + size) * c.length > 2 * offset * total) {
+            break;
+        }
+        done += size;
+        ++count;
+    }
+    return std::clamp<std::size_t>(count, 1, words.size() - 1);
+}
+
+// Palabras del texto (separadas por espacios o saltos de línea), sin copiarlas.
+std::vector<std::string_view> textWords(std::string_view text) {
+    std::vector<std::string_view> words;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+            ++i;
+        }
+        const std::size_t begin = i;
+        while (i < text.size() && !std::isspace(static_cast<unsigned char>(text[i]))) {
+            ++i;
+        }
+        if (i > begin) {
+            words.push_back(text.substr(begin, i - begin));
+        }
+    }
+    return words;
+}
+
+// Recorta los espacios del principio y del final.
+std::string trimmed(std::string_view text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.remove_suffix(1);
+    }
+    return std::string(text);
+}
+
+} // namespace
+
+std::pair<std::int64_t, std::int64_t> captionEdgeRoom(const Project& project, ObjectId id) {
+    const auto ref = project.findCaption(id);
+    if (!ref) {
+        return {0, 0};
+    }
+    const std::vector<Caption>& list = project.captionTracks[ref->track].captions;
+    const Caption& c = list[ref->index];
+    auto [low, high] = captionRoom(project.captionTracks[ref->track], ref->index);
+    if (ref->index > 0 && list[ref->index - 1].end() == c.start) {
+        low = list[ref->index - 1].start + 1;
+    }
+    if (ref->index + 1 < list.size() && list[ref->index + 1].start == c.end()) {
+        high = list[ref->index + 1].end() - 1;
+    }
+    return {low, high};
+}
+
+bool trimCaptionEdge(Project& project, ObjectId id, bool end, std::int64_t frame) {
+    const auto ref = project.findCaption(id);
+    if (!ref || project.captionTracks[ref->track].locked) {
+        return false;
+    }
+    const std::vector<Caption>& list = project.captionTracks[ref->track].captions;
+    const Caption c = list[ref->index];
+    const auto [low, high] = captionEdgeRoom(project, id);
+    if (end) {
+        frame = std::clamp(frame, c.start + 1, std::max(c.start + 1, high));
+        if (frame == c.end()) {
+            return false;
+        }
+        const bool touching = ref->index + 1 < list.size() && list[ref->index + 1].start == c.end();
+        if (!touching) {
+            return trimCaption(project, id, c.start, frame);
+        }
+        const Caption next = list[ref->index + 1];
+        // Primero el que se acorta, para que el otro tenga sitio.
+        if (frame > c.end()) {
+            return trimCaption(project, next.id, frame, next.end()) &&
+                   trimCaption(project, id, c.start, frame);
+        }
+        return trimCaption(project, id, c.start, frame) &&
+               trimCaption(project, next.id, frame, next.end());
+    }
+    frame = std::clamp(frame, std::min(low, c.end() - 1), c.end() - 1);
+    if (frame == c.start) {
+        return false;
+    }
+    const bool touching = ref->index > 0 && list[ref->index - 1].end() == c.start;
+    if (!touching) {
+        return trimCaption(project, id, frame, c.end());
+    }
+    const Caption previous = list[ref->index - 1];
+    if (frame < c.start) {
+        return trimCaption(project, previous.id, previous.start, frame) &&
+               trimCaption(project, id, frame, c.end());
+    }
+    return trimCaption(project, id, frame, c.end()) &&
+           trimCaption(project, previous.id, previous.start, frame);
+}
+
+bool splitCaptionsAt(Project& project, std::int64_t frame, const std::vector<ObjectId>& captions) {
+    bool changed = false;
+    for (CaptionTrack& track : project.captionTracks) {
+        if (track.locked) {
+            continue;
+        }
+        for (std::size_t i = 0; i < track.captions.size(); ++i) {
+            const Caption c = track.captions[i];
+            if (c.start >= frame || frame >= c.end() ||
+                (!captions.empty() && !contains(captions, c.id))) {
+                continue;
+            }
+            const std::int64_t offset = frame - c.start;
+            Caption left = c;
+            Caption right = c;
+            right.id = newId(project);
+            right.start = frame;
+            right.length = c.length - offset;
+            left.length = offset;
+
+            // El texto se parte entre dos palabras y cada mitad conserva sus saltos de
+            // línea; si no hay por dónde partirlo (una sola palabra), las dos lo llevan.
+            const std::vector<std::string_view> words = textWords(c.text);
+            const std::size_t before = wordsBefore(c, words, offset);
+            if (words.size() >= 2 || !c.words.empty()) {
+                const std::size_t cut = before == 0           ? 0
+                                        : before >= words.size() ? c.text.size()
+                                                                 : static_cast<std::size_t>(
+                                                                       words[before].data() -
+                                                                       c.text.data());
+                left.text = trimmed(std::string_view(c.text).substr(0, cut));
+                right.text = trimmed(std::string_view(c.text).substr(cut));
+            }
+            left.words.clear();
+            right.words.clear();
+            for (CaptionWord w : c.words) {
+                if (w.start + w.end <= 2 * offset) {
+                    w.end = std::min(w.end, offset);
+                    w.start = std::min(w.start, w.end - 1);
+                    left.words.push_back(std::move(w));
+                } else {
+                    w.start = std::max<std::int64_t>(w.start - offset, 0);
+                    w.end = std::max(w.end - offset, w.start + 1);
+                    right.words.push_back(std::move(w));
+                }
+            }
+            track.captions[i] = std::move(left);
+            track.captions.insert(track.captions.begin() + static_cast<std::ptrdiff_t>(i) + 1,
+                                  std::move(right));
+            ++i;
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 bool setCaptionStyle(Project& project, const std::vector<ObjectId>& captions,

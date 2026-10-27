@@ -653,11 +653,18 @@ Rectangle {
                                     && raiz.editor.captionSelection.indexOf(dato.id) >= 0
                                 readonly property bool enArrastre: raiz.arrastreSub !== null
                                     && raiz.arrastreSub.grupo.indexOf(dato.id) >= 0
-                                readonly property real inicioVista: !enArrastre ? dato.start
+                                // Vecino pegado al borde que se arrastra: su borde se mueve con él.
+                                readonly property bool esVecino: !bloque && raiz.arrastreSub !== null
+                                    && raiz.arrastreSub.vecino === dato.id
+                                readonly property real inicioVista: esVecino && raiz.arrastreSub.tipo === "final"
+                                    ? raiz.arrastreSub.valor
+                                    : !enArrastre ? dato.start
                                     : raiz.arrastreSub.tipo === "mover" ? dato.start + raiz.arrastreSub.delta
                                     : raiz.arrastreSub.tipo === "inicio" ? raiz.arrastreSub.valor
                                     : dato.start
-                                readonly property real finVista: !enArrastre ? dato.start + dato.length
+                                readonly property real finVista: esVecino && raiz.arrastreSub.tipo === "inicio"
+                                    ? raiz.arrastreSub.valor
+                                    : !enArrastre ? dato.start + dato.length
                                     : raiz.arrastreSub.tipo === "mover" ? dato.start + dato.length + raiz.arrastreSub.delta
                                     : raiz.arrastreSub.tipo === "final" ? raiz.arrastreSub.valor
                                     : dato.start + dato.length
@@ -703,20 +710,26 @@ Rectangle {
                                     enabled: subtitulo.bloque && !subtitulo.bloqueado
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: raiz.herramienta === "cuchilla" ? Qt.IBeamCursor
+                                                                                 : Qt.PointingHandCursor
                                     onPressed: (m) => {
                                         const p = mapToItem(contenido, m.x, m.y)
                                         const id = raiz.editor.captionNear(subtitulo.dato.track,
                                                                            raiz.frameEn(p.x), raiz.alcanceBloque)
                                         if (id === 0)
                                             return
+                                        if (raiz.herramienta === "cuchilla" && m.button === Qt.LeftButton) {
+                                            const f = raiz.ajustar(raiz.frameEn(p.x), [])
+                                            Qt.callLater(raiz.editor.splitCaption, id, f)
+                                            return
+                                        }
                                         const sumar = (m.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
                                         raiz.editor.selectCaption(id, sumar)
                                         if (m.button === Qt.RightButton)
                                             menuSubtitulos.abrir(subtitulo.pista)
                                     }
                                     onDoubleClicked: (m) => {
-                                        if (m.button !== Qt.LeftButton)
+                                        if (m.button !== Qt.LeftButton || raiz.herramienta === "cuchilla")
                                             return
                                         const p = mapToItem(contenido, m.x, m.y)
                                         const id = raiz.editor.captionNear(subtitulo.dato.track,
@@ -736,14 +749,21 @@ Rectangle {
                                     opacity: 0.35
                                 }
 
-                                // Cuerpo: seleccionar y mover.
+                                // Cuerpo: seleccionar, mover o (con la cuchilla) dividir.
                                 MouseArea {
                                     anchors.fill: parent
                                     enabled: !subtitulo.bloqueado && !subtitulo.bloque
                                     preventStealing: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: raiz.herramienta === "cuchilla" ? Qt.IBeamCursor
+                                                                                 : Qt.ArrowCursor
                                     property real xInicial: 0
                                     onPressed: (m) => {
+                                        if (raiz.herramienta === "cuchilla" && m.button === Qt.LeftButton) {
+                                            const f = raiz.ajustar(raiz.frameEn(mapToItem(contenido, m.x, 0).x), [])
+                                            Qt.callLater(raiz.editor.splitCaption, subtitulo.dato.id, f)
+                                            return
+                                        }
                                         const sumar = (m.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
                                         if (sumar || !subtitulo.seleccionado)
                                             raiz.editor.selectCaption(subtitulo.dato.id, sumar)
@@ -755,7 +775,8 @@ Rectangle {
                                         raiz.arrastreSub = null
                                     }
                                     onPositionChanged: (m) => {
-                                        if (!pressed || !(pressedButtons & Qt.LeftButton))
+                                        if (!pressed || raiz.herramienta !== "seleccion"
+                                                || !(pressedButtons & Qt.LeftButton))
                                             return
                                         const dx = mapToItem(contenido, m.x, 0).x - xInicial
                                         if (raiz.arrastreSub === null && Math.abs(dx) < 4)
@@ -774,7 +795,7 @@ Rectangle {
                                             delta = porFin
                                         delta = raiz.editor.limitCaptionMove(d.id, delta)
                                         raiz.arrastreSub = { tipo: "mover", id: d.id, grupo: grupo,
-                                                             delta: delta, valor: 0 }
+                                                             delta: delta, valor: 0, vecino: 0 }
                                     }
                                     onReleased: {
                                         const a = raiz.arrastreSub
@@ -785,10 +806,11 @@ Rectangle {
                                     onCanceled: raiz.arrastreSub = null
                                 }
 
-                                // Bordes: cambiar cuándo empieza o acaba.
+                                // Bordes: cambiar cuándo empieza o acaba. Entre dos subtítulos
+                                // pegados, el borde de los dos se mueve a la vez.
                                 Repeater {
                                     model: subtitulo.bloque || subtitulo.width < 6 || subtitulo.bloqueado
-                                           ? [] : ["inicio", "final"]
+                                           || raiz.herramienta !== "seleccion" ? [] : ["inicio", "final"]
                                     delegate: MouseArea {
                                         id: bordeSub
                                         required property string modelData
@@ -822,18 +844,15 @@ Rectangle {
                                                 f = Math.max(hueco.low, Math.min(f, d.start + d.length - 1))
                                             else
                                                 f = Math.max(d.start + 1, hueco.high >= 0 ? Math.min(f, hueco.high) : f)
-                                            raiz.arrastreSub = { tipo: lado, id: d.id, grupo: [d.id], delta: 0, valor: f }
+                                            raiz.arrastreSub = { tipo: lado, id: d.id, grupo: [d.id], delta: 0, valor: f,
+                                                                 vecino: lado === "inicio" ? hueco.before : hueco.after }
                                         }
                                         onReleased: {
                                             const a = raiz.arrastreSub
                                             raiz.arrastreSub = null
-                                            if (a === null)
-                                                return
-                                            const d = subtitulo.dato
-                                            if (lado === "inicio")
-                                                Qt.callLater(raiz.editor.trimCaption, d.id, a.valor, d.start + d.length)
-                                            else
-                                                Qt.callLater(raiz.editor.trimCaption, d.id, d.start, a.valor)
+                                            if (a !== null)
+                                                Qt.callLater(raiz.editor.trimCaptionEdge, subtitulo.dato.id,
+                                                             lado === "final", a.valor)
                                         }
                                         onCanceled: raiz.arrastreSub = null
                                     }

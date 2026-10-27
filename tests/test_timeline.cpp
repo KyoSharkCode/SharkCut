@@ -813,6 +813,25 @@ TEST_CASE("Folders hold media and sequences", "[document]") {
     CHECK(d.sequence(vod)->folder == 0);
 }
 
+TEST_CASE("The resources folder is found by its mark, not by its name", "[timeline][library]") {
+    Document d;
+    const ObjectId mine = addFolder(d, "Recursos de SharkCut"); // del usuario, sin marca
+    const ObjectId resources = resourceFolder(d, "Recursos de SharkCut");
+    CHECK(resources != mine);
+    CHECK(d.folder(resources)->resources);
+    CHECK(resourceFolder(d, "Otro nombre") == resources); // se reutiliza
+    CHECK(d.folders.size() == 2);
+
+    // Con otro nombre ya es una carpeta más: la siguiente vez se crea otra.
+    CHECK(renameFolder(d, resources, "Mis sonidos"));
+    CHECK_FALSE(d.folder(resources)->resources);
+    const ObjectId again = resourceFolder(d, "Recursos de SharkCut");
+    CHECK(again != resources);
+    // Y si se borra, también.
+    CHECK(removeFolder(d, again));
+    CHECK(resourceFolder(d, "Recursos de SharkCut") != again);
+}
+
 // --- Edición con rizo y marcadores ---
 
 TEST_CASE("Q and W remove up to the playhead and close the gap", "[timeline][ripple]") {

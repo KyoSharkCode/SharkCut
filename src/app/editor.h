@@ -517,9 +517,13 @@ public:
     Q_INVOKABLE void moveCaptions(qint64 id, qint64 delta);
     // `delta` limitado para que ninguno de los que se mueven pise a otro.
     Q_INVOKABLE qint64 limitCaptionMove(qint64 id, qint64 delta) const;
-    // Dónde puede empezar y acabar: {low, high} (high = −1 si no hay límite).
+    // Hasta dónde llega cada borde: {low, high} (high = −1 si no hay límite), y los
+    // vecinos pegados {before, after} (ids, 0 si no hay), cuyo borde se mueve con el suyo.
     Q_INVOKABLE QVariantMap captionRoom(qint64 id) const;
     Q_INVOKABLE void trimCaption(qint64 id, qint64 start, qint64 end);
+    // Mueve un borde (`end`: el final); si va pegado a otro subtítulo, mueve el de los dos.
+    Q_INVOKABLE void trimCaptionEdge(qint64 id, bool end, qint64 frame);
+    Q_INVOKABLE void splitCaption(qint64 id, qint64 frame); // cuchilla
     Q_INVOKABLE void setCaptionText(qint64 id, const QString& text);
     // Estilo de los seleccionados (`wholeTrack`: de sus pistas enteras). `values` puede
     // traer solo algunas claves: font, size, bold, italic, uppercase, color, outlineColor,

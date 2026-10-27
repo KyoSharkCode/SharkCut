@@ -415,19 +415,36 @@ QVariantMap Editor::captionRoom(qint64 id) const {
     if (!ref) {
         return {};
     }
+    const auto [low, high] = sharkcut::captionEdgeRoom(p, static_cast<ObjectId>(id));
     const auto& list = p.captionTracks[ref->track].captions;
+    const sharkcut::Caption& c = list[ref->index];
+    const bool before = ref->index > 0 && list[ref->index - 1].end() == c.start;
+    const bool after = ref->index + 1 < list.size() && list[ref->index + 1].start == c.end();
     return {
-        {QStringLiteral("low"),
-         ref->index > 0 ? static_cast<qint64>(list[ref->index - 1].end()) : qint64{0}},
-        {QStringLiteral("high"), ref->index + 1 < list.size()
-                                     ? static_cast<qint64>(list[ref->index + 1].start)
-                                     : qint64{-1}},
+        {QStringLiteral("low"), static_cast<qint64>(low)},
+        {QStringLiteral("high"),
+         high == std::numeric_limits<std::int64_t>::max() ? qint64{-1} : static_cast<qint64>(high)},
+        // Vecinos pegados (0 si no hay): su borde se mueve con el de este.
+        {QStringLiteral("before"), before ? static_cast<qint64>(list[ref->index - 1].id) : qint64{0}},
+        {QStringLiteral("after"), after ? static_cast<qint64>(list[ref->index + 1].id) : qint64{0}},
     };
 }
 
 void Editor::trimCaption(qint64 id, qint64 start, qint64 end) {
     edit(QStringLiteral("Recortar subtítulo"), [id, start, end](Project& p) {
         return sharkcut::trimCaption(p, static_cast<ObjectId>(id), start, end);
+    });
+}
+
+void Editor::trimCaptionEdge(qint64 id, bool end, qint64 frame) {
+    edit(QStringLiteral("Recortar subtítulo"), [id, end, frame](Project& p) {
+        return sharkcut::trimCaptionEdge(p, static_cast<ObjectId>(id), end, frame);
+    });
+}
+
+void Editor::splitCaption(qint64 id, qint64 frame) {
+    edit(QStringLiteral("Dividir subtítulo"), [id, frame](Project& p) {
+        return sharkcut::splitCaptionsAt(p, frame, {static_cast<ObjectId>(id)});
     });
 }
 

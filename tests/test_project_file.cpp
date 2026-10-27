@@ -294,6 +294,15 @@ TEST_CASE("Version 4 keeps sequences, folders and open tabs", "[project]") {
     CHECK(loaded.workspace.activeSequence == ws.activeSequence);
 }
 
+TEST_CASE("The resources folder keeps its mark", "[project]") {
+    Document d = sampleDocument();
+    const ObjectId folder = resourceFolder(d, "Recursos de SharkCut");
+    const LoadedDocument loaded = documentFromJson(documentToJson(d, {}, {}), {});
+    CHECK(loaded.document == d);
+    REQUIRE(loaded.document.folder(folder) != nullptr);
+    CHECK(loaded.document.folder(folder)->resources);
+}
+
 TEST_CASE("Older files open as a document with one sequence", "[project]") {
     const std::string json = R"({"version": 3,
         "settings": {"frameRate": [60, 1], "width": 1920, "height": 1080},

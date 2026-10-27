@@ -254,6 +254,28 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   hasta el hueco que haya. Con deshacer, como el resto.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
+### A16 · Rastro de los fotogramas que no llegan a tiempo en el visor · FB-046, FB-047 · S–M
+- **Problema:** al reproducir, a veces un clip no aparece hasta mover el cabezal (FB-047,
+  Kyo: con muchas pistas, un video con pantalla verde, reproduciendo desde 1–3 s antes de
+  que entre) y a veces la imagen se congela un momento antes de una transición (FB-046,
+  Mina, sin proxies). Pasa poco y en otros equipos: no se puede reproducir a mano.
+- **Hacer:** que SharkCut deje rastro en el registro de la sesión (`logging.h`) cuando, al
+  reproducir, un clip que se ve no tiene fotograma o lleva un rato con el mismo: pista,
+  clip, medio (y si va por proxy), fotograma pedido y el último que dio su hilo, si el hilo
+  estaba preparado o recolocándose, decodificación por GPU o por software y cuántos hilos
+  de video hay abiertos. Una línea por suceso (sin llenar el registro: agrupar los que se
+  repiten seguidos) y un resumen al pausar (fotogramas que no llegaron a tiempo). Sin
+  cambiar todavía cómo se reproduce.
+- **Hecho cuando:** con la 0.1.5, si a Kyo o a Mina les vuelve a pasar, el registro dice
+  qué hilo se quedó atrás y en qué estado.
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
+### A17 · Corregir los clips que no aparecen y las imágenes congeladas · FB-046, FB-047 · M
+- **Hacer:** con lo que diga el rastro de A16, corregir la causa. Además, como red de
+  seguridad: si al reproducir un clip visible pasa un rato sin fotograma, volver a colocar
+  su hilo solo (lo mismo que hace un clic en el cabezal).
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -536,6 +558,6 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A15 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044 |
+| Alta | A1–A17 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044, 046, 047 |
 | Media | M1–M22 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

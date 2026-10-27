@@ -49,8 +49,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
-| [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Registrado |
-| [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Registrado |
+| [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | En el plan |
+| [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | En el plan |
 
 ---
 
@@ -733,7 +733,9 @@ Formato y estados: ver [README.md](README.md).
   la primera vez, si pasa también con «Proxies» activado, qué tipo de transición, y el
   video (resolución, fps) y la tarjeta gráfica (lo dice «Hardware y codificadores» en
   Proyectos).
-- **Estado:** Registrado
+- **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
+  en la 0.1.6.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
 
 <a id="fb-047"></a>
 ### FB-047 · A veces un clip no aparece en el visor hasta mover el cabezal
@@ -763,4 +765,6 @@ Formato y estados: ver [README.md](README.md).
   en la GPU. Idea de arreglo: si al reproducir un clip visible pasa un rato sin fotograma,
   volver a colocar su hilo solo (lo mismo que hace el clic), y registrarlo para encontrar la
   causa.
-- **Estado:** Registrado
+- **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
+  en la 0.1.6.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)

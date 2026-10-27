@@ -733,6 +733,12 @@ Formato y estados: ver [README.md](README.md).
   la primera vez, si pasa también con «Proxies» activado, qué tipo de transición, y el
   video (resolución, fps) y la tarjeta gráfica (lo dice «Hardware y codificadores» en
   Proyectos).
+- **Respuestas de Mina:** pasa más de una vez (no solo la primera, así que no es crear las
+  texturas de la transición); sin proxies; transición «barrido lateral» (pan left); video
+  1080p a 60 fps; decodifica por la GPU (d3d11va). Quedan dos causas posibles: el equipo no
+  llega a 60 fps a resolución completa en ese tramo, o el clip de después del corte no se
+  prepara a tiempo. Para distinguirlas: probar el mismo tramo con «Proxies» activado y un
+  corte sin transición.
 - **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
   en la 0.1.6.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)

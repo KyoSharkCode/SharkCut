@@ -6,6 +6,7 @@ Al terminar las pruebas se ordenará todo (agrupar, priorizar y llevarlo al plan
 
 - `FEEDBACK.md`: una entrada por comentario recibido, de la más antigua a la más nueva.
 - `PLAN-MEJORA.md`: el feedback organizado por prioridad (alta, media, baja).
+- `../ROADMAP.md`: qué va en cada versión, lo publicado y lo pendiente.
 - `capturas/`: imágenes que acompañan a las entradas (`FB-XXX-descripcion.png`).
 
 ## Formato de cada entrada

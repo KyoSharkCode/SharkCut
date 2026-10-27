@@ -20,6 +20,8 @@ Criterio de prioridad:
 Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../PLAN.md)
 (sección 11). Los puntos que piden una decisión lo dicen en «Por decidir».
 
+Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
+
 ---
 
 ## Prioridad alta (0.1.1)
@@ -250,7 +252,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   texto por palabras en proporción). Arrastrar el borde entre dos subtítulos pegados mueve
   el corte entre los dos (uno se alarga y el otro se acorta); un borde libre se alarga
   hasta el hueco que haya. Con deshacer, como el resto.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ---
 
@@ -279,8 +281,8 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   pantalla verde, subtítulos).
 - **Nota:** gradación profesional queda fuera del alcance (PLAN.md); un tinte simple sí
   encaja.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27). El selector de color sirve también para
-  los textos (M21) y el color sólido (M22).
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+  El selector de color sirve también para los textos (M21) y el color sólido (M22).
 
 ### M4 · Pistas de audio de un mismo archivo (MKV/OBS) · FB-009 · L
 - **Hacer:** detectar las pistas de audio de un medio y mostrarlas en Propiedades
@@ -288,7 +290,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   cada una y llevarlas a pistas separadas de la línea de tiempo.
 - **Por decidir:** PLAN.md asume grabaciones de OBS con una sola pista de audio; esto
   cambia esa decisión.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M5 · Resolución de reproducción del visor · FB-020 (segunda parte) · M
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
@@ -423,7 +425,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   las transiciones) van a una carpeta propia de la biblioteca, que se crea la primera vez
   que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
   crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 - **Decidido con Kyo (2026-10-27):** nombre en español (p. ej. «Recursos de SharkCut»).
   Cuando haya varios idiomas (B6), la carpeta se marca como la de los recursos y su nombre
   sigue al idioma elegido (no se busca por nombre).
@@ -431,7 +433,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M20 · Vista con miniaturas como predeterminada en Medios · FB-041 · S
 - **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
   la última vista elegida en QSettings para que se mantenga al volver a abrir la app.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M21 · Editor de texto · FB-043 · L
 - **Hacer:** textos sueltos como clips de la línea de tiempo (en una pista de video, sin
@@ -448,7 +450,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** PLAN.md dejaba la «herramienta de texto genérica» para la fase 6 («si hace
   falta»); Kyo la adelanta porque hace falta: hoy solo se puede poner texto como
   subtítulo, que no se mueve libremente ni tiene keyframes.
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M22 · Crear un color sólido desde Medios · FB-045 · M
 - **Hacer:** clic derecho en un hueco de Medios → menú con «Nuevo color sólido…» (y, de
@@ -460,7 +462,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   compositor dibuja como una capa de color, con todo lo de los clips (posición, escala,
   opacidad, keyframes, efectos). Va en el archivo .sharkp (la misma versión nueva que el
   texto de M21).
-- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ---
 

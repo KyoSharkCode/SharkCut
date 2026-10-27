@@ -48,6 +48,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
 | [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
+| [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
 
 ---
 
@@ -692,3 +693,19 @@ Formato y estados: ver [README.md](README.md).
   línea de tiempo alejada no aparecen.
 - **Decisión (Kyo):** para la 0.1.5.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A15)
+
+<a id="fb-045"></a>
+### FB-045 · Crear un color sólido desde Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** que al hacer clic derecho en una parte en blanco de Medios se pueda crear un
+  color sólido, porque no existe.
+- **Contexto:** panel Medios.
+- **Notas:** hoy el clic derecho solo abre menús sobre carpetas, secuencias y medios; en un
+  hueco no hace nada (el doble clic abre Importar, M10).
+- **Decisión (Kyo):** para la 0.1.5, junto con el tinte y el selector de color (FB-013,
+  FB-014) y las pistas de audio de los MKV (FB-009).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M22)

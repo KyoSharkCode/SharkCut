@@ -279,6 +279,8 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   pantalla verde, subtítulos).
 - **Nota:** gradación profesional queda fuera del alcance (PLAN.md); un tinte simple sí
   encaja.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27). El selector de color sirve también para
+  los textos (M21) y el color sólido (M22).
 
 ### M4 · Pistas de audio de un mismo archivo (MKV/OBS) · FB-009 · L
 - **Hacer:** detectar las pistas de audio de un medio y mostrarlas en Propiedades
@@ -286,6 +288,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   cada una y llevarlas a pistas separadas de la línea de tiempo.
 - **Por decidir:** PLAN.md asume grabaciones de OBS con una sola pista de audio; esto
   cambia esa decisión.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
 
 ### M5 · Resolución de reproducción del visor · FB-020 (segunda parte) · M
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
@@ -447,6 +450,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   subtítulo, que no se mueve libremente ni tiene keyframes.
 - **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
 
+### M22 · Crear un color sólido desde Medios · FB-045 · M
+- **Hacer:** clic derecho en un hueco de Medios → menú con «Nuevo color sólido…» (y, de
+  paso, las acciones que ya hay para el hueco: importar, nueva carpeta, nueva secuencia).
+  Se elige el color (selector de M3) y un nombre, y aparece en Medios como un medio más:
+  se arrastra a la línea de tiempo, se alarga sin límite como una imagen fija y llena el
+  lienzo de la secuencia. Se puede cambiar su color después (cambia en todos sus clips).
+- **Cómo:** un medio sin archivo (como las transiciones-clip, que no tienen medio), que el
+  compositor dibuja como una capa de color, con todo lo de los clips (posición, escala,
+  opacidad, keyframes, efectos). Va en el archivo .sharkp (la misma versión nueva que el
+  texto de M21).
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -509,5 +524,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A15 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044 |
-| Media | M1–M21 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
+| Media | M1–M22 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

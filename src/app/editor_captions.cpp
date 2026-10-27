@@ -425,7 +425,8 @@ QVariantMap Editor::captionRoom(qint64 id) const {
         {QStringLiteral("high"),
          high == std::numeric_limits<std::int64_t>::max() ? qint64{-1} : static_cast<qint64>(high)},
         // Vecinos pegados (0 si no hay): su borde se mueve con el de este.
-        {QStringLiteral("before"), before ? static_cast<qint64>(list[ref->index - 1].id) : qint64{0}},
+        {QStringLiteral("before"),
+         before ? static_cast<qint64>(list[ref->index - 1].id) : qint64{0}},
         {QStringLiteral("after"), after ? static_cast<qint64>(list[ref->index + 1].id) : qint64{0}},
     };
 }

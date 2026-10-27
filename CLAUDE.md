@@ -40,7 +40,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   (sfx.h, con su grupo: Clic, Pop, Swoosh, Whoosh, Impactos; archivos en presets/sfx/
   generados por tools/sfx/generar_sfx.py). Pestaña Sonidos de PanelMedios: se arrastran a
   una pista de audio (Editor::addSound) o se ponen con su golpe en el cabezal
-  (addSoundAtPlayhead).
+  (addSoundAtPlayhead). Los que una edición añade a la biblioteca van a la carpeta
+  «Recursos de SharkCut» (Folder::resources, la marca la reconoce, no el nombre;
+  resourceFolder en document.h; Editor::edit los mueve ahí).
   src/core también: proyecto y línea de tiempo (project.h: pistas en número variable,
   primero las de video de V1 hacia arriba y después las de audio; transformación y
   volumen por clip; transiciones en los cortes de las pistas de video, que usan el
@@ -117,7 +119,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de
   pista y propio; src/core/captions.h divide palabras en subtítulos (caracteres, líneas,
   duración mínima…) y lee/escribe .srt; las operaciones están en edit.h (las de rizo
-  también los mueven). src/render/caption_renderer.h los dibuja (QPainter) y el
+  también los mueven; la cuchilla y Ctrl+K los dividen con splitCaptionsAt, y el borde
+  entre dos pegados mueve los dos con trimCaptionEdge). src/render/caption_renderer.h los dibuja (QPainter) y el
   compositor los pone encima como superposiciones (overlay.frag). src/speech (sin Qt):
   transcripción local con whisper.cpp (cmake/whisper.cmake, siempre optimizado y con base
   AVX2 fija: nada de GGML_NATIVE ni AVX-512, que con MSVC rompía en procesadores sin él;
@@ -156,6 +159,9 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Iconos: qml/Icono.qml (trazos SVG de qml/Trazos.qml dibujados con QtQuick.Shapes);
   añadir los nuevos en Trazos.qml.
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
+  Rastro de la reproducción: PlaybackTrace (playbacktrace.h) apunta en el registro los
+  clips que no tienen fotograma o se congelan al reproducir (con DecodeWorker::status) y
+  el audio sin muestras (AudioOutput::takeMissingFrames); resumen al pausar.
   Hardware y codificadores (botón en Proyectos, qml/DialogoSistema.qml): la GPU del visor
   (CompositionSource::setRenderDevice), la decodificación y los codificadores
   (editor_hardware.cpp, probeHwDecodeDevice y probeVideoEncoder en segundo plano).

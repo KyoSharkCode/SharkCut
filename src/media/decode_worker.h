@@ -60,6 +60,19 @@ public:
     // Aceleración por hardware del último fotograma ("" = por software).
     std::string hwAccelName() const;
 
+    // Estado del hilo para el registro (cuando un fotograma no llega a tiempo).
+    struct Status {
+        bool opened = false;           // ya abrió el archivo
+        std::int64_t seekPending = -1; // búsqueda pedida que aún no empezó (-1 = ninguna)
+        std::int64_t firstQueued = -1; // primer y último fotograma de la cola (-1 = vacía)
+        std::int64_t lastQueued = -1;
+        std::int64_t nextIndex = -1; // el siguiente que pondrá en la cola
+        bool endOfStream = false;
+        std::size_t cached = 0; // fotogramas en la caché (para ir hacia atrás)
+        std::string hwAccel;    // "" = por software
+    };
+    Status status() const;
+
 private:
     void run();
 
@@ -84,6 +97,7 @@ private:
     // Guarda en la caché (con el mutex tomado) y quita lo más lejano a lo último pedido.
     void remember(const std::shared_ptr<const VideoFrame>& frame);
     bool m_endOfStream = false;
+    bool m_opened = false;
     bool m_stop = false;
     std::string m_hwAccelName;
 

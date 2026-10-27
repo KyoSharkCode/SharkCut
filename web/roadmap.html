@@ -162,19 +162,6 @@
   </div>
 
   <ol class="ruta" id="ruta">
-    <li class="parada" data-version="0.1.5">
-      <div class="marcador"></div>
-      <div class="tarjeta">
-        <div class="cabecera"><span class="numero">0.1.5</span><span class="chip">Próximamente</span></div>
-        <p class="tema">Medios más ordenados y subtítulos a tu medida</p>
-        <ul class="puntos">
-          <li><b>Una carpeta para los recursos de SharkCut:</b> los sonidos que usas van a su propia carpeta de Medios y no se mezclan con tus archivos.</li>
-          <li><b>Miniaturas por defecto en Medios:</b> la lista queda como opción, y SharkCut recuerda la vista que elijas.</li>
-          <li><b>Subtítulos con la cuchilla:</b> córtalos en dos y alárgalos o acórtalos desde su borde, aunque estén pegados a otros.</li>
-          <li><b>Diagnóstico de la vista previa:</b> si un clip tarda en aparecer o la imagen se congela al reproducir, SharkCut lo anota en su registro para poder corregirlo.</li>
-        </ul>
-      </div>
-    </li>
     <li class="parada" data-version="0.1.6">
       <div class="marcador"></div>
       <div class="tarjeta">
@@ -260,6 +247,15 @@
   <h2>Ya publicadas ✨</h2>
   <div class="historial">
     <details open>
+      <summary>0.1.5 <span class="fecha">27 de octubre de 2026</span></summary>
+      <ul>
+        <li>Los sonidos de SharkCut van a su propia carpeta de Medios.</li>
+        <li>Medios se abre con miniaturas y recuerda la vista que elijas.</li>
+        <li>Corta subtítulos con la cuchilla y alárgalos desde su borde, aunque estén pegados.</li>
+        <li>Si un clip tarda en aparecer o la imagen se congela, SharkCut lo anota en su registro.</li>
+      </ul>
+    </details>
+    <details>
       <summary>0.1.4 <span class="fecha">26 de octubre de 2026</span></summary>
       <ul>
         <li>El cabezal llega hasta el final exacto de la secuencia.</li>
@@ -356,7 +352,7 @@
   }
 
   // Sin conexión con GitHub se queda con la última versión conocida al escribir la página.
-  marcar("0.1.4");
+  marcar("0.1.5");
   fetch("https://api.github.com/repos/KyoSharkCode/SharkCut/releases/latest")
     .then((r) => r.ok ? r.json() : Promise.reject(r.status))
     .then((release) => marcar(release.tag_name.replace(/^v/, "")))

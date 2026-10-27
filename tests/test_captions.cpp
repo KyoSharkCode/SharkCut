@@ -187,7 +187,8 @@ TEST_CASE("The blade splits captions by their words", "[captions]") {
     Project p;
     const std::size_t track = addCaptionTrack(p);
     // Transcrita: cada palabra va a la mitad donde cae su centro.
-    REQUIRE(setCaptions(p, track, layoutCaptions(spoken({"uno", "dos", "tres", "cuatro"}), {}, k60)));
+    REQUIRE(
+        setCaptions(p, track, layoutCaptions(spoken({"uno", "dos", "tres", "cuatro"}), {}, k60)));
     REQUIRE(p.captionTracks[track].captions.size() == 1);
     const Caption whole = p.captionTracks[track].captions.front();
     REQUIRE(whole.text == "uno dos tres cuatro");

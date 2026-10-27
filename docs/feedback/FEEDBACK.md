@@ -43,11 +43,11 @@ Formato y estados: ver [README.md](README.md).
 | [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
 | [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
 | [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
-| [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | En el plan |
-| [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | En el plan |
+| [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | Hecho |
+| [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | Hecho |
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
 | [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
-| [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
+| [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | Hecho |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
 | [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | En el plan |
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | En el plan |
@@ -633,7 +633,7 @@ Formato y estados: ver [README.md](README.md).
   `MediaItem::folder`).
 - **Decisión (Kyo):** la carpeta, con nombre en español; que cambie de nombre según el
   idioma de la app cuando haya varios (FB-042).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M19)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M19)
 
 <a id="fb-041"></a>
 ### FB-041 · Vista con miniaturas como predeterminada en Medios
@@ -647,7 +647,7 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** panel Medios (biblioteca).
 - **Notas:** hoy se abre siempre en lista (`cuadricula: false` en PanelBiblioteca.qml) y la
   elección no se recuerda al volver a abrir la app.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M20)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M20)
 
 <a id="fb-042"></a>
 ### FB-042 · Varios idiomas, elegibles en el instalador
@@ -694,7 +694,7 @@ Formato y estados: ver [README.md](README.md).
   subtítulo vecino (los de una transcripción van pegados, así que solo se acortan) y con la
   línea de tiempo alejada no aparecen.
 - **Decisión (Kyo):** para la 0.1.5.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A15)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A15)
 
 <a id="fb-045"></a>
 ### FB-045 · Crear un color sólido desde Medios

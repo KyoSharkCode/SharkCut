@@ -16,14 +16,6 @@ actualizar también esa página.
 
 ## Próximas versiones
 
-### 0.1.5 · Medios más ordenados y subtítulos más fáciles de ajustar
-| Punto | Qué trae | Tamaño |
-|-------|----------|--------|
-| M19 | Los sonidos de SharkCut que se usan en un proyecto van a su propia carpeta de Medios («Recursos de SharkCut»), en vez de mezclarse con tus medios. | Pequeño |
-| M20 | Medios se abre con la vista de miniaturas (la lista queda como opción) y recuerda la vista que elijas. | Pequeño |
-| A15 | Cortar subtítulos con la cuchilla y alargarlos o acortarlos desde su borde, también cuando van pegados unos a otros. | Medio |
-| A16 | Rastro en el registro cuando al reproducir un clip no aparece o la imagen se congela, para encontrar la causa. | Pequeño–medio |
-
 ### 0.1.6 · Color y una vista previa más fiable
 | Punto | Qué trae | Tamaño |
 |-------|----------|--------|
@@ -82,6 +74,12 @@ Cambios grandes o comodidades que pueden esperar.
 ---
 
 ## Versiones publicadas
+
+### 0.1.5 · 2026-10-27
+- Los sonidos de SharkCut van a su carpeta de Medios, «Recursos de SharkCut» (M19).
+- Medios se abre con miniaturas y recuerda la vista elegida (M20).
+- Cortar subtítulos con la cuchilla y alargarlos desde el borde, también pegados (A15).
+- Rastro en el registro de los clips que no aparecen o se congelan al reproducir (A16).
 
 ### 0.1.4 · 2026-10-26
 - El cabezal llega hasta el final exacto de la secuencia (A14).

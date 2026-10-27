@@ -10,6 +10,7 @@
 #include "core/project_file.h"
 #include "media/decode_worker.h"
 #include "playbackclock.h"
+#include "playbacktrace.h"
 #include "proxies.h"
 #include "render/caption_renderer.h"
 #include "waveforms.h"
@@ -868,6 +869,9 @@ private:
     std::unique_ptr<sharkcut::AudioOutput> m_audioOutput;
     std::unique_ptr<sharkcut::AudioWorker> m_audioWorker;
     PlaybackClock m_clock;
+    PlaybackTrace m_trace; // rastro en el registro de lo que no llega a tiempo
+    void traceStep(qint64 frame);
+    QString describeTraced(const PlaybackTrace::Visible& visible) const;
 
     qint64 m_currentFrame = 0;
     qint64 m_pendingFrame = -1; // fotograma pedido en pausa que aún no ha llegado

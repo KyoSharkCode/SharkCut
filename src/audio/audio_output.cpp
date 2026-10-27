@@ -42,6 +42,8 @@ struct AudioOutput::Impl {
     // Picos acumulados hasta que alguien los lee (takePeakLevels).
     std::atomic<float> peakLeft{0.0f};
     std::atomic<float> peakRight{0.0f};
+    // Tramas que faltaron (takeMissingFrames).
+    std::atomic<std::int64_t> missing{0};
 
     static void raisePeak(std::atomic<float>& peak, float value) {
         float current = peak.load(std::memory_order_relaxed);
@@ -64,6 +66,10 @@ struct AudioOutput::Impl {
         std::size_t got = self->buffer.read(out, wanted);
         got -= got % kAudioChannels;
         std::memset(out + got, 0, (wanted - got) * sizeof(float)); // falta de datos: silencio
+        if (got < wanted) {
+            self->missing.fetch_add(static_cast<std::int64_t>((wanted - got) / kAudioChannels),
+                                    std::memory_order_relaxed);
+        }
 
         float left = 0.0f;
         float right = 0.0f;
@@ -183,6 +189,10 @@ AudioOutput::Clock AudioOutput::clock() const {
 AudioOutput::Levels AudioOutput::takePeakLevels() {
     return {d->peakLeft.exchange(0.0f, std::memory_order_relaxed),
             d->peakRight.exchange(0.0f, std::memory_order_relaxed)};
+}
+
+std::int64_t AudioOutput::takeMissingFrames() {
+    return d->missing.exchange(0, std::memory_order_relaxed);
 }
 
 } // namespace sharkcut

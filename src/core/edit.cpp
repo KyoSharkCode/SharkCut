@@ -1938,11 +1938,11 @@ bool splitCaptionsAt(Project& project, std::int64_t frame, const std::vector<Obj
             const std::vector<std::string_view> words = textWords(c.text);
             const std::size_t before = wordsBefore(c, words, offset);
             if (words.size() >= 2 || !c.words.empty()) {
-                const std::size_t cut = before == 0           ? 0
-                                        : before >= words.size() ? c.text.size()
-                                                                 : static_cast<std::size_t>(
-                                                                       words[before].data() -
-                                                                       c.text.data());
+                const std::size_t cut =
+                    before == 0 ? 0
+                    : before >= words.size()
+                        ? c.text.size()
+                        : static_cast<std::size_t>(words[before].data() - c.text.data());
                 left.text = trimmed(std::string_view(c.text).substr(0, cut));
                 right.text = trimmed(std::string_view(c.text).substr(cut));
             }

@@ -745,11 +745,22 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** de vez en cuando un clip no aparece en el visor; hay que mover el cabezal a
   otra parte para que se muestre. Sin proxies. Le pasaba también en otros editores, sobre
   todo con la pantalla verde, así que lo ve como algo normal de los editores.
-- **Contexto:** edición normal (en pausa o reproduciendo, por confirmar).
+- **Contexto:** reproduciendo desde 1–3 s antes de que entre el clip; pasa poco y solo con
+  muchas cosas en la línea de tiempo. Era un video con pantalla verde (en una pista de
+  encima). Al pausar y hacer clic en el cabezal al lado, aparece. No se puede mandar el
+  proyecto: al recolocar el cabezal se arregla.
 - **Notas:** no debería pasar: si el visor no muestra un clip que está en el cabezal, algo
   no pidió o no recogió su fotograma (p. ej. tras mover, recortar o cambiar un clip, o al
   cambiar de clip en una pista). Falta saber: si estaba en pausa o reproduciendo, qué se
   acababa de hacer (mover, recortar, deshacer, aplicar la pantalla verde…), si el clip está
   en una pista superior y si es un video, una imagen o un clip con pantalla verde. Puede
   estar relacionado con FB-046 (fotogramas que no llegan a tiempo).
+- **Notas (tras su respuesta):** al reproducir, el clip siguiente de cada pista se prepara
+  antes de que entre (un hilo de decodificación lo coloca en su primer fotograma). Si al
+  entrar ese hilo no tiene un fotograma utilizable, el visor no muestra nada de ese clip;
+  hacer clic en el cabezal vuelve a colocar los hilos, por eso se arregla. Con muchas
+  pistas hay muchos hilos a la vez (dos por pista de video), cada uno con su decodificador
+  en la GPU. Idea de arreglo: si al reproducir un clip visible pasa un rato sin fotograma,
+  volver a colocar su hilo solo (lo mismo que hace el clic), y registrarlo para encontrar la
+  causa.
 - **Estado:** Registrado

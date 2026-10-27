@@ -237,6 +237,21 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   marcadores y transiciones se ponen ahí. Test del núcleo; comprobado con Xvfb (Fin y
   Ctrl+V en el final).
 
+### A15 · Cortar subtítulos con la cuchilla y alargarlos por el borde · FB-044 · M
+- **Problema:** la cuchilla no corta subtítulos, y al arrastrar el borde de un subtítulo no
+  se puede alargar.
+- **Causa:** la cuchilla y «Dividir en el cabezal» solo trabajan con clips (no existe una
+  operación para dividir un subtítulo). Los bordes sí recortan (`trimCaption`), pero solo
+  hasta el subtítulo vecino (`captionRoom`), y los de una transcripción van pegados unos a
+  otros, así que solo se pueden acortar; con la línea de tiempo alejada (subtítulos
+  agrupados en bloque) los bordes no aparecen.
+- **Hacer:** la cuchilla y Ctrl+K cortan también los subtítulos: cada mitad se queda con
+  sus palabras (las de la transcripción guardan su momento; si no lo tienen, se reparte el
+  texto por palabras en proporción). Arrastrar el borde entre dos subtítulos pegados mueve
+  el corte entre los dos (uno se alarga y el otro se acorta); un borde libre se alarga
+  hasta el hueco que haya. Con deshacer, como el resto.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -405,6 +420,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   las transiciones) van a una carpeta propia de la biblioteca, que se crea la primera vez
   que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
   crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
 - **Decidido con Kyo (2026-10-27):** nombre en español (p. ej. «Recursos de SharkCut»).
   Cuando haya varios idiomas (B6), la carpeta se marca como la de los recursos y su nombre
   sigue al idioma elegido (no se busca por nombre).
@@ -412,6 +428,24 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 ### M20 · Vista con miniaturas como predeterminada en Medios · FB-041 · S
 - **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
   la última vista elegida en QSettings para que se mantenga al volver a abrir la app.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
+
+### M21 · Editor de texto · FB-043 · L
+- **Hacer:** textos sueltos como clips de la línea de tiempo (en una pista de video, sin
+  medio, como las transiciones-clip), con todo lo que ya tienen los clips: posición,
+  escala, rotación, opacidad, keyframes, efectos, ajustes guardados y punto de anclaje.
+  Propiedades del texto: contenido (varias líneas), fuente, tamaño, color, alineación,
+  contorno, sombra y fondo (como el estilo de los subtítulos). Pestaña nueva «Texto» en
+  PanelMedios, entre Efectos y Subtítulos (Medios · Transiciones · Efectos · Texto ·
+  Subtítulos): añadir un texto en el cabezal o arrastrarlo a la línea de tiempo, y estilos
+  guardados.
+- **Cómo:** el texto se dibuja con el mismo motor que los subtítulos
+  (`caption_renderer.h`, QPainter) en una textura que el compositor trata como una capa
+  más, así el visor y la exportación salen iguales. Archivo .sharkp versión 11.
+- **Nota:** PLAN.md dejaba la «herramienta de texto genérica» para la fase 6 («si hace
+  falta»); Kyo la adelanta porque hace falta: hoy solo se puede poner texto como
+  subtítulo, que no se mueve libremente ni tiene keyframes.
+- **Para:** 0.1.5 (pedido por Kyo, 2026-10-27).
 
 ---
 
@@ -474,6 +508,6 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M20 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041 |
+| Alta | A1–A15 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044 |
+| Media | M1–M21 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

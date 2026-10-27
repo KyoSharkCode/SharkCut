@@ -46,6 +46,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | En el plan |
 | [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | En el plan |
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
+| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
+| [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
 
 ---
 
@@ -656,3 +658,37 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** al decidir el nombre de la carpeta de recursos (FB-040).
 - **Notas:** hoy toda la interfaz está solo en español.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B6)
+
+<a id="fb-043"></a>
+### FB-043 · Editor de texto
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Efectos
+- **Tipo:** Propuesta
+- **Qué dijo:** hace falta un editor de texto: ahora la única forma de añadir texto es con
+  subtítulos, y no se puede poner un texto, moverlo por toda la pantalla ni ponerle
+  keyframes fuera de los subtítulos. Propone una pestaña nueva en el panel: Medios ·
+  Transiciones · Efectos · Texto · Subtítulos.
+- **Contexto:** edición de shorts y VODs.
+- **Notas:** los subtítulos sirven como texto suelto («Añadir un subtítulo o texto en el
+  cabezal»), pero van en sus pistas propias, sin la colocación libre ni los keyframes de
+  los clips. PLAN.md tenía la herramienta de texto genérica en la fase 6.
+- **Decisión (Kyo):** para la 0.1.5.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
+
+<a id="fb-044"></a>
+### FB-044 · Cortar subtítulos con la cuchilla y alargarlos por el borde
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Subtítulos
+- **Tipo:** Usabilidad
+- **Qué dijo:** que los subtítulos se puedan cortar con la cuchilla y que desde el borde se
+  puedan alargar o acortar, porque ahora mismo no pudo hacerlo.
+- **Contexto:** al ajustar subtítulos en la línea de tiempo.
+- **Notas:** la cuchilla solo corta clips. Los bordes recortan, pero no pasan del
+  subtítulo vecino (los de una transcripción van pegados, así que solo se acortan) y con la
+  línea de tiempo alejada no aparecen.
+- **Decisión (Kyo):** para la 0.1.5.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A15)

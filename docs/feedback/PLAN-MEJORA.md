@@ -400,6 +400,18 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Nota:** cambia lo decidido en A4 («los atajos configurables quedan fuera»): ahora se
   piden, como mejora aparte.
 
+### M19 · Los recursos de SharkCut en su propia carpeta de Medios · FB-040 · S
+- **Hacer:** los medios que SharkCut añade solo (efectos de sonido, también los que llevan
+  las transiciones) van a una carpeta propia de la biblioteca, que se crea la primera vez
+  que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
+  crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
+- **Por decidir con Kyo:** el nombre de la carpeta («SharkCut Items» o uno en español,
+  como los demás textos).
+
+### M20 · Vista con miniaturas como predeterminada en Medios · FB-041 · S
+- **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
+  la última vista elegida en QSettings para que se mantenga al volver a abrir la app.
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -454,5 +466,5 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M18 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039 |
+| Media | M1–M20 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041 |
 | Baja | B1–B5 | FB-011, 016, 018, 029, 038 |

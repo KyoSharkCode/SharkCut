@@ -43,6 +43,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
 | [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
 | [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
+| [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | En el plan |
+| [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | En el plan |
 
 ---
 
@@ -606,3 +608,36 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** los teclados 60 % suelen tener las flechas en una capa con Fn, pero usarlas así
   para navegar por cortes es incómodo. Hoy los atajos son fijos.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)
+
+<a id="fb-040"></a>
+### FB-040 · Los recursos de SharkCut en su propia carpeta de Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** al usar recursos internos, como los sonidos o las transiciones, a veces
+  aparecen sus medios en el apartado Medios; deberían crearse en una carpeta dentro de
+  Medios, algo tipo «SharkCut Items».
+- **Contexto:** al poner efectos de sonido o transiciones con su sonido en la línea de
+  tiempo.
+- **Notas:** cada efecto de sonido que se usa se añade como medio a la raíz de la
+  biblioteca (`soundMedia` en editor.cpp, con su ruta en presets/sfx); las transiciones-clip
+  no tienen medio, pero su sonido sí. La biblioteca ya tiene carpetas (`Folder`,
+  `MediaItem::folder`). El nombre de la carpeta está por decidir («SharkCut Items» o uno en
+  español).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M19)
+
+<a id="fb-041"></a>
+### FB-041 · Vista con miniaturas como predeterminada en Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** que la vista con miniaturas sea la predeterminada en Medios y la vista en
+  lista la opcional.
+- **Contexto:** panel Medios (biblioteca).
+- **Notas:** hoy se abre siempre en lista (`cuadricula: false` en PanelBiblioteca.qml) y la
+  elección no se recuerda al volver a abrir la app.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M20)

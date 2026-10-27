@@ -137,6 +137,22 @@ std::string DecodeWorker::hwAccelName() const {
     return m_hwAccelName;
 }
 
+DecodeWorker::Status DecodeWorker::status() const {
+    std::lock_guard lock(m_mutex);
+    Status s;
+    s.opened = m_opened;
+    s.seekPending = m_seekTarget;
+    if (!m_queue.empty()) {
+        s.firstQueued = m_queue.front()->index;
+        s.lastQueued = m_queue.back()->index;
+    }
+    s.nextIndex = m_nextIndex;
+    s.endOfStream = m_endOfStream;
+    s.cached = m_cache.size();
+    s.hwAccel = m_hwAccelName;
+    return s;
+}
+
 void DecodeWorker::run() {
     std::unique_ptr<VideoDecoder> decoder;
     try {
@@ -146,6 +162,10 @@ void DecodeWorker::run() {
             m_callbacks.failed(e.what());
         }
         return;
+    }
+    {
+        std::lock_guard lock(m_mutex);
+        m_opened = true;
     }
     if (m_callbacks.opened) {
         m_callbacks.opened(decoder->info());

@@ -59,6 +59,10 @@ public:
     };
     Levels takePeakLevels();
 
+    // Tramas de silencio que salieron por falta de muestras preparadas mientras sonaba
+    // (el reloj no avanza en ellas), desde la última llamada.
+    std::int64_t takeMissingFrames();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> d;

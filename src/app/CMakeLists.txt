@@ -48,6 +48,8 @@ qt_add_qml_module(SharkCut
         compositionsource.h
         playbackclock.h
         playbackclock.cpp
+        playbacktrace.h
+        playbacktrace.cpp
         editor.h
         editor.cpp
         editor_captions.cpp

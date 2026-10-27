@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
@@ -13,12 +14,19 @@ ColumnLayout {
 
     required property Editor editor
     required property Item fantasma
-    property bool cuadricula: false
+    // Vista de miniaturas o de lista; se recuerda la última elegida.
+    property alias cuadricula: recuerdo.cuadricula
     signal importar()
     signal nuevaSecuencia()
     signal cerrarProyecto(var uid)
 
     spacing: 10
+
+    Settings {
+        id: recuerdo
+        category: "medios"
+        property bool cuadricula: true
+    }
 
     // Carpeta abierta de cada proyecto (uid → id de carpeta; 0 = raíz).
     property var carpetas: ({})

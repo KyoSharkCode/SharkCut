@@ -174,10 +174,22 @@ bool renameFolder(Document& document, ObjectId id, std::string name) {
     for (Folder& f : document.folders) {
         if (f.id == id && !name.empty() && f.name != name) {
             f.name = std::move(name);
+            f.resources = false; // con otro nombre ya es una carpeta más
             return true;
         }
     }
     return false;
+}
+
+ObjectId resourceFolder(Document& document, std::string name) {
+    for (const Folder& f : document.folders) {
+        if (f.resources) {
+            return f.id;
+        }
+    }
+    const ObjectId id = addFolder(document, std::move(name));
+    document.folders.back().resources = true;
+    return id;
 }
 
 bool removeFolder(Document& document, ObjectId id) {

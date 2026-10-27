@@ -253,6 +253,16 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   el corte entre los dos (uno se alarga y el otro se acorta); un borde libre se alarga
   hasta el hueco que haya. Con deshacer, como el resto.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** la cuchilla y Ctrl+K dividen también los subtítulos (`splitCaptionsAt` en
+  edit.h; Editor::splitCaption y splitAtPlayhead). Cada mitad se queda con sus palabras: con
+  tiempos, por el centro de cada palabra; sin ellos (o si no cuadran con el texto), en
+  proporción a su longitud, con al menos una a cada lado. El texto se parte entre dos
+  palabras y conserva sus saltos de línea; con una sola palabra, las dos mitades la llevan.
+  Los bordes usan `trimCaptionEdge`: entre dos subtítulos pegados se mueve el borde de los
+  dos (al menos un fotograma cada uno; `captionEdgeRoom` da el límite y el visor dibuja el
+  vecino mientras se arrastra); un borde libre llega hasta el hueco. Con la cuchilla se
+  corta también sobre un bloque de subtítulos agrupados. Tests del núcleo; comprobado con
+  Xvfb (borde entre dos pegados y cuchilla).
 
 ### A16 · Rastro de los fotogramas que no llegan a tiempo en el visor · FB-046, FB-047 · S–M
 - **Problema:** al reproducir, a veces un clip no aparece hasta mover el cabezal (FB-047,
@@ -273,6 +283,21 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hecho cuando:** con la 0.1.5, si a Kyo o a Mina les vuelve a pasar, el registro dice
   qué hilo se quedó atrás y en qué estado.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `PlaybackTrace` (src/app/playbacktrace.h) en cada paso de la reproducción a
+  velocidad normal: un clip que se ve sin fotograma durante 100 ms («sin fotograma») o con el
+  mismo durante 150 ms cuando ya tocaba otro («congelado») abre un suceso con pista, clip,
+  medio (imagen, pantalla verde), fotograma pedido y último, y el estado de su hilo
+  (`DecodeWorker::status`: abriendo, recolocándose, cola, siguiente, fin del medio, caché,
+  GPU o software, proxy), el otro hilo de la pista y los hilos abiertos. El suceso sigue
+  abierto hasta que el clip se pone al día (una línea al cerrarse, con los fotogramas que
+  no llegaron). Los primeros 300 ms tras empezar o saltar no cuentan. Al pausar, un
+  resumen. También: el audio sin muestras preparadas (`AudioOutput::takeMissingFrames`,
+  una línea por racha de 20 ms o más), lo que tarda en abrirse cada archivo de audio de la mezcla y cada
+  hilo de video, y las texturas de transiciones del compositor. Comprobado con Xvfb con un
+  video 4K por software en un núcleo: un solo suceso con 283 fotogramas.
+- **Visto al hacerlo:** el primer juego de texturas de transición se crea al preparar el
+  compositor, no al llegar a la primera transición; solo hace falta otro si se dibujan dos
+  transiciones a la vez.
 
 ### A17 · Corregir los clips que no aparecen y las imágenes congeladas · FB-046, FB-047 · M
 - **Hacer:** con lo que diga el rastro de A16, corregir la causa. Además, como red de
@@ -466,6 +491,11 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
   crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `Folder::resources` marca la carpeta (`resourceFolder` en document.h la busca
+  o la crea; `renameFolder` le quita la marca). Editor::edit lleva a ella los efectos de
+  sonido que la edición acaba de añadir (los de presets/sfx con id nuevo), así cubre
+  sonidos, transiciones con sonido y cambios de sonido. Campo opcional `resources` de cada
+  carpeta en el .sharkp (versión 10). Tests del núcleo; comprobado con Xvfb.
 - **Decidido con Kyo (2026-10-27):** nombre en español (p. ej. «Recursos de SharkCut»).
   Cuando haya varios idiomas (B6), la carpeta se marca como la de los recursos y su nombre
   sigue al idioma elegido (no se busca por nombre).
@@ -474,6 +504,8 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
   la última vista elegida en QSettings para que se mantenga al volver a abrir la app.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `Settings` (categoría «medios», `cuadricula`, por defecto true) en
+  PanelBiblioteca.qml.
 
 ### M21 · Editor de texto · FB-043 · L
 - **Hacer:** textos sueltos como clips de la línea de tiempo (en una pista de video, sin

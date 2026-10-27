@@ -4,6 +4,8 @@
 #include "media/media_error.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 
@@ -73,7 +75,15 @@ AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media) {
     const MediaItem* item = m_project.findMedia(media);
     try {
         if (item) {
+            // Se abre al llegar a su primer clip, en el hilo del audio: si tarda, el
+            // audio se queda sin muestras (queda en el registro de la sesión).
+            const auto began = std::chrono::steady_clock::now();
             auto opened = std::make_unique<AudioDecoder>(item->path);
+            const auto ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began)
+                    .count();
+            std::fprintf(stderr, "Audio de la mezcla: «%s» abierto en %.1f ms\n",
+                         item->name.c_str(), ms);
             AudioDecoder* result = opened.get();
             m_decoders.emplace(key, std::move(opened));
             return result;

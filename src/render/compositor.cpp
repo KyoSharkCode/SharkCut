@@ -2,6 +2,7 @@
 
 #include "media/color.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QMatrix4x4>
 #include <rhi/qrhi.h>
@@ -339,9 +340,18 @@ void Compositor::prepareOverlay(Overlay& o, const CompositorOverlay& input,
 
 Compositor::TransitionTargets& Compositor::transitionTargets(std::size_t index) {
     while (m_transitions.size() <= index) {
+        // El primer juego se crea al preparar el compositor; los demás, la primera vez que
+        // se dibujan varias transiciones a la vez. Queda en el registro cuánto tardan, por
+        // si la imagen se para un momento ahí.
+        QElapsedTimer timer;
+        timer.start();
         auto created = std::make_unique<TransitionTargets>();
         createTransitionTargets(*created);
         m_transitions.push_back(std::move(created));
+        qInfo("Compositor: texturas para transiciones (juego %zu) creadas en %.1f ms "
+              "(lienzo %dx%d)",
+              m_transitions.size(), static_cast<double>(timer.nsecsElapsed()) / 1e6,
+              m_canvasSize.width(), m_canvasSize.height());
     }
     return *m_transitions[index];
 }

@@ -42,6 +42,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <filesystem>
@@ -129,6 +130,23 @@ QString fromView(std::string_view text) {
 // Carpeta de los efectos de sonido, junto al ejecutable.
 QString soundFolder() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
+}
+
+// Los efectos de sonido que una edición acaba de añadir a la biblioteca (ids desde
+// `firstNew`) van a la carpeta de los recursos de SharkCut, que se crea si no está.
+void fileNewResources(sharkcut::Document& document, ObjectId firstNew) {
+    const std::string folder = QDir(soundFolder()).absolutePath().toStdString();
+    std::vector<ObjectId> added;
+    for (const MediaItem& item : document.media) {
+        if (item.id >= firstNew && item.folder == 0 &&
+            QFileInfo(QString::fromStdString(item.path)).absolutePath().toStdString() == folder) {
+            added.push_back(item.id);
+        }
+    }
+    if (!added.empty()) {
+        sharkcut::moveToFolder(document, added,
+                               sharkcut::resourceFolder(document, "Recursos de SharkCut"));
+    }
 }
 
 // Medio de la biblioteca para un efecto de sonido (se añade si no está).
@@ -2346,7 +2364,12 @@ bool Editor::edit(const QString& label, const std::function<bool(Project&)>& cha
         return false;
     }
     if (!current().history.apply(label.toStdString(), [&](sharkcut::Document& d) {
-            return sharkcut::edit(d, sequence, change);
+            const ObjectId firstNew = d.nextId;
+            if (!sharkcut::edit(d, sequence, change)) {
+                return false;
+            }
+            fileNewResources(d, firstNew);
+            return true;
         })) {
         return false;
     }
@@ -2442,7 +2465,10 @@ void Editor::addMedia(qint64 mediaId, qint64 frame, int track) {
 
 void Editor::splitAtPlayhead() {
     const std::int64_t frame = m_currentFrame;
-    edit(QStringLiteral("Dividir"), [frame](Project& p) { return sharkcut::splitAt(p, frame); });
+    edit(QStringLiteral("Dividir"), [frame](Project& p) {
+        const bool clips = sharkcut::splitAt(p, frame);
+        return sharkcut::splitCaptionsAt(p, frame) || clips;
+    });
 }
 
 void Editor::splitClip(qint64 clipId, qint64 frame) {
@@ -3909,6 +3935,15 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
         callbacks.framesAvailable = [this] {
             QMetaObject::invokeMethod(this, [this] { onFramesAvailable(); }, Qt::QueuedConnection);
         };
+        // Cuánto tarda en abrirse (en su hilo), para el registro de la sesión.
+        callbacks.opened =
+            [name = QFileInfo(QString::fromStdString(path)).fileName(), track,
+             opening = std::chrono::steady_clock::now()](const sharkcut::VideoStreamInfo&) {
+                const double ms = std::chrono::duration<double, std::milli>(
+                                      std::chrono::steady_clock::now() - opening)
+                                      .count();
+                qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qPrintable(name), ms);
+            };
         slot.worker =
             std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
         slot.media = clip.media;
@@ -4052,10 +4087,18 @@ void Editor::play() {
     setBusy(false);
     setPlaying(true);
     m_clock.start(sharkcut::frameToMicroseconds(m_currentFrame, project().settings.frameRate));
+    if (m_audioOutput) {
+        m_audioOutput->takeMissingFrames(); // lo de antes no cuenta
+    }
+    const sharkcut::FrameRate rate = project().settings.frameRate;
+    m_trace.begin(m_currentFrame, [rate](qint64 f) {
+        return QString::fromStdString(sharkcut::formatTimecode(f, rate));
+    });
 }
 
 void Editor::pause() {
     const bool shuttling = m_playing && m_speed != 1;
+    m_trace.end();
     m_clock.stop();
     m_speed = 1;
     setPlaying(false);
@@ -4083,6 +4126,7 @@ void Editor::shuttle(int direction) {
     if ((speed < 0 && m_currentFrame <= 0) || (speed > 0 && m_currentFrame >= last)) {
         return;
     }
+    m_trace.end();
     m_clock.stop(); // a otra velocidad no suena
     m_speed = speed;
     m_shuttleFrom = m_currentFrame;
@@ -4119,6 +4163,7 @@ void Editor::seek(qint64 frame) {
     requestFrames(frame);
     if (m_playing && m_speed == 1) {
         m_clock.start(sharkcut::frameToMicroseconds(frame, project().settings.frameRate));
+        m_trace.restart(frame);
         return;
     }
     if (m_playing) { // J/L: se sigue desde aquí
@@ -4187,11 +4232,103 @@ void Editor::advance() {
         assignTrack(t, target, false);
         takeTrackFrame(t, target);
     }
+    traceStep(target);
     setCurrentFrame(target);
     emit compositionChanged();
     if (reachedEnd) {
         pause();
     }
+}
+
+void Editor::traceStep(qint64 frame) {
+    if (!m_trace.active()) {
+        return;
+    }
+    m_trace.audioMissing(m_audioOutput ? m_audioOutput->takeMissingFrames() : 0);
+    std::vector<PlaybackTrace::Visible> visible;
+    for (std::size_t t : playedVideoTracks()) {
+        const TrackVideo& track = m_video[t];
+        for (const Need& need : needsAt(t, frame)) {
+            PlaybackTrace::Visible v;
+            v.track = t;
+            v.clip = need.clip->id;
+            v.wanted = need.index;
+            if (const auto shown = track.frameOf(need.clip->id)) {
+                v.shown = shown->index;
+            }
+            const int slot = slotWith(t, need.clip->id);
+            v.finished =
+                slot >= 0 && track.decoders[static_cast<std::size_t>(slot)].worker->finished();
+            visible.push_back(v);
+        }
+    }
+    m_trace.step(frame, visible,
+                 [this](const PlaybackTrace::Visible& v) { return describeTraced(v); });
+}
+
+QString Editor::describeTraced(const PlaybackTrace::Visible& v) const {
+    const Project& p = project();
+    const Clip* clip = p.clip(static_cast<ObjectId>(v.clip));
+    const MediaItem* item = clip ? p.findMedia(clip->media) : nullptr;
+    QStringList parts;
+    QString what = QStringLiteral("%1 · «%2»")
+                       .arg(QString::fromStdString(p.trackName(v.track)),
+                            item ? QString::fromStdString(item->name) : QStringLiteral("?"));
+    if (item && item->still) {
+        what += QStringLiteral(" (imagen)");
+    }
+    if (clip && clip->transform.chromaKey.enabled) {
+        what += QStringLiteral(" (pantalla verde)");
+    }
+    parts << what;
+    parts << QStringLiteral("pedido %1, último %2").arg(v.wanted).arg(v.shown);
+    const TrackVideo& track = m_video[v.track];
+    const int slot = slotWith(v.track, static_cast<ObjectId>(v.clip));
+    if (slot < 0) {
+        parts << QStringLiteral("ningún hilo colocado para este clip");
+    } else {
+        const VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
+        const DecodeWorker::Status st = s.worker->status();
+        QString state = QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex);
+        if (item && s.path != item->path) {
+            state += QStringLiteral(" (proxy)");
+        }
+        if (!st.opened) {
+            state += QStringLiteral(", abriendo el archivo");
+        }
+        if (st.seekPending >= 0) {
+            state += QStringLiteral(", recolocándose en %1").arg(st.seekPending);
+        }
+        state += st.firstQueued >= 0
+                     ? QStringLiteral(", cola %1–%2").arg(st.firstQueued).arg(st.lastQueued)
+                     : QStringLiteral(", cola vacía");
+        state += QStringLiteral(", siguiente %1").arg(st.nextIndex);
+        if (st.endOfStream) {
+            state += QStringLiteral(", al final del medio");
+        }
+        state += QStringLiteral(", caché %1").arg(st.cached);
+        state += st.hwAccel.empty()
+                     ? QStringLiteral(", por software")
+                     : QStringLiteral(", GPU %1").arg(QString::fromStdString(st.hwAccel));
+        parts << state;
+    }
+    // El otro hilo de la pista (el clip siguiente preparado o la otra mitad de una
+    // transición).
+    for (int i = 0; i < static_cast<int>(track.decoders.size()); ++i) {
+        const VideoSlot& s = track.decoders[static_cast<std::size_t>(i)];
+        if (i != slot && s.worker) {
+            parts
+                << QStringLiteral("hilo %1: clip %2 en %3").arg(i + 1).arg(s.clip).arg(s.seekIndex);
+        }
+    }
+    int workers = 0;
+    for (const TrackVideo& t : m_video) {
+        for (const VideoSlot& s : t.decoders) {
+            workers += s.worker ? 1 : 0;
+        }
+    }
+    parts << QStringLiteral("%1 hilos de video abiertos").arg(workers);
+    return parts.join(QStringLiteral(" · "));
 }
 
 void Editor::advanceShuttle(sharkcut::FrameRate rate) {

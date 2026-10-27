@@ -22,12 +22,14 @@ actualizar también esa página.
 | M19 | Los sonidos de SharkCut que se usan en un proyecto van a su propia carpeta de Medios («Recursos de SharkCut»), en vez de mezclarse con tus medios. | Pequeño |
 | M20 | Medios se abre con la vista de miniaturas (la lista queda como opción) y recuerda la vista que elijas. | Pequeño |
 | A15 | Cortar subtítulos con la cuchilla y alargarlos o acortarlos desde su borde, también cuando van pegados unos a otros. | Medio |
+| A16 | Rastro en el registro cuando al reproducir un clip no aparece o la imagen se congela, para encontrar la causa. | Pequeño–medio |
 
-### 0.1.6 · Color
+### 0.1.6 · Color y una vista previa más fiable
 | Punto | Qué trae | Tamaño |
 |-------|----------|--------|
 | M3 | Efecto de tinte de color y un selector de color completo en todas las muestras de color (efectos, pantalla verde, subtítulos). | Medio |
 | M22 | Crear un color sólido desde Medios (clic derecho en un hueco), para fondos y rellenos. | Medio |
+| A17 | Corregir los clips que a veces no aparecen al reproducir y las imágenes congeladas antes de una transición (con lo que diga el rastro de A16). | Medio |
 
 ### 0.1.7 · Texto y audio de las grabaciones
 | Punto | Qué trae | Tamaño |

@@ -266,6 +266,11 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   de video hay abiertos. Una línea por suceso (sin llenar el registro: agrupar los que se
   repiten seguidos) y un resumen al pausar (fotogramas que no llegaron a tiempo). Sin
   cambiar todavía cómo se reproduce.
+  También lo que solo pasa la primera vez que se llega a un tramo (FB-046: «sobre todo la
+  primera vez»): el audio que se queda sin muestras preparadas (el reloj del visor se
+  para), cuánto tarda en abrirse cada archivo de audio de la mezcla (el sonido de una
+  transición se abre al llegar a él) o de video, y cuánto tarda en crear sus texturas la
+  primera transición.
 - **Hecho cuando:** con la 0.1.5, si a Kyo o a Mina les vuelve a pasar, el registro dice
   qué hilo se quedó atrás y en qué estado.
 - **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
@@ -274,6 +279,9 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hacer:** con lo que diga el rastro de A16, corregir la causa. Además, como red de
   seguridad: si al reproducir un clip visible pasa un rato sin fotograma, volver a colocar
   su hilo solo (lo mismo que hace un clic en el cabezal).
+- **Ideas si el rastro lo confirma:** abrir por adelantado los archivos de audio de la mezcla
+  (hoy se abren al llegar a su clip, dentro del hilo de audio) y crear las texturas de las
+  transiciones antes de que hagan falta.
 - **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ---

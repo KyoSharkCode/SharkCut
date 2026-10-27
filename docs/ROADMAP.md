@@ -5,8 +5,10 @@ de pruebas ([FEEDBACK.md](feedback/FEEDBACK.md)), organizado en
 [PLAN-MEJORA.md](feedback/PLAN-MEJORA.md), donde está el detalle de cada punto (su código,
 p. ej. M19, lleva a él).
 
-Las próximas versiones salen de tres en tres puntos. Lo que aún no tiene versión está
-ordenado por prioridad, pero el orden puede cambiar con el feedback nuevo.
+Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.9 viene la
+0.2.0. Lo que aún no tiene versión («Más adelante») puede cambiar de orden con el feedback
+nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
+actualizar también esa página.
 
 Última actualización: 2026-10-27.
 
@@ -33,25 +35,34 @@ ordenado por prioridad, pero el orden puede cambiar con el feedback nuevo.
 | M21 | Editor de texto: textos libres en la línea de tiempo que se colocan en cualquier parte de la pantalla, con su estilo, keyframes y efectos. Pestaña nueva «Texto» en el panel. | Grande |
 | M4 | Pistas de audio por separado de las grabaciones que guardan varias (por ejemplo, micrófono y juego en un MKV). | Grande |
 
----
+### 0.1.8 · Secuencias y rendimiento
+| Punto | Qué trae | Tamaño |
+|-------|----------|--------|
+| M2 | Cambiar el lienzo y los fps de una secuencia ya creada y guardar presets propios. | Medio |
+| M5 | Resolución de reproducción del visor (completa, 1/2, 1/4) para que vaya más fluido. | Medio |
+| M11 | Caché en una carpeta común, con opción para limpiarla. | Medio |
 
-## Pendiente, sin versión todavía
-
-Prioridad media: funciones que encajan en el flujo de edición actual.
-
+### 0.1.9 · Línea de tiempo
 | Punto | Qué trae | Tamaño |
 |-------|----------|--------|
 | M1 | Transiciones de entrada y de salida, con marca de centro e imán al moverlas. | Grande |
-| M2 | Cambiar el lienzo y los fps de una secuencia ya creada y guardar presets propios. | Medio |
-| M5 | Resolución de reproducción del visor (completa, 1/2, 1/4) para que vaya más fluido. | Medio |
+| M17 | Altura de las pistas ajustable. | Medio |
+
+### 0.2.0 · Nueva aleta y atajos a tu gusto
+| Punto | Qué trae | Tamaño |
+|-------|----------|--------|
 | M8 | Logo más reconocible como aleta de tiburón. | Medio |
-| M11 | Caché en una carpeta común, con opción para limpiarla. | Medio |
-| M13 | Cabezal con forma de aleta de tiburón. | Pequeño |
-| M14 | Propiedades con una pestaña por cada efecto del clip. | Medio |
+| M13 | Cabezal con forma de aleta de tiburón (la misma del logo). | Pequeño |
+| M18 | Atajos de teclado personalizables. | Medio |
+
+### 0.2.1 · Propiedades a fondo
+| Punto | Qué trae | Tamaño |
+|-------|----------|--------|
+| M14 | Propiedades con una pestaña por cada efecto del clip (va primero: las máscaras usan su pestaña). | Medio |
 | M15 | Línea de tiempo de keyframes dentro de Propiedades. | Grande |
 | M16 | Máscaras con formas simples (rectángulo, elipse…). | Medio–grande |
-| M17 | Altura de las pistas ajustable. | Medio |
-| M18 | Atajos de teclado personalizables. | Medio |
+
+---
 
 ## Más adelante
 
@@ -105,7 +116,8 @@ Cambios grandes o comodidades que pueden esperar.
 
 ## Cómo se mantiene
 
-- Al decidir la versión de un punto, se apunta aquí y en su «Para:» de PLAN-MEJORA.md.
+- Al decidir la versión de un punto, se apunta aquí, en su «Para:» de PLAN-MEJORA.md y en
+  `web/roadmap.html` (con textos para el público, sin los códigos).
 - Al terminarlo, se marca como hecho en PLAN-MEJORA.md y FEEDBACK.md; al publicar la
   versión, sus puntos pasan a «Versiones publicadas».
 - El feedback nuevo entra primero en FEEDBACK.md y después aquí, cuando tiene prioridad.

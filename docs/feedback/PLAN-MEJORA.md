@@ -268,12 +268,14 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   entrada/salida son la misma idea. Marca de centro e imán al mover una transición.
 - **Por decidir:** con Kyo, la forma final (transición partida en dos mitades frente a
   tres variantes: entrada, salida y corte).
+- **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M2 · Editar una secuencia ya creada y guardar presets · FB-015 · M
 - **Hacer:** cambiar lienzo (relación de aspecto, tamaño libre) y fps de una secuencia
   existente; guardar la configuración como preset propio (QSettings, como los ajustes
   de clips).
 - **Cuidado:** cambiar fps mueve los tiempos de los clips: definir cómo se reajustan.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M3 · Tinte de color y selector de color completo · FB-013, FB-014 · M
 - **Hacer:** efecto de color (como blanco y negro, pero teñido con un color elegido);
@@ -295,6 +297,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 ### M5 · Resolución de reproducción del visor · FB-020 (segunda parte) · M
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
   sin crear archivos), independiente de los proxies.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M6 · Presets de exportación para YouTube y TikTok · FB-022, FB-033 · S
 - **Hacer:** presets en Exportar con una línea que explique cada uno:
@@ -323,6 +326,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hacer:** rediseñar el icono para que se lea como aleta de tiburón (curva trasera
   marcada, línea de agua) y regenerarlo con tools/icono; actualizar el instalador y la
   página de descarga (web/).
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
@@ -347,6 +351,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   carpetas `.sharkp.cache` que ya existen.
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
   mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M12 · Poner una transición en el cabezal con un clic · FB-031 · S
 - **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
@@ -368,12 +373,14 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   tiburón, con el color del cabezal del tema (`Theme.cabezal`) y el mismo tamaño para
   agarrarlo. Icono nuevo en `Trazos.qml`.
 - **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M14 · Propiedades con una pestaña por efecto · FB-036 · M
 - **Hacer:** organizar Propiedades en pestañas: la de base (posición, escala, rotación,
   opacidad, recorte) y una pestaña por cada efecto aplicado al clip (p. ej. al aplicar la
   pantalla verde aparece la pestaña «Croma»). Al quitar el efecto, su pestaña desaparece.
 - **Nota:** es la base de M15 y M16 (las máscaras serán un efecto con su pestaña).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M15 · Línea de tiempo de keyframes en Propiedades · FB-035 · L
 - **Hacer:** dar más ancho al panel Propiedades y usar el espacio extra para una pequeña
@@ -384,6 +391,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   borde se puede arrastrar para ensancharlo o estrecharlo, y el ancho se recuerda
   (adelanta una parte de B1, paneles reorganizables).
 - **Depende de:** M14 (cada pestaña tendría su propia franja de keyframes).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M17 · Altura de las pistas ajustable · FB-037 · M
 - **Hacer:** que cada pista de la línea de tiempo se pueda hacer más alta o más baja:
@@ -394,6 +402,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   esa pista; sobre el resto de la línea de tiempo sigue siendo el zoom horizontal.
 - **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
   con más altura se ven mejor las ondas y las miniaturas.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M16 · Máscaras con formas simples · FB-034 · M–L
 - **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
@@ -404,6 +413,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   objeto (se podría apoyar después en el punto de anclaje).
 - **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
   layer.frag, como las esquinas redondeadas (distancia a una forma).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M18 · Atajos de teclado personalizables · FB-039 · M
 - **Hacer:** apartado «Atajos de teclado» en la configuración con todas las acciones
@@ -419,6 +429,7 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   adaptar SharkCut a la costumbre de cada persona.
 - **Nota:** cambia lo decidido en A4 («los atajos configurables quedan fuera»): ahora se
   piden, como mejora aparte.
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M19 · Los recursos de SharkCut en su propia carpeta de Medios · FB-040 · S
 - **Hacer:** los medios que SharkCut añade solo (efectos de sonido, también los que llevan

@@ -20,6 +20,8 @@ Criterio de prioridad:
 Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../PLAN.md)
 (sección 11). Los puntos que piden una decisión lo dicen en «Por decidir».
 
+Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
+
 ---
 
 ## Prioridad alta (0.1.1)
@@ -237,6 +239,21 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   marcadores y transiciones se ponen ahí. Test del núcleo; comprobado con Xvfb (Fin y
   Ctrl+V en el final).
 
+### A15 · Cortar subtítulos con la cuchilla y alargarlos por el borde · FB-044 · M
+- **Problema:** la cuchilla no corta subtítulos, y al arrastrar el borde de un subtítulo no
+  se puede alargar.
+- **Causa:** la cuchilla y «Dividir en el cabezal» solo trabajan con clips (no existe una
+  operación para dividir un subtítulo). Los bordes sí recortan (`trimCaption`), pero solo
+  hasta el subtítulo vecino (`captionRoom`), y los de una transcripción van pegados unos a
+  otros, así que solo se pueden acortar; con la línea de tiempo alejada (subtítulos
+  agrupados en bloque) los bordes no aparecen.
+- **Hacer:** la cuchilla y Ctrl+K cortan también los subtítulos: cada mitad se queda con
+  sus palabras (las de la transcripción guardan su momento; si no lo tienen, se reparte el
+  texto por palabras en proporción). Arrastrar el borde entre dos subtítulos pegados mueve
+  el corte entre los dos (uno se alarga y el otro se acorta); un borde libre se alarga
+  hasta el hueco que haya. Con deshacer, como el resto.
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad media (0.2.0)
@@ -251,12 +268,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   entrada/salida son la misma idea. Marca de centro e imán al mover una transición.
 - **Por decidir:** con Kyo, la forma final (transición partida en dos mitades frente a
   tres variantes: entrada, salida y corte).
+- **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M2 · Editar una secuencia ya creada y guardar presets · FB-015 · M
 - **Hacer:** cambiar lienzo (relación de aspecto, tamaño libre) y fps de una secuencia
   existente; guardar la configuración como preset propio (QSettings, como los ajustes
   de clips).
 - **Cuidado:** cambiar fps mueve los tiempos de los clips: definir cómo se reajustan.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M3 · Tinte de color y selector de color completo · FB-013, FB-014 · M
 - **Hacer:** efecto de color (como blanco y negro, pero teñido con un color elegido);
@@ -264,6 +283,8 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   pantalla verde, subtítulos).
 - **Nota:** gradación profesional queda fuera del alcance (PLAN.md); un tinte simple sí
   encaja.
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+  El selector de color sirve también para los textos (M21) y el color sólido (M22).
 
 ### M4 · Pistas de audio de un mismo archivo (MKV/OBS) · FB-009 · L
 - **Hacer:** detectar las pistas de audio de un medio y mostrarlas en Propiedades
@@ -271,10 +292,12 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   cada una y llevarlas a pistas separadas de la línea de tiempo.
 - **Por decidir:** PLAN.md asume grabaciones de OBS con una sola pista de audio; esto
   cambia esa decisión.
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M5 · Resolución de reproducción del visor · FB-020 (segunda parte) · M
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
   sin crear archivos), independiente de los proxies.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M6 · Presets de exportación para YouTube y TikTok · FB-022, FB-033 · S
 - **Hacer:** presets en Exportar con una línea que explique cada uno:
@@ -303,6 +326,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 - **Hacer:** rediseñar el icono para que se lea como aleta de tiburón (curva trasera
   marcada, línea de agua) y regenerarlo con tools/icono; actualizar el instalador y la
   página de descarga (web/).
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M9 · Botones de zoom arriba a la derecha · FB-019 · S
 - **Hacer:** mover acercar/alejar de la línea de tiempo a su esquina superior derecha.
@@ -327,6 +351,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   carpetas `.sharkp.cache` que ya existen.
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
   mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M12 · Poner una transición en el cabezal con un clic · FB-031 · S
 - **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
@@ -348,12 +373,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   tiburón, con el color del cabezal del tema (`Theme.cabezal`) y el mismo tamaño para
   agarrarlo. Icono nuevo en `Trazos.qml`.
 - **Nota:** conviene hacerlo con el logo nuevo (M8) para que la aleta sea la misma.
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M14 · Propiedades con una pestaña por efecto · FB-036 · M
 - **Hacer:** organizar Propiedades en pestañas: la de base (posición, escala, rotación,
   opacidad, recorte) y una pestaña por cada efecto aplicado al clip (p. ej. al aplicar la
   pantalla verde aparece la pestaña «Croma»). Al quitar el efecto, su pestaña desaparece.
 - **Nota:** es la base de M15 y M16 (las máscaras serán un efecto con su pestaña).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M15 · Línea de tiempo de keyframes en Propiedades · FB-035 · L
 - **Hacer:** dar más ancho al panel Propiedades y usar el espacio extra para una pequeña
@@ -364,6 +391,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   borde se puede arrastrar para ensancharlo o estrecharlo, y el ancho se recuerda
   (adelanta una parte de B1, paneles reorganizables).
 - **Depende de:** M14 (cada pestaña tendría su propia franja de keyframes).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M17 · Altura de las pistas ajustable · FB-037 · M
 - **Hacer:** que cada pista de la línea de tiempo se pueda hacer más alta o más baja:
@@ -374,6 +402,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   esa pista; sobre el resto de la línea de tiempo sigue siendo el zoom horizontal.
 - **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
   con más altura se ven mejor las ondas y las miniaturas.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M16 · Máscaras con formas simples · FB-034 · M–L
 - **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
@@ -384,6 +413,7 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   objeto (se podría apoyar después en el punto de anclaje).
 - **Nota:** el plan original ya proponía «máscaras simples» como efecto. Se dibuja en
   layer.frag, como las esquinas redondeadas (distancia a una forma).
+- **Para:** 0.2.1 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M18 · Atajos de teclado personalizables · FB-039 · M
 - **Hacer:** apartado «Atajos de teclado» en la configuración con todas las acciones
@@ -399,6 +429,51 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   adaptar SharkCut a la costumbre de cada persona.
 - **Nota:** cambia lo decidido en A4 («los atajos configurables quedan fuera»): ahora se
   piden, como mejora aparte.
+- **Para:** 0.2.0 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
+### M19 · Los recursos de SharkCut en su propia carpeta de Medios · FB-040 · S
+- **Hacer:** los medios que SharkCut añade solo (efectos de sonido, también los que llevan
+  las transiciones) van a una carpeta propia de la biblioteca, que se crea la primera vez
+  que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
+  crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Decidido con Kyo (2026-10-27):** nombre en español (p. ej. «Recursos de SharkCut»).
+  Cuando haya varios idiomas (B6), la carpeta se marca como la de los recursos y su nombre
+  sigue al idioma elegido (no se busca por nombre).
+
+### M20 · Vista con miniaturas como predeterminada en Medios · FB-041 · S
+- **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
+  la última vista elegida en QSettings para que se mantenga al volver a abrir la app.
+- **Para:** 0.1.5 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
+### M21 · Editor de texto · FB-043 · L
+- **Hacer:** textos sueltos como clips de la línea de tiempo (en una pista de video, sin
+  medio, como las transiciones-clip), con todo lo que ya tienen los clips: posición,
+  escala, rotación, opacidad, keyframes, efectos, ajustes guardados y punto de anclaje.
+  Propiedades del texto: contenido (varias líneas), fuente, tamaño, color, alineación,
+  contorno, sombra y fondo (como el estilo de los subtítulos). Pestaña nueva «Texto» en
+  PanelMedios, entre Efectos y Subtítulos (Medios · Transiciones · Efectos · Texto ·
+  Subtítulos): añadir un texto en el cabezal o arrastrarlo a la línea de tiempo, y estilos
+  guardados.
+- **Cómo:** el texto se dibuja con el mismo motor que los subtítulos
+  (`caption_renderer.h`, QPainter) en una textura que el compositor trata como una capa
+  más, así el visor y la exportación salen iguales. Archivo .sharkp versión 11.
+- **Nota:** PLAN.md dejaba la «herramienta de texto genérica» para la fase 6 («si hace
+  falta»); Kyo la adelanta porque hace falta: hoy solo se puede poner texto como
+  subtítulo, que no se mueve libremente ni tiene keyframes.
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+
+### M22 · Crear un color sólido desde Medios · FB-045 · M
+- **Hacer:** clic derecho en un hueco de Medios → menú con «Nuevo color sólido…» (y, de
+  paso, las acciones que ya hay para el hueco: importar, nueva carpeta, nueva secuencia).
+  Se elige el color (selector de M3) y un nombre, y aparece en Medios como un medio más:
+  se arrastra a la línea de tiempo, se alarga sin límite como una imagen fija y llena el
+  lienzo de la secuencia. Se puede cambiar su color después (cambia en todos sus clips).
+- **Cómo:** un medio sin archivo (como las transiciones-clip, que no tienen medio), que el
+  compositor dibuja como una capa de color, con todo lo de los clips (posición, escala,
+  opacidad, keyframes, efectos). Va en el archivo .sharkp (la misma versión nueva que el
+  texto de M21).
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ---
 
@@ -447,12 +522,20 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   y acaba el tramo lento, la velocidad mínima y lo suave del cambio (curvas de easing.h).
   Va después de la velocidad constante, que es su base.
 
+### B6 · Varios idiomas, elegibles en el instalador · FB-042 · L
+- **Hacer:** traducir la interfaz a otros idiomas y elegir el idioma en el instalador
+  (y cambiarlo después en la app). Los textos de la app (como el nombre de la carpeta de
+  recursos de M19) siguen al idioma elegido.
+- **Decidido con Kyo (2026-10-27):** más adelante, cuando el producto esté más maduro.
+- **Cuidado:** hoy los textos están escritos en español directamente en QML y C++; habría
+  que pasarlos a las herramientas de traducción de Qt (qsTr/tr y archivos .ts).
+
 ---
 
 ## Resumen
 
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
-| Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
-| Media | M1–M18 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039 |
-| Baja | B1–B5 | FB-011, 016, 018, 029, 038 |
+| Alta | A1–A15 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044 |
+| Media | M1–M22 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
+| Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

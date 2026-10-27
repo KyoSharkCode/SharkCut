@@ -192,7 +192,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   FFmpeg y x264 que exige la GPL: FFMPEG_SOURCE_* y X264_COMMIT en build.yml, a la par que
   cmake/FFmpeg.cmake). Firma con SignPath preparada en build.yml, desactivada mientras no
   haya variables (docs/FIRMA.md). Página de descarga: web/ (GitHub Pages,
-  .github/workflows/pages.yml), con privacidad.html (= PRIVACIDAD.md) y firma.html.
+  .github/workflows/pages.yml), con privacidad.html (= PRIVACIDAD.md), firma.html y
+  roadmap.html (= docs/ROADMAP.md, la hoja de ruta, con textos para el público).
   Textos legales: MARCA.md (nombre, logo e icono fuera de la GPL), CONTRIBUTING.md (no se
   aceptan cambios de código), PRIVACIDAD.md; © 2026 KyoSumiVT. «Acerca de»:
   qml/DialogoAcercaDe.qml (botón en Proyectos). Enlace de Ko-fi: vacío por ahora

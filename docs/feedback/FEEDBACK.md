@@ -43,6 +43,12 @@ Formato y estados: ver [README.md](README.md).
 | [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
 | [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
 | [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
+| [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | En el plan |
+| [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | En el plan |
+| [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
+| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
+| [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | En el plan |
+| [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
 
 ---
 
@@ -606,3 +612,100 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** los teclados 60 % suelen tener las flechas en una capa con Fn, pero usarlas así
   para navegar por cortes es incómodo. Hoy los atajos son fijos.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M18)
+
+<a id="fb-040"></a>
+### FB-040 · Los recursos de SharkCut en su propia carpeta de Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** al usar recursos internos, como los sonidos o las transiciones, a veces
+  aparecen sus medios en el apartado Medios; deberían crearse en una carpeta dentro de
+  Medios, algo tipo «SharkCut Items».
+- **Contexto:** al poner efectos de sonido o transiciones con su sonido en la línea de
+  tiempo.
+- **Notas:** cada efecto de sonido que se usa se añade como medio a la raíz de la
+  biblioteca (`soundMedia` en editor.cpp, con su ruta en presets/sfx); las transiciones-clip
+  no tienen medio, pero su sonido sí. La biblioteca ya tiene carpetas (`Folder`,
+  `MediaItem::folder`).
+- **Decisión (Kyo):** la carpeta, con nombre en español; que cambie de nombre según el
+  idioma de la app cuando haya varios (FB-042).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M19)
+
+<a id="fb-041"></a>
+### FB-041 · Vista con miniaturas como predeterminada en Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** que la vista con miniaturas sea la predeterminada en Medios y la vista en
+  lista la opcional.
+- **Contexto:** panel Medios (biblioteca).
+- **Notas:** hoy se abre siempre en lista (`cuadricula: false` en PanelBiblioteca.qml) y la
+  elección no se recuerda al volver a abrir la app.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M20)
+
+<a id="fb-042"></a>
+### FB-042 · Varios idiomas, elegibles en el instalador
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Instalación
+- **Tipo:** Propuesta
+- **Qué dijo:** más adelante, meter nuevos idiomas y que se puedan elegir en el
+  instalador, cuando el producto esté más maduro.
+- **Contexto:** al decidir el nombre de la carpeta de recursos (FB-040).
+- **Notas:** hoy toda la interfaz está solo en español.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B6)
+
+<a id="fb-043"></a>
+### FB-043 · Editor de texto
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Efectos
+- **Tipo:** Propuesta
+- **Qué dijo:** hace falta un editor de texto: ahora la única forma de añadir texto es con
+  subtítulos, y no se puede poner un texto, moverlo por toda la pantalla ni ponerle
+  keyframes fuera de los subtítulos. Propone una pestaña nueva en el panel: Medios ·
+  Transiciones · Efectos · Texto · Subtítulos.
+- **Contexto:** edición de shorts y VODs.
+- **Notas:** los subtítulos sirven como texto suelto («Añadir un subtítulo o texto en el
+  cabezal»), pero van en sus pistas propias, sin la colocación libre ni los keyframes de
+  los clips. PLAN.md tenía la herramienta de texto genérica en la fase 6.
+- **Decisión (Kyo):** para la 0.1.5.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
+
+<a id="fb-044"></a>
+### FB-044 · Cortar subtítulos con la cuchilla y alargarlos por el borde
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Subtítulos
+- **Tipo:** Usabilidad
+- **Qué dijo:** que los subtítulos se puedan cortar con la cuchilla y que desde el borde se
+  puedan alargar o acortar, porque ahora mismo no pudo hacerlo.
+- **Contexto:** al ajustar subtítulos en la línea de tiempo.
+- **Notas:** la cuchilla solo corta clips. Los bordes recortan, pero no pasan del
+  subtítulo vecino (los de una transcripción van pegados, así que solo se acortan) y con la
+  línea de tiempo alejada no aparecen.
+- **Decisión (Kyo):** para la 0.1.5.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A15)
+
+<a id="fb-045"></a>
+### FB-045 · Crear un color sólido desde Medios
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** que al hacer clic derecho en una parte en blanco de Medios se pueda crear un
+  color sólido, porque no existe.
+- **Contexto:** panel Medios.
+- **Notas:** hoy el clic derecho solo abre menús sobre carpetas, secuencias y medios; en un
+  hueco no hace nada (el doble clic abre Importar, M10).
+- **Decisión (Kyo):** para la 0.1.5, junto con el tinte y el selector de color (FB-013,
+  FB-014) y las pistas de audio de los MKV (FB-009).
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M22)

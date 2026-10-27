@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SharkCut · Hoja de ruta</title>
+<meta name="description" content="Hoja de ruta de SharkCut: qué trae cada próxima versión, qué viene más adelante y qué se ha publicado ya.">
+<link rel="icon" href="icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Cherry+Bomb+One&family=Fredoka:wght@500;600;700&family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+<!-- Contenido: docs/ROADMAP.md (al cambiarlo, actualizar esta página; aquí sin los códigos internos). -->
+<style>
+  :root {
+    --abisal: #0A1030; --indigo: #2B2F7A; --aleta: #3A7BD5; --bioluz: #6FE3F0;
+    --espuma: #C9E6F2; --lavanda: #BDB0E6; --perla: #F5F3FB; --oro: #F4C542;
+    --pegatina: #0f1a4a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 0%, #1a2470 0%, var(--abisal) 60%) fixed, var(--abisal);
+    color: var(--perla);
+    font-family: "M PLUS Rounded 1c", system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+  .cielo { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .estrella { position: absolute; width: 3px; height: 3px; border-radius: 50%;
+    background: var(--espuma); animation: titilar 3s ease-in-out infinite; }
+  @keyframes titilar { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .mar { position: fixed; left: 0; right: 0; bottom: 0; height: 90px; z-index: 0; pointer-events: none; }
+  .mar svg { position: absolute; bottom: 0; width: 200%; height: 90px; animation: oleaje 18s linear infinite; }
+  .mar svg.lejos { opacity: .5; animation-duration: 28s; bottom: 14px; }
+  @keyframes oleaje { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  main { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 36px 16px 150px; }
+  .volver { display: inline-flex; align-items: center; gap: 10px; color: var(--espuma);
+    text-decoration: none; font-family: "Fredoka", sans-serif; font-weight: 600; }
+  .volver img { width: 36px; height: 36px; border-radius: 9px; }
+  h1 { font-family: "Cherry Bomb One", cursive; font-weight: 400; font-size: clamp(40px, 8vw, 68px);
+    text-align: center; margin: 22px 0 0; color: var(--perla);
+    -webkit-text-stroke: 3px var(--abisal); paint-order: stroke fill;
+    text-shadow: 0 6px 0 var(--abisal), 0 0 24px rgba(111, 227, 240, .45); }
+  .lema { text-align: center; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 18px;
+    color: var(--espuma); margin: 12px auto 8px; max-width: 600px; line-height: 1.5; }
+  .aviso { text-align: center; font-size: 13px; color: var(--espuma); opacity: .85; margin: 0 0 40px; }
+
+  h2 { font-family: "Cherry Bomb One", cursive; font-weight: 400; font-size: 32px; text-align: center;
+    margin: 64px 0 28px; -webkit-text-stroke: 2px var(--abisal); paint-order: stroke fill;
+    text-shadow: 0 4px 0 var(--abisal); }
+
+  /* La ruta: una línea de bioluz con una parada (aleta) por versión. */
+  .ruta { position: relative; list-style: none; margin: 0; padding: 0 0 0 54px; }
+  .ruta::before { content: ""; position: absolute; left: 19px; top: 18px; bottom: 18px; width: 4px;
+    border-radius: 4px; background: repeating-linear-gradient(to bottom, var(--bioluz) 0 12px, transparent 12px 22px);
+    opacity: .55; }
+  .parada { position: relative; margin: 0 0 30px; }
+  .parada:last-child { margin-bottom: 0; }
+  .marcador { position: absolute; left: -54px; top: 16px; width: 42px; height: 42px; border-radius: 50%;
+    background: var(--pegatina); display: grid; place-items: center;
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--abisal); }
+  .marcador svg { width: 24px; height: 24px; }
+  .tarjeta { background: var(--pegatina); border-radius: 24px; padding: 20px 22px;
+    box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--abisal), 0 8px 0 8px var(--abisal); }
+  .parada:nth-child(odd) .tarjeta { transform: rotate(-.6deg); }
+  .parada:nth-child(even) .tarjeta { transform: rotate(.6deg); }
+  .cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 4px; }
+  .numero { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 26px; color: var(--perla); }
+  .chip { display: inline-block; font-family: "Chakra Petch", sans-serif; font-weight: 700; font-size: 12px;
+    letter-spacing: 1.4px; text-transform: uppercase; color: var(--abisal); background: var(--lavanda);
+    padding: 4px 11px; border-radius: 999px; }
+  .tema { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 18px; color: var(--bioluz);
+    margin: 0 0 10px; }
+  .puntos { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .puntos li { position: relative; padding-left: 22px; font-size: 14.5px; line-height: 1.5; color: var(--espuma); }
+  .puntos li::before { content: ""; position: absolute; left: 4px; top: 8px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--aleta); box-shadow: 0 0 0 2px var(--abisal); }
+  .puntos b { color: var(--perla); }
+
+  /* Estados: la siguiente versión brilla; las publicadas llevan su check. */
+  .parada.siguiente .chip { background: var(--bioluz); }
+  .parada.siguiente .marcador { background: var(--bioluz); animation: latido 2.4s ease-in-out infinite; }
+  .parada.siguiente .tarjeta { box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--abisal), 0 8px 0 8px var(--abisal),
+    0 0 46px 8px rgba(111, 227, 240, .28); }
+  @keyframes latido { 0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--abisal), 0 0 0 0 rgba(111, 227, 240, .6); }
+    50% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--abisal), 0 0 0 14px rgba(111, 227, 240, 0); } }
+  .parada.salto .chip { background: var(--oro); }
+  .parada.publicada .chip { background: var(--oro); }
+  .parada.publicada .marcador { background: var(--oro); }
+  .parada.publicada .tarjeta { opacity: .9; }
+
+  /* Más adelante: burbujas. */
+  .burbujas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 22px; }
+  .burbuja { background: rgba(43, 47, 122, .55); border: 2px solid var(--indigo); border-radius: 20px;
+    padding: 16px 18px; }
+  .burbuja h3 { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 17px; margin: 0 0 4px;
+    color: var(--perla); }
+  .burbuja p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--espuma); }
+
+  /* Ya publicadas: lista compacta. */
+  .historial { display: grid; gap: 14px; }
+  .historial details { background: rgba(43, 47, 122, .55); border: 2px solid var(--indigo); border-radius: 18px;
+    padding: 12px 18px; }
+  .historial summary { cursor: pointer; font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 17px;
+    color: var(--perla); list-style: none; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+  .historial summary::-webkit-details-marker { display: none; }
+  .historial summary::before { content: "▸"; color: var(--bioluz); transition: transform .2s; }
+  .historial details[open] summary::before { transform: rotate(90deg); }
+  .historial .fecha { font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 400; font-size: 13px; color: var(--espuma); }
+  .historial ul { margin: 10px 0 2px; padding-left: 22px; }
+  .historial li { font-size: 14px; line-height: 1.55; color: var(--espuma); }
+
+  .leyenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; margin: 0 0 34px;
+    font-size: 13px; color: var(--espuma); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 8px; }
+  .punto { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
+
+  .boton { display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+    font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 18px; color: var(--abisal);
+    background: var(--bioluz); padding: 14px 24px; border-radius: 18px;
+    box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--abisal), 0 8px 0 8px var(--abisal);
+    transition: transform .2s cubic-bezier(.34, 1.56, .64, 1); }
+  .boton:hover { transform: translateY(-3px) rotate(-1deg); }
+  .final { text-align: center; margin-top: 56px; }
+  .final p { color: var(--espuma); font-size: 15px; margin: 0 0 22px; }
+  footer { text-align: center; margin-top: 48px; font-size: 13px; color: var(--espuma); }
+  footer a { color: var(--bioluz); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+  @media (max-width: 520px) {
+    .ruta { padding-left: 42px; }
+    .ruta::before { left: 14px; }
+    .marcador { left: -42px; width: 32px; height: 32px; }
+    .marcador svg { width: 18px; height: 18px; }
+    .tarjeta { padding: 16px; }
+    .parada .tarjeta { transform: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="cielo" id="cielo"></div>
+<div class="mar">
+  <svg class="lejos" viewBox="0 0 1440 90" preserveAspectRatio="none">
+    <path d="M0 45 Q90 22 180 45 T360 45 T540 45 T720 45 T900 45 T1080 45 T1260 45 T1440 45 V90 H0Z" fill="#2B2F7A"/>
+  </svg>
+  <svg viewBox="0 0 1440 90" preserveAspectRatio="none">
+    <path d="M0 52 Q90 30 180 52 T360 52 T540 52 T720 52 T900 52 T1080 52 T1260 52 T1440 52 V90 H0Z"
+          fill="#3A7BD5" stroke="#fff" stroke-width="5"/>
+  </svg>
+</div>
+
+<main>
+  <a class="volver" href="./"><img src="icono.png" alt=""> SharkCut</a>
+  <h1>Hoja de ruta</h1>
+  <p class="lema">Lo que viene en SharkCut, versión a versión. Casi todo sale de lo que nos cuentan quienes lo prueban 💙</p>
+  <p class="aviso">Última actualización: 27 de octubre de 2026 · El orden puede cambiar con el feedback.</p>
+
+  <div class="leyenda" aria-hidden="true">
+    <span><i class="punto" style="background:var(--bioluz)"></i> La siguiente</span>
+    <span><i class="punto" style="background:var(--lavanda)"></i> Próximamente</span>
+    <span><i class="punto" style="background:var(--oro)"></i> Ya disponible</span>
+  </div>
+
+  <ol class="ruta" id="ruta">
+    <li class="parada" data-version="0.1.5">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.1.5</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Medios más ordenados y subtítulos a tu medida</p>
+        <ul class="puntos">
+          <li><b>Una carpeta para los recursos de SharkCut:</b> los sonidos que usas van a su propia carpeta de Medios y no se mezclan con tus archivos.</li>
+          <li><b>Miniaturas por defecto en Medios:</b> la lista queda como opción, y SharkCut recuerda la vista que elijas.</li>
+          <li><b>Subtítulos con la cuchilla:</b> córtalos en dos y alárgalos o acórtalos desde su borde, aunque estén pegados a otros.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada" data-version="0.1.6">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.1.6</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Color 🎨</p>
+        <ul class="puntos">
+          <li><b>Tinte de color</b> como efecto, y un <b>selector de color completo</b> en todas las muestras de color.</li>
+          <li><b>Color sólido:</b> créalo desde Medios con un clic derecho, para fondos y rellenos.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada" data-version="0.1.7">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.1.7</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Texto y el audio de tus grabaciones</p>
+        <ul class="puntos">
+          <li><b>Editor de texto:</b> textos libres que colocas en cualquier parte de la pantalla, con su estilo, keyframes y efectos. Pestaña nueva «Texto».</li>
+          <li><b>Pistas de audio por separado</b> de las grabaciones que guardan varias (por ejemplo, micrófono y juego en un MKV).</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada" data-version="0.1.8">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.1.8</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Secuencias y rendimiento ⚡</p>
+        <ul class="puntos">
+          <li><b>Cambia el lienzo y los fps</b> de una secuencia ya creada y guarda tus propios presets.</li>
+          <li><b>Resolución del visor</b> (completa, 1/2 o 1/4) para que la vista previa vaya más fluida.</li>
+          <li><b>Caché en una carpeta común,</b> con opción para limpiarla y recuperar espacio.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada" data-version="0.1.9">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.1.9</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Línea de tiempo</p>
+        <ul class="puntos">
+          <li><b>Transiciones de entrada y de salida,</b> con marca de centro e imán al moverlas.</li>
+          <li><b>Altura de las pistas</b> ajustable a tu gusto.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada salto" data-version="0.2.0">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.2.0</span><span class="chip">Gran salto</span></div>
+        <p class="tema">Nueva aleta y atajos a tu gusto 🦈</p>
+        <ul class="puntos">
+          <li><b>Logo renovado,</b> más reconocible como aleta de tiburón.</li>
+          <li><b>Cabezal con forma de aleta,</b> la misma del logo.</li>
+          <li><b>Atajos de teclado personalizables,</b> ideales para teclados compactos.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="parada" data-version="0.2.1">
+      <div class="marcador"></div>
+      <div class="tarjeta">
+        <div class="cabecera"><span class="numero">0.2.1</span><span class="chip">Próximamente</span></div>
+        <p class="tema">Propiedades a fondo</p>
+        <ul class="puntos">
+          <li><b>Una pestaña por efecto</b> en Propiedades, para tenerlo todo ordenado.</li>
+          <li><b>Línea de tiempo de keyframes</b> dentro de Propiedades.</li>
+          <li><b>Máscaras</b> con formas simples (rectángulo, elipse…).</li>
+        </ul>
+      </div>
+    </li>
+  </ol>
+
+  <h2>Más adelante 🌊</h2>
+  <div class="burbujas">
+    <div class="burbuja"><h3>Paneles a tu manera</h3><p>Muévelos, cambia su tamaño y guarda tus diseños.</p></div>
+    <div class="burbuja"><h3>Carpetas vinculadas</h3><p>Tus carpetas de uso frecuente, a mano en todos los proyectos.</p></div>
+    <div class="burbuja"><h3>Descargas en el instalador</h3><p>Elige al instalar si quieres bajar ya el modelo de subtítulos.</p></div>
+    <div class="burbuja"><h3>Tutorial</h3><p>Una guía dentro de la app para empezar y descubrir los trucos.</p></div>
+    <div class="burbuja"><h3>Velocidad de los clips</h3><p>Acelera, ralentiza y crea rampas de velocidad.</p></div>
+    <div class="burbuja"><h3>Más idiomas</h3><p>SharkCut en otros idiomas, elegibles al instalar.</p></div>
+  </div>
+
+  <h2>Ya publicadas ✨</h2>
+  <div class="historial">
+    <details open>
+      <summary>0.1.4 <span class="fecha">26 de octubre de 2026</span></summary>
+      <ul>
+        <li>El cabezal llega hasta el final exacto de la secuencia.</li>
+        <li>Un clic en la flecha de una transición la pone en el cabezal, con su sonido.</li>
+        <li>«Preparar para» YouTube o TikTok en Exportar.</li>
+        <li>Apartado «Hardware y codificadores»: tarjeta gráfica, decodificación y codificador en uso.</li>
+        <li>Ondas de audio unas 4 veces más rápidas.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>0.1.3 <span class="fecha">26 de octubre de 2026</span></summary>
+      <ul>
+        <li>Escucha los efectos de sonido antes de usarlos.</li>
+        <li>Doble clic en un hueco de Medios para importar.</li>
+        <li>Botones de zoom arriba a la derecha y atajos a la vista en las ayudas.</li>
+        <li>El punto de anclaje, explicado paso a paso.</li>
+        <li>Alt + rueda para desplazarte entre pistas.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>0.1.2 <span class="fecha">25 de octubre de 2026</span></summary>
+      <ul>
+        <li>Arrastra los medios nada más importarlos.</li>
+        <li>Cortes sin tirones durante la reproducción.</li>
+        <li>Clips muy cortos fáciles de seleccionar con la línea de tiempo alejada.</li>
+        <li>La línea de tiempo sigue al cabezal al saltar entre cortes.</li>
+        <li>Pantalla «Acerca de».</li>
+      </ul>
+    </details>
+    <details>
+      <summary>0.1.1 <span class="fecha">22 de octubre de 2026</span></summary>
+      <ul>
+        <li>Imágenes PNG y JPG en la línea de tiempo.</li>
+        <li>Las transiciones y su sonido se mueven juntos.</li>
+        <li>Botón «Proxies» más claro.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>0.1.0 <span class="fecha">21 de octubre de 2026</span></summary>
+      <ul><li>Primera versión de acceso anticipado.</li></ul>
+    </details>
+  </div>
+
+  <div class="final">
+    <p>¿Echas algo en falta o algo no va como esperas? Cuéntanoslo y entra en la ruta.</p>
+    <a class="boton" href="https://github.com/KyoSharkCode/SharkCut/issues">Enviar una idea o un fallo</a>
+  </div>
+
+  <footer>
+    Hecho con 💙 por <b>@KyoSumiVT</b> · <a href="./">Descargar SharkCut</a> ·
+    <a href="privacidad.html">Privacidad</a>
+  </footer>
+</main>
+
+<script>
+  // Estrellas del cielo (posición y ritmo al azar).
+  const cielo = document.getElementById("cielo");
+  for (let i = 0; i < 60; i++) {
+    const e = document.createElement("div");
+    e.className = "estrella";
+    e.style.left = Math.random() * 100 + "%";
+    e.style.top = Math.random() * 70 + "%";
+    e.style.animationDelay = (Math.random() * 3).toFixed(2) + "s";
+    const lado = Math.random() < .2 ? 4 : 2;
+    e.style.width = e.style.height = lado + "px";
+    cielo.appendChild(e);
+  }
+
+  // Marcadores: una aleta en cada parada (un check en las publicadas).
+  const ALETA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18c4-1 7-6 9-14 1 6 4 11 9 14z" fill="#3A7BD5" stroke="#0A1030" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="#0A1030" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  const comparar = (a, b) => {
+    const x = a.split(".").map(Number), y = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+    return 0;
+  };
+
+  // Marca como disponibles las versiones ya publicadas y hace brillar la siguiente.
+  function marcar(publicada) {
+    let siguiente = null;
+    document.querySelectorAll(".parada").forEach((p) => {
+      const lista = comparar(p.dataset.version, publicada) <= 0;
+      p.classList.toggle("publicada", lista);
+      p.classList.remove("siguiente");
+      if (lista) p.querySelector(".chip").textContent = "Ya disponible";
+      if (!lista && !siguiente) siguiente = p;
+      p.querySelector(".marcador").innerHTML = lista ? CHECK : ALETA;
+    });
+    if (siguiente) {
+      siguiente.classList.add("siguiente");
+      siguiente.querySelector(".chip").textContent = "La siguiente";
+    }
+  }
+
+  // Sin conexión con GitHub se queda con la última versión conocida al escribir la página.
+  marcar("0.1.4");
+  fetch("https://api.github.com/repos/KyoSharkCode/SharkCut/releases/latest")
+    .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+    .then((release) => marcar(release.tag_name.replace(/^v/, "")))
+    .catch(() => {});
+</script>
+</body>
+</html>

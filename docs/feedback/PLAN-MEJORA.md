@@ -405,8 +405,9 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   las transiciones) van a una carpeta propia de la biblioteca, que se crea la primera vez
   que hace falta y se reutiliza después (si se le cambia el nombre o se borra, se vuelve a
   crear). Los medios ya añadidos en proyectos antiguos pueden quedarse donde están.
-- **Por decidir con Kyo:** el nombre de la carpeta («SharkCut Items» o uno en español,
-  como los demás textos).
+- **Decidido con Kyo (2026-10-27):** nombre en español (p. ej. «Recursos de SharkCut»).
+  Cuando haya varios idiomas (B6), la carpeta se marca como la de los recursos y su nombre
+  sigue al idioma elegido (no se busca por nombre).
 
 ### M20 · Vista con miniaturas como predeterminada en Medios · FB-041 · S
 - **Hacer:** Medios se abre con la vista de miniaturas; la lista queda como opción. Guardar
@@ -459,6 +460,14 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
   y acaba el tramo lento, la velocidad mínima y lo suave del cambio (curvas de easing.h).
   Va después de la velocidad constante, que es su base.
 
+### B6 · Varios idiomas, elegibles en el instalador · FB-042 · L
+- **Hacer:** traducir la interfaz a otros idiomas y elegir el idioma en el instalador
+  (y cambiarlo después en la app). Los textos de la app (como el nombre de la carpeta de
+  recursos de M19) siguen al idioma elegido.
+- **Decidido con Kyo (2026-10-27):** más adelante, cuando el producto esté más maduro.
+- **Cuidado:** hoy los textos están escritos en español directamente en QML y C++; habría
+  que pasarlos a las herramientas de traducción de Qt (qsTr/tr y archivos .ts).
+
 ---
 
 ## Resumen
@@ -467,4 +476,4 @@ Antes de empezar cada punto, comprobar que encaja en las fases de [PLAN.md](../P
 |-----------|--------|----------|
 | Alta | A1–A14 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030 |
 | Media | M1–M20 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041 |
-| Baja | B1–B5 | FB-011, 016, 018, 029, 038 |
+| Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

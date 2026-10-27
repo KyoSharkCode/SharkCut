@@ -45,6 +45,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
 | [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | En el plan |
 | [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | En el plan |
+| [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
 
 ---
 
@@ -624,8 +625,9 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** cada efecto de sonido que se usa se añade como medio a la raíz de la
   biblioteca (`soundMedia` en editor.cpp, con su ruta en presets/sfx); las transiciones-clip
   no tienen medio, pero su sonido sí. La biblioteca ya tiene carpetas (`Folder`,
-  `MediaItem::folder`). El nombre de la carpeta está por decidir («SharkCut Items» o uno en
-  español).
+  `MediaItem::folder`).
+- **Decisión (Kyo):** la carpeta, con nombre en español; que cambie de nombre según el
+  idioma de la app cuando haya varios (FB-042).
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M19)
 
 <a id="fb-041"></a>
@@ -641,3 +643,16 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** hoy se abre siempre en lista (`cuadricula: false` en PanelBiblioteca.qml) y la
   elección no se recuerda al volver a abrir la app.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M20)
+
+<a id="fb-042"></a>
+### FB-042 · Varios idiomas, elegibles en el instalador
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.4
+- **Área:** Instalación
+- **Tipo:** Propuesta
+- **Qué dijo:** más adelante, meter nuevos idiomas y que se puedan elegir en el
+  instalador, cuando el producto esté más maduro.
+- **Contexto:** al decidir el nombre de la carpeta de recursos (FB-040).
+- **Notas:** hoy toda la interfaz está solo en español.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), B6)

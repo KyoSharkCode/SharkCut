@@ -153,7 +153,7 @@
   <a class="volver" href="./"><img src="icono.png" alt=""> SharkCut</a>
   <h1>Hoja de ruta</h1>
   <p class="lema">Lo que viene en SharkCut, versión a versión. Casi todo sale de lo que nos cuentan quienes lo prueban 💙</p>
-  <p class="aviso">Última actualización: 27 de octubre de 2026 · El orden puede cambiar con el feedback.</p>
+  <p class="aviso">Última actualización: 28 de octubre de 2026 · El orden puede cambiar con el feedback.</p>
 
   <div class="leyenda" aria-hidden="true">
     <span><i class="punto" style="background:var(--bioluz)"></i> La siguiente</span>
@@ -162,19 +162,6 @@
   </div>
 
   <ol class="ruta" id="ruta">
-    <li class="parada" data-version="0.1.6">
-      <div class="marcador"></div>
-      <div class="tarjeta">
-        <div class="cabecera"><span class="numero">0.1.6</span><span class="chip">Próximamente</span></div>
-        <p class="tema">Color 🎨 y una vista previa más fiable</p>
-        <ul class="puntos">
-          <li><b>Tinte de color</b> como efecto, y un <b>selector de color completo</b> en todas las muestras de color.</li>
-          <li><b>Color sólido:</b> créalo desde Medios con un clic derecho, para fondos y rellenos.</li>
-          <li><b>Vista previa más fiable:</b> adiós a los clips que a veces no aparecían y a las imágenes congeladas antes de una transición.</li>
-          <li><b>Girar 90° con un clic:</b> pasa un video horizontal a tu lienzo vertical y se ajusta solo, sin escalarlo a mano.</li>
-        </ul>
-      </div>
-    </li>
     <li class="parada" data-version="0.1.7">
       <div class="marcador"></div>
       <div class="tarjeta">
@@ -248,6 +235,15 @@
   <h2>Ya publicadas ✨</h2>
   <div class="historial">
     <details open>
+      <summary>0.1.6 <span class="fecha">28 de octubre de 2026</span></summary>
+      <ul>
+        <li>Tinte de color como efecto y un selector de color completo en todas las muestras.</li>
+        <li>Colores sólidos para fondos y rellenos, desde Medios con un clic derecho.</li>
+        <li>Vista previa más fiable: los clips que a veces no aparecían ya se muestran.</li>
+        <li>Girar 90° con un clic: un video horizontal llena tu lienzo vertical.</li>
+      </ul>
+    </details>
+    <details>
       <summary>0.1.5 <span class="fecha">27 de octubre de 2026</span></summary>
       <ul>
         <li>Los sonidos de SharkCut van a su propia carpeta de Medios.</li>
@@ -353,7 +349,7 @@
   }
 
   // Sin conexión con GitHub se queda con la última versión conocida al escribir la página.
-  marcar("0.1.5");
+  marcar("0.1.6");
   fetch("https://api.github.com/repos/KyoSharkCode/SharkCut/releases/latest")
     .then((r) => r.ok ? r.json() : Promise.reject(r.status))
     .then((release) => marcar(release.tag_name.replace(/^v/, "")))

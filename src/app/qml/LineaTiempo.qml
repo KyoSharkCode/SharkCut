@@ -2033,6 +2033,16 @@ Rectangle {
             enabled: menuClip.clipMenu !== null && menuClip.clipMenu.video
             onTriggered: raiz.editor.fitClip(menuClip.clipMenu.id, true)
         }
+        Action {
+            text: "Girar 90° a la derecha"
+            enabled: menuClip.clipMenu !== null && menuClip.clipMenu.video
+            onTriggered: raiz.editor.rotateClip(menuClip.clipMenu.id, true)
+        }
+        Action {
+            text: "Girar 90° a la izquierda"
+            enabled: menuClip.clipMenu !== null && menuClip.clipMenu.video
+            onTriggered: raiz.editor.rotateClip(menuClip.clipMenu.id, false)
+        }
         MenuSeparator {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
         }

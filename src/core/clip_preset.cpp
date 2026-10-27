@@ -34,7 +34,7 @@ bool presetIncludes(const PresetParts& parts, AnimProperty p) {
     if (between(p, AnimProperty::CropLeft, AnimProperty::CropBottom)) {
         return parts.crop;
     }
-    if (between(p, AnimProperty::Grayscale, AnimProperty::ShadowY)) {
+    if (between(p, AnimProperty::Grayscale, AnimProperty::Tint)) {
         return parts.effects;
     }
     return false;

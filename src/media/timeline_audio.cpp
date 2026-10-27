@@ -11,6 +11,13 @@
 
 namespace sharkcut {
 
+namespace {
+
+// Cuánto antes de que suene un clip se abre su archivo (2 s a 48 kHz).
+constexpr std::int64_t kOpenAhead = 2 * kAudioSampleRate;
+
+} // namespace
+
 TimelineAudioSource::TimelineAudioSource(Project project) : m_project(std::move(project)) {
     if (!m_project.hasAudibleAudio()) {
         throw MediaError("La línea de tiempo no tiene audio");
@@ -159,6 +166,11 @@ std::size_t TimelineAudioSource::read(float* out, std::size_t frames) {
             const std::int64_t to = std::min(end, it->end);
             mixSegment(track, *it, from, to,
                        out + static_cast<std::size_t>(from - start) * kAudioChannels);
+        }
+        // Los archivos de lo que va a sonar pronto se abren ya, con margen: abrirlos al
+        // llegar a su clip dejaba al audio sin muestras un momento (y el visor se paraba).
+        for (; it != segments.end() && it->start < end + kOpenAhead; ++it) {
+            decoder(track, it->media);
         }
     }
     m_position = end;

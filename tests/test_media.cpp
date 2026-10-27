@@ -1,3 +1,4 @@
+#include "core/project.h"
 #include "media/chroma_key.h"
 #include "media/decode_worker.h"
 #include "media/media_error.h"
@@ -290,6 +291,56 @@ TEST_CASE("DecodeWorker sabe si sigue justo despues de un fotograma", "[media]")
     CHECK_FALSE(worker.continuesAfter(last - 5));
     worker.seek(40);
     CHECK_FALSE(worker.continuesAfter(last));
+}
+
+TEST_CASE("A solid color is decoded as a still frame without a file", "[media]") {
+    const SolidColor white{0xFFFFFF, 1080, 1920};
+    const std::string path = solidColorPath(white);
+    CHECK(path == "sharkcut-color:FFFFFF:1080x1920");
+    CHECK(solidColorOf(path) == white);
+    CHECK_FALSE(solidColorOf("/medios/video.mp4").has_value());
+    CHECK_FALSE(solidColorOf("sharkcut-color:ZZZ:1x1").has_value());
+    CHECK_FALSE(solidColorOf("sharkcut-color:FFFFFF:0x10").has_value());
+
+    VideoDecoder decoder(path, HwAccel::Auto);
+    CHECK(decoder.info().still);
+    CHECK(decoder.info().width == 1080);
+    auto frame = decoder.nextFrame();
+    REQUIRE(frame);
+    CHECK(frame->index == 0);
+    CHECK(frame->width == 36); // la forma del lienzo, en pequeño
+    CHECK(frame->height == 64);
+    CHECK(frame->y.front() == 255);
+    CHECK(frame->uv.front() == 128);
+    CHECK_FALSE(decoder.nextFrame()); // un solo fotograma…
+    decoder.seekToFrame(500);
+    CHECK(decoder.nextFrame()); // …que es el de cualquier momento
+
+    VideoDecoder red(solidColorPath({0xFF0000, 1920, 1080}), HwAccel::None);
+    frame = red.nextFrame();
+    REQUIRE(frame);
+    CHECK(frame->fullRange);
+    CHECK(frame->y.front() == 54); // 0,2126 × 255
+    CHECK(frame->uv[1] == 255);    // Cr al máximo
+}
+
+TEST_CASE("DecodeWorker says when it is waiting with a full queue", "[media]") {
+    TempClip clip({.frames = 60});
+    DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 4);
+    worker.seek(20);
+    // Con la cola llena se para a esperar: es lo que el visor mira para saber si un clip
+    // sin su fotograma está atascado (y no solo lento).
+    REQUIRE(waitFor([&] {
+        const DecodeWorker::Status s = worker.status();
+        return s.waiting && s.firstQueued == 20 && s.lastQueued == 23;
+    }));
+    const DecodeWorker::Status full = worker.status();
+    CHECK(full.opened);
+    CHECK(full.seekPending < 0);
+    CHECK(full.nextIndex == 24);
+    // Al sacar fotogramas vuelve a decodificar.
+    REQUIRE(worker.takeUpTo(21));
+    REQUIRE(waitFor([&] { return worker.status().lastQueued == 25; }));
 }
 
 TEST_CASE("DecodeWorker informa si el archivo no se puede abrir", "[media]") {

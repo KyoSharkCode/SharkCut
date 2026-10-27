@@ -96,6 +96,34 @@ CanvasPoint canvasPointOnMedia(const ProjectSettings& settings, int mediaWidth, 
     return {scaleX > 0 ? 0.5 + localX / scaleX : 0.5, scaleY > 0 ? 0.5 + localY / scaleY : 0.5};
 }
 
+ClipTransform fitToCanvas(const ProjectSettings& settings, int mediaWidth, int mediaHeight,
+                          ClipTransform t, bool fill) {
+    const auto [fitW, fitH] = fitSize(settings, mediaWidth, mediaHeight);
+    // La parte visible a escala 1 y su centro respecto al del video (sobre el que gira).
+    const double w = fitW * (1.0 - t.cropLeft - t.cropRight);
+    const double h = fitH * (1.0 - t.cropTop - t.cropBottom);
+    if (w <= 0 || h <= 0) {
+        return t;
+    }
+    const double cx = (t.cropLeft - t.cropRight) / 2.0 * fitW;
+    const double cy = (t.cropTop - t.cropBottom) / 2.0 * fitH;
+    const double angle = t.rotation * std::numbers::pi / 180.0;
+    // Redondeado: con 90°, 180° o 270° el seno y el coseno dan 0 exacto.
+    const auto clean = [](double v) { return std::abs(v) < 1e-9 ? 0.0 : v; };
+    const double c = clean(std::cos(angle));
+    const double s = clean(std::sin(angle));
+    // El rectángulo que ocupa una vez girada.
+    const double boxW = std::abs(w * c) + std::abs(h * s);
+    const double boxH = std::abs(w * s) + std::abs(h * c);
+    const double sx = settings.width / boxW;
+    const double sy = settings.height / boxH;
+    t.scale = fill ? std::max(sx, sy) : std::min(sx, sy);
+    // Su centro, ya girado y escalado, en el centro del lienzo.
+    t.x = -(cx * c - cy * s) * t.scale;
+    t.y = -(cx * s + cy * c) * t.scale;
+    return t;
+}
+
 bool anchorClip(Project& project, ObjectId id, ObjectId targetId,
                 const std::vector<AnchorSample>& samples) {
     const auto ref = project.findClip(id);

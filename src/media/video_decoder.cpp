@@ -1,10 +1,12 @@
 #include "media/video_decoder.h"
 
+#include "core/project.h"
 #include "media/ffmpeg_util.h"
 #include "media/media_error.h"
 #include "media/media_info_internal.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <utility>
 #include <vector>
@@ -248,6 +250,10 @@ struct VideoDecoder::Impl {
     }
 
     void open(const std::string& path, HwAccel hwAccel) {
+        if (const std::optional<SolidColor> solid = solidColorOf(path)) {
+            openSolid(*solid);
+            return;
+        }
         const AVCodec* decoder = openStream(path);
         if (stream->codecpar->codec_id == AV_CODEC_ID_AV1) {
             if (hwAccel == HwAccel::Auto) {
@@ -265,6 +271,44 @@ struct VideoDecoder::Impl {
             return;
         }
         openCodec(decoder, hwAccel == HwAccel::Auto);
+    }
+
+    // Color sólido: una imagen fija de un color, sin archivo. Basta un fotograma pequeño
+    // con la forma del lienzo para el que se creó (el compositor lo estira sin deformarlo).
+    void openSolid(const SolidColor& solid) {
+        info.codec = "color";
+        info.pixelFormat = "nv12";
+        info.width = solid.width;
+        info.height = solid.height;
+        info.frameRate = {60, 1};
+        info.timeBase = {1, 60};
+        info.frameCount = 1;
+        info.still = true;
+        const double longest = std::max(solid.width, solid.height);
+        VideoFrame out;
+        out.width = std::max(2, static_cast<int>(std::lround(64.0 * solid.width / longest)));
+        out.height = std::max(2, static_cast<int>(std::lround(64.0 * solid.height / longest)));
+        // RGB → Y'CbCr de BT.709 en rango completo (como lo deshace el compositor).
+        const double r = ((solid.color >> 16) & 0xFF) / 255.0;
+        const double g = ((solid.color >> 8) & 0xFF) / 255.0;
+        const double b = (solid.color & 0xFF) / 255.0;
+        const double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const auto code = [](double v) {
+            return static_cast<std::uint8_t>(std::clamp(std::lround(v * 255.0), 0L, 255L));
+        };
+        out.matrix = ColorMatrix::Bt709;
+        out.fullRange = true;
+        out.y.assign(static_cast<std::size_t>(out.width) * out.height, code(luma));
+        const std::uint8_t cb = code((b - luma) / 1.8556 + 128.0 / 255.0);
+        const std::uint8_t cr = code((r - luma) / 1.5748 + 128.0 / 255.0);
+        out.uv.resize(static_cast<std::size_t>(out.uvWidth()) * 2 * out.uvHeight());
+        for (std::size_t i = 0; i + 1 < out.uv.size(); i += 2) {
+            out.uv[i] = cb;
+            out.uv[i + 1] = cr;
+        }
+        out.index = 0;
+        stillFrame = std::move(out);
+        stillPending = true;
     }
 
     // Una imagen se lee entera al abrirla: sus demuxers no permiten saltar (ni volver al

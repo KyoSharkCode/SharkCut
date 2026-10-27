@@ -18,13 +18,13 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 10, que abre la 1, la 2
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 11, que abre la 1, la 2
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
   subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
   `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
-  transiciones como clips, `effect` del clip, con la 9 y las imágenes fijas, `still` del
-  medio, con la 10).
+  transiciones como clips, `effect` del clip, con la 9, las imágenes fijas, `still` del
+  medio, con la 10 y los colores sólidos y el tinte con la 11).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -73,7 +73,7 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   la exportación); setClipTransformAt (edit.h) convierte un cambio en un keyframe si la
   propiedad está animada. Editor: editor_keyframes.cpp; interfaz: ⏱ ◀ ◆ ▶ junto a cada
   valor en PanelPropiedades y ◆ sobre los clips en LineaTiempo.
-  Efectos de imagen: ClipEffects dentro de ClipTransform (blanco y negro, desenfoque,
+  Efectos de imagen: ClipEffects dentro de ClipTransform (blanco y negro, tinte, desenfoque,
   esquinas redondeadas, sombra/resplandor; medidas en px del lienzo, que la exportación
   escala). Todo en layer.frag: desenfoque con 32 muestras (disco de Vogel), esquinas con
   una distancia a un rectángulo redondeado, y la sombra es la misma capa dibujada antes en
@@ -114,6 +114,14 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   anchorClip convierte el recorrido en keyframes de posición, simplificados). Editor:
   editor_anchor.cpp (en segundo plano, con el proxy si lo hay); interfaz: «Punto de
   anclaje» en PanelPropiedades y MarcoAnclaje en Main.qml (recuadro en el visor).
+  Colores sólidos: medios sin archivo con ruta "sharkcut-color:RRGGBB:ANCHOxALTO"
+  (SolidColor, solidColorPath/solidColorOf en project.h); VideoDecoder da su fotograma como
+  una imagen fija. addSolidColor/setSolidColor (document.h); en la interfaz, clic derecho en
+  un hueco de Medios y «Cambiar el color…» en su menú.
+  Colores elegibles: qml/SelectorColor.qml (toda la gama), se abre desde cada muestra.
+  Girar 90°: Editor::rotateClip; fitToCanvas (motion_anchor.h) ajusta con el giro.
+  Los dos shaders de capa (layer.vert y layer.frag) declaran el mismo bloque de uniformes:
+  un campo nuevo va en los dos (si no, OpenGL no los enlaza y el visor sale negro).
   Pantalla verde: ChromaKey dentro de ClipTransform (project.h), aplicada en layer.frag;
   src/media/chroma_key.h detecta el color de fondo en los bordes de un fotograma.
   Subtítulos: pistas propias (CaptionTrack en project.h, encima de todo) con estilo de
@@ -161,7 +169,10 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   AudioOutput::takePeakLevels alimenta el medidor de la mezcla.
   Rastro de la reproducción: PlaybackTrace (playbacktrace.h) apunta en el registro los
   clips que no tienen fotograma o se congelan al reproducir (con DecodeWorker::status) y
-  el audio sin muestras (AudioOutput::takeMissingFrames); resumen al pausar.
+  el audio sin muestras (AudioOutput::takeMissingFrames); resumen al pausar. Red de
+  seguridad: Editor::rescueStalledSlots recoloca el hilo de un clip visible sin fotograma
+  cuando su hilo está parado (DecodeWorker::Status::waiting). TimelineAudioSource abre los
+  archivos 2 s antes de que suenen.
   Hardware y codificadores (botón en Proyectos, qml/DialogoSistema.qml): la GPU del visor
   (CompositionSource::setRenderDevice), la decodificación y los codificadores
   (editor_hardware.cpp, probeHwDecodeDevice y probeVideoEncoder en segundo plano).

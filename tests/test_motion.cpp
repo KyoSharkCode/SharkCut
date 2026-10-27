@@ -98,6 +98,35 @@ TEST_CASE("Media points are placed on the canvas like the compositor", "[motion]
     CHECK(back.y == Approx(0.5));
 }
 
+TEST_CASE("Fitting to the canvas takes the rotation into account", "[motion]") {
+    ProjectSettings vertical;
+    vertical.width = 1080;
+    vertical.height = 1920;
+    // Un 16:9 girado 90° en un lienzo 9:16: lo ocupa entero al ajustarlo.
+    ClipTransform t;
+    t.rotation = 90.0;
+    const ClipTransform fit = fitToCanvas(vertical, 1920, 1080, t, false);
+    CHECK(fit.scale == Approx(1920.0 / 1080.0));
+    CHECK(fit.x == Approx(0.0).margin(1e-9));
+    CHECK(fit.y == Approx(0.0).margin(1e-9));
+    CHECK(fit.rotation == 90.0);
+    const CanvasPoint topLeft = mediaPointOnCanvas(vertical, 1920, 1080, fit, 0.0, 0.0);
+    CHECK(topLeft.x == Approx(1080.0));
+    CHECK(topLeft.y == Approx(0.0).margin(1e-6));
+    // Sin girar, como antes: entero con bandas, o cubriéndolo.
+    CHECK(fitToCanvas(vertical, 1920, 1080, {}, false).scale == Approx(1.0));
+    CHECK(fitToCanvas(vertical, 1920, 1080, {}, true).scale == Approx(1920.0 / 607.5));
+
+    // Con un recorte, lo que queda se centra también después del giro.
+    ClipTransform cropped;
+    cropped.rotation = 90.0;
+    cropped.cropLeft = 0.5; // solo la mitad derecha del video
+    const ClipTransform half = fitToCanvas(vertical, 1920, 1080, cropped, true);
+    const CanvasPoint middle = mediaPointOnCanvas(vertical, 1920, 1080, half, 0.75, 0.5);
+    CHECK(middle.x == Approx(540.0));
+    CHECK(middle.y == Approx(960.0));
+}
+
 TEST_CASE("Anchoring adds position keyframes that follow the region", "[motion]") {
     Project p;
     MediaItem item;

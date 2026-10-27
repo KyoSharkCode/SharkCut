@@ -148,6 +148,7 @@ DecodeWorker::Status DecodeWorker::status() const {
     }
     s.nextIndex = m_nextIndex;
     s.endOfStream = m_endOfStream;
+    s.waiting = m_waiting;
     s.cached = m_cache.size();
     s.hwAccel = m_hwAccelName;
     return s;
@@ -176,6 +177,7 @@ void DecodeWorker::run() {
         std::int64_t keepBefore = 0;
         {
             std::unique_lock lock(m_mutex);
+            m_waiting = true;
             m_wake.wait(lock, [this] {
                 // Tras servir desde la caché, se espera a que se consuma lo servido.
                 const bool wantsMore = m_resumeAt >= 0
@@ -183,6 +185,7 @@ void DecodeWorker::run() {
                                            : !m_endOfStream && m_queue.size() < m_capacity;
                 return m_stop || m_seekTarget >= 0 || wantsMore;
             });
+            m_waiting = false;
             if (m_stop) {
                 return;
             }

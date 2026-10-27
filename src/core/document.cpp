@@ -192,6 +192,39 @@ ObjectId resourceFolder(Document& document, std::string name) {
     return id;
 }
 
+ObjectId addSolidColor(Document& document, const SolidColor& solid, std::string name,
+                       std::int64_t durationUs, FrameRate rate, ObjectId folder) {
+    MediaItem item;
+    item.id = document.nextId++;
+    item.path = solidColorPath(solid);
+    item.name = std::move(name);
+    item.durationUs = std::max<std::int64_t>(durationUs, 1);
+    item.frameRate = rate;
+    item.width = solid.width;
+    item.height = solid.height;
+    item.hasVideo = true;
+    item.still = true; // se alarga sin límite y siempre se ve igual
+    item.folder = document.folder(folder) ? folder : 0;
+    document.media.push_back(std::move(item));
+    return document.media.back().id;
+}
+
+bool setSolidColor(Document& document, ObjectId media, std::uint32_t color) {
+    for (MediaItem& item : document.media) {
+        if (item.id != media) {
+            continue;
+        }
+        std::optional<SolidColor> solid = solidColorOf(item.path);
+        if (!solid || solid->color == (color & 0xFFFFFFu)) {
+            return false;
+        }
+        solid->color = color & 0xFFFFFFu;
+        item.path = solidColorPath(*solid);
+        return true;
+    }
+    return false;
+}
+
 bool removeFolder(Document& document, ObjectId id) {
     if (std::erase_if(document.folders, [id](const Folder& f) { return f.id == id; }) == 0) {
         return false;

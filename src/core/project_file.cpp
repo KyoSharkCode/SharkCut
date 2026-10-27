@@ -321,6 +321,9 @@ json transformToJson(const ClipTransform& t) {
             {"shadowX", e.shadowX},
             {"shadowY", e.shadowY},
             {"shadowSpread", e.shadowSpread},
+            {"tintOn", e.tintOn},
+            {"tintColor", colorToHex(e.tintColor)},
+            {"tint", e.tint},
         };
     }
     if (t.chromaKey != ChromaKey{}) {
@@ -363,6 +366,9 @@ ClipTransform transformFromJson(const json& value) {
         e.shadowX = fx->value("shadowX", d.shadowX);
         e.shadowY = fx->value("shadowY", d.shadowY);
         e.shadowSpread = fx->value("shadowSpread", d.shadowSpread);
+        e.tintOn = fx->value("tintOn", false);
+        e.tintColor = colorFromHex(fx->value("tintColor", std::string()), d.tintColor);
+        e.tint = fx->value("tint", d.tint);
     }
     if (const auto key = value.find("chromaKey"); key != value.end()) {
         const ChromaKey defaults;
@@ -677,7 +683,9 @@ std::string documentToJson(const Document& document, const std::filesystem::path
         if (item.still) {
             entry["still"] = true;
         }
-        const std::string relative = relativeMediaPath(item.path, projectFile);
+        // Un color sólido no es un archivo: no tiene ruta relativa.
+        const std::string relative =
+            isSolidColorPath(item.path) ? std::string() : relativeMediaPath(item.path, projectFile);
         if (!relative.empty()) {
             entry["relativePath"] = relative;
         }

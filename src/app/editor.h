@@ -16,6 +16,7 @@
 #include "waveforms.h"
 
 #include <QElapsedTimer>
+
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -24,6 +25,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
+#include <map>
 
 #include <array>
 #include <memory>
@@ -315,6 +317,11 @@ public:
     // Mueve medios y secuencias (ids) a una carpeta (0 = raíz).
     Q_INVOKABLE void moveToFolder(const QVariantList& items, qint64 folderId);
 
+    // --- Colores sólidos (medios sin archivo, del tamaño del lienzo de la secuencia) ---
+    // `color` "#RRGGBB"; va a la carpeta `folderId` (0 = raíz). Devuelve su id (0 si no).
+    Q_INVOKABLE qint64 addSolidColor(const QString& color, qint64 folderId);
+    Q_INVOKABLE void setSolidColor(qint64 mediaId, const QString& color);
+
     // --- Exportación (mismo compositor que la vista previa) ---
     // Exporta una secuencia del proyecto activo. `options`: los de exportSettings y además
     // sequence (id; 0 = la activa), name (sin ".mp4"), rangeStart y rangeEnd (fotogramas
@@ -428,6 +435,8 @@ public:
     // Ajusta el clip al lienzo (`fill` = false: entero, con bandas) o lo rellena (sin
     // bandas, recortando lo que sobre), centrado y respetando su recorte.
     Q_INVOKABLE void fitClip(qint64 clipId, bool fill);
+    // Gira el clip 90° y, si estaba ajustado o rellenando el lienzo, lo vuelve a ajustar.
+    Q_INVOKABLE void rotateClip(qint64 clipId, bool clockwise);
     Q_INVOKABLE void resetTransform(qint64 clipId);
 
     // --- Keyframes (en el cabezal). `property`: "x", "y", "scale", "opacity", "cropLeft",
@@ -450,10 +459,10 @@ public:
     // `fallbackToGreen`: si no se encuentra, la activa igualmente con el color que tenga.
     Q_INVOKABLE void detectKeyColor(qint64 clipId, bool fallbackToGreen = false);
     // Efecto del panel Efectos aplicado a un clip de video (arrastrándolo o con el clip
-    // seleccionado): "croma", "byn", "desenfoque", "esquinas", "sombra", "resplandor" o un
-    // ajuste guardado, "ajuste:<nombre>".
-    // Los efectos de imagen son las claves grayscaleOn/grayscale, blurOn/blur,
-    // cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
+    // seleccionado): "croma", "byn", "tinte", "desenfoque", "esquinas", "sombra",
+    // "resplandor" o un ajuste guardado, "ajuste:<nombre>".
+    // Los efectos de imagen son las claves grayscaleOn/grayscale, tintOn/tintColor/tint,
+    // blurOn/blur, cornersOn/corners y shadowOn/shadowColor/shadowOpacity/shadowSoftness/shadowX/
     // shadowY/shadowSpread de setClipTransform. Selecciona el clip para ajustarlo en Propiedades.
     // Si el clip está en la selección, se aplica a todos sus clips de video a la vez (un
     // solo paso de deshacer).
@@ -710,6 +719,7 @@ private:
         struct Shown {
             sharkcut::ObjectId clip = 0;
             std::shared_ptr<const sharkcut::VideoFrame> frame;
+            std::string path; // de dónde salió (si el clip pasa a leer otro, ya no vale)
         };
         std::array<Shown, 2> shown; // último fotograma de cada clip que se ve
         // El más reciente: se sigue mostrando mientras llega el de otro clip.
@@ -870,6 +880,17 @@ private:
     std::unique_ptr<sharkcut::AudioWorker> m_audioWorker;
     PlaybackClock m_clock;
     PlaybackTrace m_trace; // rastro en el registro de lo que no llega a tiempo
+    // Red de seguridad al reproducir: un clip que se ve sin su fotograma, con su hilo sin
+    // avanzar un rato, se vuelve a colocar (lo mismo que un clic en el cabezal).
+    struct Stall {
+        qint64 shown = -2;     // último fotograma que se vio del clip
+        qint64 next = -2;      // siguiente que iba a dar su hilo
+        qint64 sinceMs = 0;    // desde cuándo no cambia ninguno de los dos
+        qint64 rescuedMs = -1; // última vez que se recolocó
+    };
+    std::map<std::pair<std::size_t, sharkcut::ObjectId>, Stall> m_stalls;
+    QElapsedTimer m_stallClock;
+    void rescueStalledSlots(qint64 frame);
     void traceStep(qint64 frame);
     QString describeTraced(const PlaybackTrace::Visible& visible) const;
 

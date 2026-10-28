@@ -6,6 +6,7 @@
 #include "audio/audio_worker.h"
 #include "core/edit.h"
 #include "core/export_settings.h"
+#include "core/motion_anchor.h"
 #include "core/project_file.h"
 #include "core/sfx.h"
 #include "media/chroma_key.h"
@@ -289,6 +290,10 @@ QVariantMap transformToMap(const sharkcut::ClipTransform& t) {
              {QStringLiteral("shadowX"), t.effects.shadowX},
              {QStringLiteral("shadowY"), t.effects.shadowY},
              {QStringLiteral("shadowSpread"), t.effects.shadowSpread},
+             {QStringLiteral("tintOn"), t.effects.tintOn},
+             {QStringLiteral("tintColor"),
+              QStringLiteral("#%1").arg(t.effects.tintColor, 6, 16, QLatin1Char('0')).toUpper()},
+             {QStringLiteral("tint"), t.effects.tint},
          }},
         {QStringLiteral("chromaKey"),
          QVariantMap{
@@ -421,8 +426,13 @@ QVariantList Editor::mediaItems() const {
                                         QUrl::toPercentEncoding(QString::fromStdString(item.path))))
                           : QString();
         entry[QStringLiteral("still")] = item.still;
+        const std::optional<sharkcut::SolidColor> solid = sharkcut::solidColorOf(item.path);
+        entry[QStringLiteral("solid")] =
+            solid ? QStringLiteral("#%1").arg(solid->color, 6, 16, QLatin1Char('0')).toUpper()
+                  : QString();
         entry[QStringLiteral("details")] =
-            item.still      ? QStringLiteral("Imagen · %1×%2").arg(item.width).arg(item.height)
+            solid ? QStringLiteral("Color sólido · %1×%2").arg(item.width).arg(item.height)
+            : item.still    ? QStringLiteral("Imagen · %1×%2").arg(item.width).arg(item.height)
             : item.hasVideo ? QStringLiteral("%1×%2 · %3 fps")
                                   .arg(item.width)
                                   .arg(item.height)
@@ -1410,6 +1420,60 @@ void Editor::newFolder(const QString& name) {
                  [&text](sharkcut::Document& d) { return sharkcut::addFolder(d, text) != 0; });
 }
 
+namespace {
+
+// Nombre de un color sólido en la biblioteca (sigue al color mientras no se cambie a mano).
+std::string solidColorName(std::uint32_t color) {
+    return (QStringLiteral("Color #") +
+            QStringLiteral("%1").arg(color, 6, 16, QLatin1Char('0')).toUpper())
+        .toStdString();
+}
+
+std::optional<std::uint32_t> colorFromText(const QString& text) {
+    const QColor color(text);
+    if (!color.isValid()) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(color.rgb()) & 0xFFFFFFu;
+}
+
+} // namespace
+
+qint64 Editor::addSolidColor(const QString& color, qint64 folderId) {
+    const std::optional<std::uint32_t> rgb = colorFromText(color);
+    if (!rgb || !hasSequence()) {
+        return 0;
+    }
+    // Del tamaño del lienzo de la secuencia activa, así la llena.
+    const sharkcut::ProjectSettings& settings = project().settings;
+    const sharkcut::SolidColor solid{*rgb, settings.width, settings.height};
+    const auto durationUs = static_cast<std::int64_t>(std::llround(stillSeconds() * 1e6));
+    ObjectId created = 0;
+    editDocument(QStringLiteral("Nuevo color sólido"), [&](sharkcut::Document& d) {
+        created = sharkcut::addSolidColor(d, solid, solidColorName(*rgb), durationUs,
+                                          settings.frameRate, static_cast<ObjectId>(folderId));
+        return created != 0;
+    });
+    return static_cast<qint64>(created);
+}
+
+void Editor::setSolidColor(qint64 mediaId, const QString& color) {
+    const std::optional<std::uint32_t> rgb = colorFromText(color);
+    if (!rgb) {
+        return;
+    }
+    const auto id = static_cast<ObjectId>(mediaId);
+    editDocument(QStringLiteral("Cambiar el color sólido"), [&](sharkcut::Document& d) {
+        for (MediaItem& item : d.media) {
+            const std::optional<sharkcut::SolidColor> old = sharkcut::solidColorOf(item.path);
+            if (item.id == id && old && item.name == solidColorName(old->color)) {
+                item.name = solidColorName(*rgb);
+            }
+        }
+        return sharkcut::setSolidColor(d, id, *rgb);
+    });
+}
+
 void Editor::renameFolder(qint64 folderId, const QString& name) {
     const std::string text = name.trimmed().toStdString();
     editDocument(QStringLiteral("Renombrar carpeta"), [&](sharkcut::Document& d) {
@@ -1482,6 +1546,9 @@ namespace {
 // los medios que no se encuentran.
 QStringList relinkAndCheck(sharkcut::LoadedDocument& loaded) {
     for (MediaItem& item : loaded.document.media) {
+        if (sharkcut::isSolidColorPath(item.path)) {
+            continue; // un color sólido no tiene archivo
+        }
         std::error_code ignored;
         const std::filesystem::path current = sharkcut::pathFromUtf8(item.path);
         if (std::filesystem::exists(current, ignored)) {
@@ -1499,7 +1566,8 @@ QStringList relinkAndCheck(sharkcut::LoadedDocument& loaded) {
     QStringList missing;
     for (const MediaItem& item : loaded.document.media) {
         std::error_code ignored;
-        if (!std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
+        if (!sharkcut::isSolidColorPath(item.path) &&
+            !std::filesystem::exists(sharkcut::pathFromUtf8(item.path), ignored)) {
             missing << QString::fromStdString(item.name);
         }
     }
@@ -2774,6 +2842,14 @@ sharkcut::ClipTransform Editor::withValues(sharkcut::ClipTransform t, const QVar
     take("shadowX", fx.shadowX);
     take("shadowY", fx.shadowY);
     take("shadowSpread", fx.shadowSpread);
+    flag("tintOn", fx.tintOn);
+    if (const auto it = values.find(QStringLiteral("tintColor")); it != values.end()) {
+        const QColor color(it->toString());
+        if (color.isValid()) {
+            fx.tintColor = static_cast<std::uint32_t>(color.rgb()) & 0xFFFFFFu;
+        }
+    }
+    take("tint", fx.tint);
     return sharkcut::clampTransform(t);
 }
 
@@ -2820,26 +2896,46 @@ void Editor::setClipTransform(qint64 clipId, const QVariantMap& values, const QS
 void Editor::fitClip(qint64 clipId, bool fill) {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);
-    if (!clip) {
+    const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
+    if (!item || item->width <= 0 || item->height <= 0) {
         return;
     }
-    sharkcut::ClipTransform t = transformOf(id);
-    t.scale = 1.0;
-    const CanvasBox base = canvasBox(*clip, t); // a escala 1, con su recorte
-    if (base.width <= 0 || base.height <= 0) {
-        return;
-    }
-    const double canvasW = project().settings.width;
-    const double canvasH = project().settings.height;
-    const double sx = canvasW / base.width;
-    const double sy = canvasH / base.height;
-    t.scale = fill ? std::max(sx, sy) : std::min(sx, sy);
-    // Centrar la parte visible (no el video entero, si está recortado).
-    t.x = -(t.cropLeft - t.cropRight) / 2.0 * base.fullWidth * t.scale;
-    t.y = -(t.cropTop - t.cropBottom) / 2.0 * base.fullHeight * t.scale;
+    const sharkcut::ClipTransform t =
+        sharkcut::fitToCanvas(project().settings, item->width, item->height, transformOf(id), fill);
     m_previewClip = 0;
     const std::int64_t frame = m_currentFrame;
     edit(fill ? QStringLiteral("Rellenar el lienzo") : QStringLiteral("Ajustar al lienzo"),
+         [id, t, frame](Project& p) { return sharkcut::setClipTransformAt(p, id, t, frame); });
+}
+
+void Editor::rotateClip(qint64 clipId, bool clockwise) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Clip* clip = project().clip(id);
+    const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
+    if (!item || item->width <= 0 || item->height <= 0) {
+        return;
+    }
+    const sharkcut::ProjectSettings& settings = project().settings;
+    sharkcut::ClipTransform t = transformOf(id);
+    // Si estaba ajustado o rellenando el lienzo, después del giro sigue así; si no (p. ej.
+    // una cámara pequeña en una esquina), solo gira.
+    const auto same = [](const sharkcut::ClipTransform& a, const sharkcut::ClipTransform& b) {
+        return std::abs(a.scale - b.scale) < 1e-3 && std::abs(a.x - b.x) < 0.5 &&
+               std::abs(a.y - b.y) < 0.5;
+    };
+    const bool fitted =
+        same(t, sharkcut::fitToCanvas(settings, item->width, item->height, t, false));
+    const bool filled =
+        same(t, sharkcut::fitToCanvas(settings, item->width, item->height, t, true));
+    t.rotation += clockwise ? 90.0 : -90.0;
+    if (filled && !fitted) {
+        t = sharkcut::fitToCanvas(settings, item->width, item->height, t, true);
+    } else if (fitted) {
+        t = sharkcut::fitToCanvas(settings, item->width, item->height, t, false);
+    }
+    m_previewClip = 0;
+    const std::int64_t frame = m_currentFrame;
+    edit(QStringLiteral("Girar 90°"),
          [id, t, frame](Project& p) { return sharkcut::setClipTransformAt(p, id, t, frame); });
 }
 
@@ -2887,6 +2983,9 @@ void Editor::applyEffect(qint64 clipId, const QString& effect) {
     if (effect == QLatin1String("byn")) {
         values = {{QStringLiteral("grayscaleOn"), true}, {QStringLiteral("grayscale"), 1.0}};
         label = QStringLiteral("Blanco y negro");
+    } else if (effect == QLatin1String("tinte")) {
+        values = {{QStringLiteral("tintOn"), true}};
+        label = QStringLiteral("Tinte");
     } else if (effect == QLatin1String("desenfoque")) {
         values = {{QStringLiteral("blurOn"), true}};
         label = QStringLiteral("Desenfoque");
@@ -3832,10 +3931,17 @@ void Editor::resetVideoSlots() {
             slot.clip = 0;
             slot.seekIndex = -1;
         }
-        // Lo último que se veía se conserva mientras llega lo nuevo, si sigue en la pista.
+        // Lo último que se veía se conserva mientras llega lo nuevo, si sigue en la pista y
+        // leyendo lo mismo (un color sólido que cambia de color, otro proxy… ya no vale: se
+        // daría por bueno sin esperar al nuevo).
         for (TrackVideo::Shown& shown : track.shown) {
             const auto ref = p.findClip(shown.clip);
-            if (!video || !ref || ref->track != t) {
+            const sharkcut::Clip* clip = ref ? p.clip(shown.clip) : nullptr;
+            const MediaItem* item = clip ? p.findMedia(clip->media) : nullptr;
+            if (!video || !ref || ref->track != t || !item || decodePath(*item) != shown.path) {
+                if (track.last == shown.frame) {
+                    track.last.reset();
+                }
                 shown = {};
             }
         }
@@ -4042,9 +4148,17 @@ bool Editor::takeTrackFrame(std::size_t t, qint64 frame) {
             all = false;
             continue;
         }
-        DecodeWorker& worker = *track.decoders[static_cast<std::size_t>(slot)].worker;
+        const VideoSlot& source = track.decoders[static_cast<std::size_t>(slot)];
+        DecodeWorker& worker = *source.worker;
         if (auto f = worker.takeUpTo(need.index)) {
             shown[k].frame = std::move(f);
+            shown[k].path = source.path;
+        } else {
+            for (const TrackVideo::Shown& before : track.shown) {
+                if (before.clip == need.clip->id && before.frame == shown[k].frame) {
+                    shown[k].path = before.path;
+                }
+            }
         }
         if (shown[k].frame) {
             track.last = shown[k].frame;
@@ -4090,6 +4204,8 @@ void Editor::play() {
     if (m_audioOutput) {
         m_audioOutput->takeMissingFrames(); // lo de antes no cuenta
     }
+    m_stalls.clear();
+    m_stallClock.start();
     const sharkcut::FrameRate rate = project().settings.frameRate;
     m_trace.begin(m_currentFrame, [rate](qint64 f) {
         return QString::fromStdString(sharkcut::formatTimecode(f, rate));
@@ -4164,6 +4280,8 @@ void Editor::seek(qint64 frame) {
     if (m_playing && m_speed == 1) {
         m_clock.start(sharkcut::frameToMicroseconds(frame, project().settings.frameRate));
         m_trace.restart(frame);
+        m_stalls.clear();
+        m_stallClock.restart();
         return;
     }
     if (m_playing) { // J/L: se sigue desde aquí
@@ -4232,12 +4350,72 @@ void Editor::advance() {
         assignTrack(t, target, false);
         takeTrackFrame(t, target);
     }
+    rescueStalledSlots(target);
     traceStep(target);
     setCurrentFrame(target);
     emit compositionChanged();
     if (reachedEnd) {
         pause();
     }
+}
+
+void Editor::rescueStalledSlots(qint64 frame) {
+    // Tras empezar o saltar, el primer fotograma puede tardar: no cuenta.
+    constexpr qint64 kGraceMs = 300;
+    // Sin fotograma y con el hilo quieto durante este tiempo: se da por atascado.
+    constexpr qint64 kStalledMs = 250;
+    // Como mucho una recolocación por clip en este tiempo (si la causa es otra, no se
+    // repite sin parar).
+    constexpr qint64 kRetryMs = 1500;
+    const qint64 now = m_stallClock.elapsed();
+    std::map<std::pair<std::size_t, ObjectId>, Stall> next;
+    for (std::size_t t : playedVideoTracks()) {
+        TrackVideo& track = m_video[t];
+        for (const Need& need : needsAt(t, frame)) {
+            const std::pair key{t, need.clip->id};
+            Stall stall;
+            if (const auto it = m_stalls.find(key); it != m_stalls.end()) {
+                stall = it->second;
+            } else {
+                stall.sinceMs = now;
+            }
+            const int slot = slotWith(t, need.clip->id);
+            if (slot < 0) {
+                next.emplace(key, stall);
+                continue;
+            }
+            const DecodeWorker& worker = *track.decoders[static_cast<std::size_t>(slot)].worker;
+            const DecodeWorker::Status status = worker.status();
+            const auto shown = track.frameOf(need.clip->id);
+            const qint64 shownIndex = shown ? shown->index : -1;
+            if (shownIndex != stall.shown || status.nextIndex != stall.next) {
+                stall.shown = shownIndex;
+                stall.next = status.nextIndex;
+                stall.sinceMs = now;
+            }
+            // Le falta su fotograma y el hilo está parado esperando (cola llena de otros
+            // fotogramas o tras servir la caché). Si está abriendo el archivo, buscando o
+            // decodificando, va lento pero avanza: recolocarlo lo empeoraría.
+            const bool late = shownIndex < need.index && !worker.finished();
+            const bool idle = status.opened && status.seekPending < 0 && status.waiting;
+            if (late && idle && now >= kGraceMs && now - stall.sinceMs >= kStalledMs &&
+                (stall.rescuedMs < 0 || now - stall.rescuedMs >= kRetryMs)) {
+                qInfo("Visor: pista %zu, clip %llu sin avanzar %lld ms (pedido %lld, último %lld, "
+                      "cola %lld–%lld, siguiente %lld): se vuelve a colocar su hilo",
+                      t + 1, static_cast<unsigned long long>(need.clip->id),
+                      static_cast<long long>(now - stall.sinceMs),
+                      static_cast<long long>(need.index), static_cast<long long>(shownIndex),
+                      static_cast<long long>(status.firstQueued),
+                      static_cast<long long>(status.lastQueued),
+                      static_cast<long long>(status.nextIndex));
+                placeSlot(t, slot, need.index, true);
+                stall.rescuedMs = now;
+                stall.sinceMs = now;
+            }
+            next.emplace(key, stall);
+        }
+    }
+    m_stalls = std::move(next);
 }
 
 void Editor::traceStep(qint64 frame) {
@@ -4305,6 +4483,9 @@ QString Editor::describeTraced(const PlaybackTrace::Visible& v) const {
         state += QStringLiteral(", siguiente %1").arg(st.nextIndex);
         if (st.endOfStream) {
             state += QStringLiteral(", al final del medio");
+        }
+        if (st.waiting) {
+            state += QStringLiteral(", parado esperando");
         }
         state += QStringLiteral(", caché %1").arg(st.cached);
         state += st.hwAccel.empty()

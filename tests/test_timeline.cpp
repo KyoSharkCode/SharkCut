@@ -832,6 +832,37 @@ TEST_CASE("The resources folder is found by its mark, not by its name", "[timeli
     CHECK(resourceFolder(d, "Recursos de SharkCut") != again);
 }
 
+TEST_CASE("Solid colors are media without a file", "[timeline][library]") {
+    Document d;
+    addSequence(d, "Short", {});
+    const ObjectId folder = addFolder(d, "Fondos");
+    const ObjectId solid =
+        addSolidColor(d, {0x112233, 1080, 1920}, "Fondo azul", 5'000'000, {60, 1}, folder);
+    const MediaItem* item = nullptr;
+    for (const MediaItem& m : d.media) {
+        if (m.id == solid) {
+            item = &m;
+        }
+    }
+    REQUIRE(item != nullptr);
+    CHECK(item->still);
+    CHECK(item->hasVideo);
+    CHECK_FALSE(item->hasAudio);
+    CHECK(item->folder == folder);
+    CHECK(item->width == 1080);
+    CHECK(solidColorOf(item->path)->color == 0x112233u);
+
+    CHECK(setSolidColor(d, solid, 0xFF0000));
+    CHECK(solidColorOf(item->path) == SolidColor{0xFF0000, 1080, 1920});
+    CHECK_FALSE(setSolidColor(d, solid, 0xFF0000)); // el mismo: nada que cambiar
+    CHECK_FALSE(setSolidColor(d, 999, 0x00FF00));
+
+    // Se pone en la línea de tiempo como una imagen.
+    const ObjectId seq = d.sequences.front().id;
+    REQUIRE(edit(d, seq, [&](Project& p) { return placeClip(p, solid, 0) != 0; }));
+    CHECK(d.view(seq).tracks[kVideoTrack].clips.size() == 1);
+}
+
 // --- Edición con rizo y marcadores ---
 
 TEST_CASE("Q and W remove up to the playhead and close the gap", "[timeline][ripple]") {

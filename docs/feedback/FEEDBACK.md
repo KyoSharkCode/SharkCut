@@ -16,8 +16,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
-| [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | En el plan |
-| [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | En el plan |
+| [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | Hecho |
+| [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | Hecho |
 | [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | En el plan |
 | [FB-016](#fb-016) | 2026-10-22 | Otro | Propuesta | Paneles reorganizables y diseños | En el plan |
 | [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Hecho |
@@ -48,9 +48,10 @@ Formato y estados: ver [README.md](README.md).
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
 | [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | Hecho |
-| [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | En el plan |
-| [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | En el plan |
-| [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | En el plan |
+| [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | Hecho |
+| [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Hecho |
+| [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Hecho |
+| [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
 
 ---
 
@@ -212,7 +213,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** Un efecto de color como el de blanco y negro, pero con cualquier color personalizado (teñir la imagen).
 - **Contexto:** Pestaña Efectos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md))
 
 <a id="fb-014"></a>
 ### FB-014 · Selector de color completo al pulsar el cuadro de color
@@ -223,7 +224,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** En los efectos con colores, al hacer clic en el cuadro del color, que se despliegue un selector con toda la gama para elegir el que se quiera.
 - **Contexto:** Ajustar colores de efectos (sombra, pantalla verde, subtítulos…).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md))
 
 <a id="fb-015"></a>
 ### FB-015 · Editar la secuencia después de crearla y guardarla como preset
@@ -710,7 +711,7 @@ Formato y estados: ver [README.md](README.md).
   hueco no hace nada (el doble clic abre Importar, M10).
 - **Decisión (Kyo):** para la 0.1.5, junto con el tinte y el selector de color (FB-013,
   FB-014) y las pistas de audio de los MKV (FB-009).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M22)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M22)
 
 <a id="fb-046"></a>
 ### FB-046 · La vista previa se congela un momento antes de una transición
@@ -742,7 +743,7 @@ Formato y estados: ver [README.md](README.md).
   transición.
 - **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
   en la 0.1.6.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
 
 <a id="fb-047"></a>
 ### FB-047 · A veces un clip no aparece en el visor hasta mover el cabezal
@@ -774,4 +775,20 @@ Formato y estados: ver [README.md](README.md).
   causa.
 - **Decisión (Kyo):** en la 0.1.5 se deja rastro en el registro para cazarlo; el arreglo,
   en la 0.1.6.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A16 y A17)
+
+<a id="fb-048"></a>
+### FB-048 · Girar 90° un video horizontal y ajustarlo al lienzo vertical
+- **Fecha:** 2026-10-27
+- **Quién:** Kyo
+- **Versión:** 0.1.5
+- **Área:** Propiedades
+- **Tipo:** Usabilidad
+- **Qué dijo:** que un video en horizontal se pueda rotar 90 grados y ajustar al lienzo
+  vertical; ahora se le hace complejo.
+- **Contexto:** shorts en vertical a partir de grabaciones horizontales.
+- **Notas:** la rotación existe (Propiedades, en grados), pero «Ajustar» y «Rellenar»
+  (Editor::fitClip) calculan la escala sin tener en cuenta el giro: un 16:9 girado 90° en
+  un lienzo 9:16 se queda pequeño y hay que escalarlo a mano (×1,78).
+- **Decisión (Kyo):** para la 0.1.6.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M23)

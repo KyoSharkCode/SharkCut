@@ -68,6 +68,7 @@ public:
         std::int64_t lastQueued = -1;
         std::int64_t nextIndex = -1; // el siguiente que pondrá en la cola
         bool endOfStream = false;
+        bool waiting = false;   // parado esperando (cola llena, al final o tras la caché)
         std::size_t cached = 0; // fotogramas en la caché (para ir hacia atrás)
         std::string hwAccel;    // "" = por software
     };
@@ -98,6 +99,7 @@ private:
     void remember(const std::shared_ptr<const VideoFrame>& frame);
     bool m_endOfStream = false;
     bool m_opened = false;
+    bool m_waiting = false; // el hilo está parado en m_wake
     bool m_stop = false;
     std::string m_hwAccelName;
 

@@ -2,7 +2,7 @@
 
 // Una capa del lienzo: un fotograma NV12 (plano Y + plano UV) con su transparencia (texA;
 // un píxel blanco si el video es opaco) y la opacidad del clip, en alfa premultiplicado.
-// Efectos: pantalla verde, blanco y negro, desenfoque y esquinas redondeadas.
+// Efectos: pantalla verde, blanco y negro, tinte, desenfoque y esquinas redondeadas.
 //
 // Modo sombra (params.w = 1): en vez del clip se dibuja su sombra o resplandor, con la
 // forma del clip (esquinas, transparencia y pantalla verde) difuminada, desplazada y del
@@ -25,6 +25,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 shadowColor; // rgb y opacidad de la sombra
     vec4 shadow;    // xy: difuminado (u, v); zw: desplazamiento (u, v)
     vec4 extra;     // x: crecimiento de la sombra (px)
+    vec4 tint;      // rgb: color del tinte; a: cuánto (0 = nada)
 } ubuf;
 
 layout(binding = 1) uniform sampler2D texY;
@@ -32,6 +33,15 @@ layout(binding = 2) uniform sampler2D texUV;
 layout(binding = 3) uniform sampler2D texA;
 
 const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722); // BT.709
+
+// La imagen en tonos del color del tinte: de negro al color en las sombras y del color a
+// blanco en las luces (así conserva el contraste), mezclada con la original.
+vec3 tinted(vec3 rgb) {
+    float l = clamp(dot(rgb, kLuma), 0.0, 1.0);
+    vec3 dark = ubuf.tint.rgb * (l * 2.0);
+    vec3 light = mix(ubuf.tint.rgb, vec3(1.0), l * 2.0 - 1.0);
+    return mix(rgb, l < 0.5 ? dark : light, ubuf.tint.a);
+}
 const int kTaps = 32;          // muestras del desenfoque (disco de Vogel)
 const float kGolden = 2.399963; // ángulo áureo
 
@@ -131,6 +141,9 @@ void main()
     vec3 rgb;
     float alpha = a * ubuf.params.x * keyAlpha(toRgb(y, uv), rgb);
     rgb = mix(rgb, vec3(dot(rgb, kLuma)), ubuf.params.y);
+    if (ubuf.tint.a > 0.0) {
+        rgb = tinted(rgb);
+    }
     if (ubuf.params.z > 0.0) {
         alpha *= roundedMask(v_texcoord, 0.0);
     }

@@ -3,9 +3,42 @@
 #include "core/edit.h" // clampTransform
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
+#include <cstdio>
 
 namespace sharkcut {
+
+std::string solidColorPath(const SolidColor& solid) {
+    char text[64];
+    std::snprintf(text, sizeof(text), "%06X:%dx%d", solid.color & 0xFFFFFFu,
+                  std::max(1, solid.width), std::max(1, solid.height));
+    return std::string(kSolidColorScheme) + text;
+}
+
+std::optional<SolidColor> solidColorOf(std::string_view path) {
+    if (!isSolidColorPath(path)) {
+        return std::nullopt;
+    }
+    path.remove_prefix(kSolidColorScheme.size());
+    const auto number = [&path](auto& value, int base, char end) {
+        const auto [rest, error] =
+            std::from_chars(path.data(), path.data() + path.size(), value, base);
+        if (error != std::errc{} ||
+            (end != 0 && (rest == path.data() + path.size() || *rest != end))) {
+            return false;
+        }
+        path.remove_prefix(static_cast<std::size_t>(rest - path.data()) + (end != 0 ? 1 : 0));
+        return true;
+    };
+    SolidColor solid;
+    if (path.size() < 7 || !number(solid.color, 16, ':') || !number(solid.width, 10, 'x') ||
+        !number(solid.height, 10, 0) || !path.empty() || solid.width <= 0 || solid.height <= 0 ||
+        solid.color > 0xFFFFFFu) {
+        return std::nullopt;
+    }
+    return solid;
+}
 
 double gainFromDb(double db) {
     if (!(db > kMinVolumeDb)) {
@@ -368,6 +401,8 @@ double& transformField(ClipTransform& t, AnimProperty p) {
         return t.effects.shadowX;
     case AnimProperty::ShadowY:
         return t.effects.shadowY;
+    case AnimProperty::Tint:
+        return t.effects.tint;
     }
     return t.x;
 }

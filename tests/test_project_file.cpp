@@ -82,7 +82,7 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 10") != std::string::npos);
+    CHECK(json.find("\"version\": 11") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 10"), 13, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 11"), 13, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.
@@ -303,6 +303,21 @@ TEST_CASE("The resources folder keeps its mark", "[project]") {
     CHECK(loaded.document.folder(folder)->resources);
 }
 
+TEST_CASE("Solid colors survive a round trip without a relative path", "[project]") {
+    Document d = sampleDocument();
+    const ObjectId solid = addSolidColor(d, {0x3AA8FF, 1920, 1080}, "Fondo", 4'000'000, {60, 1});
+    const std::string json = documentToJson(d, "/proyectos/mi.sharkp", {});
+    CHECK(json.find("sharkcut-color:3AA8FF:1920x1080") != std::string::npos);
+    CHECK(json.find("\"relativePath\": \"../sharkcut") == std::string::npos);
+    const LoadedDocument loaded = documentFromJson(json, "/otra/carpeta/mi.sharkp");
+    CHECK(loaded.document == d);
+    bool found = false;
+    for (const MediaItem& m : loaded.document.media) {
+        found = found || (m.id == solid && solidColorOf(m.path).has_value());
+    }
+    CHECK(found);
+}
+
 TEST_CASE("Older files open as a document with one sequence", "[project]") {
     const std::string json = R"({"version": 3,
         "settings": {"frameRate": [60, 1], "width": 1920, "height": 1080},
@@ -393,6 +408,9 @@ TEST_CASE("Clip effects survive a round trip and are clamped", "[project][efecto
     t.effects.shadowOn = true;
     t.effects.shadowColor = 0x3AA8FF;
     t.effects.shadowSpread = 10;
+    t.effects.tintOn = true;
+    t.effects.tintColor = 0x5856D6;
+    t.effects.tint = 0.75;
     REQUIRE(setClipTransform(p, clip, t));
     CHECK(projectFromJson(projectToJson(p, {}), {}).clip(clip)->transform == t);
 
@@ -400,10 +418,21 @@ TEST_CASE("Clip effects survive a round trip and are clamped", "[project][efecto
     bad.effects.blur = 1e6;
     bad.effects.shadowOpacity = -3;
     bad.effects.grayscale = 7;
+    bad.effects.tint = -1;
+    bad.effects.tintColor = 0xFF123456;
     const ClipTransform fixed = clampTransform(bad);
     CHECK(fixed.effects.blur == kMaxBlur);
     CHECK(fixed.effects.shadowOpacity == 0.0);
     CHECK(fixed.effects.grayscale == 1.0);
+    CHECK(fixed.effects.tint == 0.0);
+    CHECK(fixed.effects.tintColor == 0x123456u);
+}
+
+TEST_CASE("The tint amount can be animated", "[project][efectos]") {
+    REQUIRE(animPropertyFromId("tint") == AnimProperty::Tint);
+    ClipTransform t;
+    transformField(t, AnimProperty::Tint) = 0.25;
+    CHECK(t.effects.tint == 0.25);
 }
 
 TEST_CASE("Still images keep their flag and stretched clips", "[project][imagen]") {

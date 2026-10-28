@@ -42,6 +42,8 @@ QtObject {
         "lienzo": "M8 3h8v18H8zM11 18h2",
         "rellenar": "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5M8 8h8v8H8z",
         "restablecer": "M4 4v6h6M4.5 10A8 8 0 1 1 6 16.5",
+        "girarIzquierda": "M9 13h11v8H9zM4 9a7 7 0 0 1 12-5M4 3v6h6",
+        "girarDerecha": "M4 13h11v8H4zM20 9a7 7 0 0 0-12-5M20 3v6h-6",
         "mas": "M12 5v14M5 12h14",
         "cerrar": "M6 6l12 12M18 6L6 18",
         "transicion": "M4 12h16M14 6l6 6-6 6",

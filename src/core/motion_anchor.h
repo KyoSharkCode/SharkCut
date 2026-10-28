@@ -29,6 +29,12 @@ CanvasPoint mediaPointOnCanvas(const ProjectSettings& settings, int mediaWidth, 
 CanvasPoint canvasPointOnMedia(const ProjectSettings& settings, int mediaWidth, int mediaHeight,
                                const ClipTransform& transform, double x, double y);
 
+// La colocación con la que la parte visible del clip (con su recorte y su giro) se ve
+// entera en el lienzo (`fill` = false, con bandas si no encaja) o lo cubre entero (true),
+// centrada. Cambia la escala y la posición; el resto se queda como está.
+ClipTransform fitToCanvas(const ProjectSettings& settings, int mediaWidth, int mediaHeight,
+                          ClipTransform transform, bool fill);
+
 // La zona seguida en un fotograma de la línea de tiempo: su centro en el video del clip
 // seguido (fracciones, 0–1).
 struct AnchorSample {

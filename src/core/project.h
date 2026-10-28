@@ -49,6 +49,25 @@ struct MediaItem {
     friend bool operator==(const MediaItem&, const MediaItem&) = default;
 };
 
+// Color sólido: un medio sin archivo que se ve como una imagen fija de un color (fondos,
+// rellenos). Su ruta lo describe, "sharkcut-color:RRGGBB:ANCHOxALTO" (el tamaño es el del
+// lienzo al crearlo, para que lo llene), así lo dibujan el visor y la exportación como un
+// medio más.
+struct SolidColor {
+    std::uint32_t color = 0x000000; // 0xRRGGBB
+    int width = 1920;
+    int height = 1080;
+
+    friend bool operator==(const SolidColor&, const SolidColor&) = default;
+};
+inline constexpr std::string_view kSolidColorScheme = "sharkcut-color:";
+std::string solidColorPath(const SolidColor& solid);
+// El color de una ruta de color sólido (nullopt si es un archivo).
+std::optional<SolidColor> solidColorOf(std::string_view path);
+inline bool isSolidColorPath(std::string_view path) {
+    return path.substr(0, kSolidColorScheme.size()) == kSolidColorScheme;
+}
+
 enum class TrackKind { Video, Audio };
 
 // Pantalla verde (croma): vuelve transparente el color de fondo del clip para ver lo
@@ -86,6 +105,11 @@ struct ClipEffects {
     double shadowX = 0.0;         // desplazamiento
     double shadowY = 12.0;
     double shadowSpread = 0.0; // cuánto crece la forma antes de difuminarse
+    // Tinte: la imagen en tonos de un color (de negro al color en las sombras y del color a
+    // blanco en las luces), mezclada con la original.
+    bool tintOn = false;
+    std::uint32_t tintColor = 0xFF8A3D;
+    double tint = 1.0; // 0 = sin teñir, 1 = solo el tinte
 
     friend bool operator==(const ClipEffects&, const ClipEffects&) = default;
 };
@@ -139,14 +163,15 @@ enum class AnimProperty {
     ShadowSpread,
     ShadowX,
     ShadowY,
+    Tint,
 };
-inline constexpr std::size_t kAnimPropertyCount = 17;
+inline constexpr std::size_t kAnimPropertyCount = 18;
 // Identificadores estables (archivo de proyecto, interfaz), en el orden del enum.
 inline constexpr std::array<std::string_view, kAnimPropertyCount> kAnimPropertyIds{
     "x",       "y",         "scale",         "opacity",        "cropLeft",
     "cropTop", "cropRight", "cropBottom",    "rotation",       "grayscale",
     "blur",    "corners",   "shadowOpacity", "shadowSoftness", "shadowSpread",
-    "shadowX", "shadowY"};
+    "shadowX", "shadowY",   "tint"};
 std::optional<AnimProperty> animPropertyFromId(std::string_view id);
 // El campo de la transformación que anima la propiedad.
 double& transformField(ClipTransform& transform, AnimProperty property);

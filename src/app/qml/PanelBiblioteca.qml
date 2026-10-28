@@ -253,9 +253,13 @@ ColumnLayout {
         spacing: 4
         Component.onCompleted: model = biblioteca.elementos
         ScrollBar.vertical: ScrollBar {}
-        // Doble clic en un hueco (no sobre un elemento): importar.
+        // Doble clic en un hueco (no sobre un elemento): importar; clic derecho: su menú.
         TapHandler {
             onDoubleTapped: biblioteca.importar()
+        }
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: menuHueco.popup()
         }
 
         delegate: Rectangle {
@@ -360,6 +364,10 @@ ColumnLayout {
         ScrollBar.vertical: ScrollBar {}
         TapHandler {
             onDoubleTapped: biblioteca.importar()
+        }
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: menuHueco.popup()
         }
 
         delegate: Item {
@@ -483,6 +491,51 @@ ColumnLayout {
     // --- Menús y diálogos ---
     DialogoNombre { id: dialogoNombre }
 
+    // Elegir el color de un color sólido nuevo (`medio` = 0) o de uno que ya existe.
+    SelectorColor {
+        id: selectorSolido
+        property var medio: 0
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        Overlay.modal: Rectangle { color: Theme.velo }
+        function pedir(medio, color) {
+            selectorSolido.medio = medio
+            selectorSolido.color = color
+            selectorSolido.titulo = medio === 0 ? "Nuevo color sólido" : "Cambiar el color"
+            open()
+        }
+        onElegido: (c) => {
+            if (selectorSolido.medio === 0)
+                biblioteca.editor.addSolidColor(c, biblioteca.carpeta)
+            else
+                biblioteca.editor.setSolidColor(selectorSolido.medio, c)
+        }
+    }
+
+    // Clic derecho en un hueco de la biblioteca.
+    MenuTema {
+        id: menuHueco
+        Action {
+            text: "Importar…"
+            onTriggered: biblioteca.importar()
+        }
+        Action {
+            text: "Nuevo color sólido…"
+            enabled: biblioteca.editor.hasSequence
+            onTriggered: selectorSolido.pedir(0, "#000000")
+        }
+        Action {
+            text: "Nueva carpeta…"
+            onTriggered: dialogoNombre.pedir("Nueva carpeta", "Carpeta nueva", "Crear",
+                                             (nombre) => biblioteca.editor.newFolder(nombre))
+        }
+        Action {
+            text: "Nueva secuencia…"
+            onTriggered: biblioteca.nuevaSecuencia()
+        }
+    }
+
     MenuTema {
         id: menuSecuencia
         property var elemento: null
@@ -564,6 +617,11 @@ ColumnLayout {
             text: "Añadir al final de la línea de tiempo"
             enabled: biblioteca.editor.hasSequence
             onTriggered: biblioteca.editor.addMedia(menuMedio.elemento.id, -1)
+        }
+        Action {
+            text: "Cambiar el color…"
+            enabled: menuMedio.elemento !== null && (menuMedio.elemento.solid || "").length > 0
+            onTriggered: selectorSolido.pedir(menuMedio.elemento.id, menuMedio.elemento.solid)
         }
         Action {
             text: "Sacar de la carpeta"

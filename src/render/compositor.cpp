@@ -56,8 +56,9 @@ struct LayerUniforms {
     float shadowColor[4];
     float shadow[4];
     float extra[4];
+    float tint[4];
 };
-static_assert(sizeof(LayerUniforms) == 288);
+static_assert(sizeof(LayerUniforms) == 304);
 
 // Tono de un color 0xRRGGBB relativo a su brillo (Cb, Cr de BT.709 entre luma + 0,1),
 // como lo calcula layer.frag.
@@ -535,6 +536,12 @@ void Compositor::prepareSource(Source& s, const VideoFrame& frame, const ClipTra
     std::copy(u.uvRect, u.uvRect + 4, u.cropUv);
     u.params[1] = fx.grayscaleOn ? f(fx.grayscale) : 0.0f;
     u.params[2] = fx.cornersOn ? f(fx.corners) : 0.0f;
+    if (fx.tintOn && fx.tint > 0.0) {
+        u.tint[0] = f(((fx.tintColor >> 16) & 0xFF) / 255.0);
+        u.tint[1] = f(((fx.tintColor >> 8) & 0xFF) / 255.0);
+        u.tint[2] = f((fx.tintColor & 0xFF) / 255.0);
+        u.tint[3] = f(fx.tint);
+    }
     updates->updateDynamicBuffer(s.uniforms.get(), 0, sizeof(u), &u);
 
     s.shadow = fx.shadowOn && fx.shadowOpacity > 0.0;

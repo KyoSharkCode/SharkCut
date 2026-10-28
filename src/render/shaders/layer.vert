@@ -21,6 +21,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 shadowColor;
     vec4 shadow;
     vec4 extra;
+    vec4 tint;
 } ubuf;
 
 void main()

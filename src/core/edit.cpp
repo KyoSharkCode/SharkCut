@@ -800,6 +800,8 @@ ClipTransform clampTransform(ClipTransform t) {
     fx.shadowX = std::clamp(finite(fx.shadowX, 0.0), -kMaxEffectPixels, kMaxEffectPixels);
     fx.shadowY = std::clamp(finite(fx.shadowY, 12.0), -kMaxEffectPixels, kMaxEffectPixels);
     fx.shadowSpread = std::clamp(finite(fx.shadowSpread, 0.0), 0.0, kMaxBlur);
+    fx.tintColor &= 0xFFFFFFu;
+    fx.tint = std::clamp(finite(fx.tint, 1.0), 0.0, 1.0);
     ChromaKey& key = t.chromaKey;
     key.color &= 0xFFFFFFu;
     key.similarity = std::clamp(finite(key.similarity, 0.40), 0.0, kMaxChromaDistance);

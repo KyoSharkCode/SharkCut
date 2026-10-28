@@ -70,6 +70,7 @@ Rectangle {
                 if (efecto.startsWith("ajuste:"))
                     return // un ajuste guardado: cambia varias secciones a la vez
                 propiedades.seccionPendiente = efecto === "byn" ? seccionByn
+                    : efecto === "tinte" ? seccionTinte
                     : efecto === "desenfoque" ? seccionDesenfoque
                     : efecto === "esquinas" ? seccionEsquinas : seccionSombra
                 desplazarCroma.restart()
@@ -836,6 +837,16 @@ Rectangle {
                         onPulsado: panel.editor.fitClip(propiedades.sel.video, true)
                     }
                     BotonIcono {
+                        icono: "girarIzquierda"
+                        ayuda: "Girar 90° a la izquierda (si estaba ajustado al lienzo, se vuelve a ajustar)"
+                        onPulsado: panel.editor.rotateClip(propiedades.sel.video, false)
+                    }
+                    BotonIcono {
+                        icono: "girarDerecha"
+                        ayuda: "Girar 90° a la derecha (p. ej. un video horizontal en un lienzo vertical)"
+                        onPulsado: panel.editor.rotateClip(propiedades.sel.video, true)
+                    }
+                    BotonIcono {
                         icono: "restablecer"
                         ayuda: "Restablecer posición, escala, opacidad y recorte"
                         onPulsado: panel.editor.resetTransform(propiedades.sel.video)
@@ -1027,13 +1038,32 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
-                    // Muestra del color que se quita (es un color del video, no del tema).
+                    // Muestra del color que se quita (es un color del video, no del tema); un
+                    // clic abre el selector con toda la gama.
                     Rectangle {
+                        id: muestraCroma
                         implicitWidth: 26
                         implicitHeight: 26
                         radius: Theme.radio
                         color: propiedades.croma.color || "transparent"
-                        border.color: Theme.borde
+                        border.color: zonaMuestraCroma.containsMouse ? Theme.acento : Theme.borde
+                        MouseArea {
+                            id: zonaMuestraCroma
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: selectorCroma.open()
+                        }
+                        ToolTip.visible: zonaMuestraCroma.containsMouse
+                        ToolTip.delay: 600
+                        ToolTip.text: "Elegir el color que se quita"
+                        SelectorColor {
+                            id: selectorCroma
+                            y: muestraCroma.height + 4
+                            color: propiedades.croma.color || "#00FF00"
+                            onElegido: (c) => propiedades.aplicar({ keyEnabled: true, keyColor: c },
+                                                                  "Pantalla verde")
+                        }
                     }
                     TextField {
                         id: campoColor
@@ -1164,6 +1194,33 @@ Rectangle {
                 valor: (propiedades.fx.grayscale !== undefined ? propiedades.fx.grayscale : 1) * 100
                 onCambiando: (v) => propiedades.vista({ grayscale: v / 100 })
                 onCambiado: (v) => propiedades.aplicar({ grayscale: v / 100 }, "Blanco y negro")
+            }
+
+            CabeceraEfecto {
+                id: seccionTinte
+                visible: propiedades.hayVideo && propiedades.fx.tintOn === true
+                titulo: "Tinte"
+                onQuitar: propiedades.aplicar({ tintOn: false }, "Quitar tinte")
+            }
+            CampoColor {
+                visible: seccionTinte.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Color"
+                color: propiedades.fx.tintColor || "#FF8A3D"
+                onElegido: (c) => propiedades.aplicar({ tintColor: c }, "Color del tinte")
+            }
+            CampoAnimable {
+                clave: "tint"
+                visible: seccionTinte.visible
+                enabled: propiedades.videoEditable
+                etiqueta: "Intensidad"
+                unidad: "%"
+                paso: 0.5
+                desde: 0
+                hasta: 100
+                valor: (propiedades.fx.tint !== undefined ? propiedades.fx.tint : 1) * 100
+                onCambiando: (v) => propiedades.vista({ tint: v / 100 })
+                onCambiado: (v) => propiedades.aplicar({ tint: v / 100 }, "Tinte")
             }
 
             CabeceraEfecto {
@@ -1450,13 +1507,31 @@ Rectangle {
             font.pixelSize: Theme.tamTextoPequeno
             elide: Text.ElideRight
         }
-        // Muestra del color elegido (es un color del video, no del tema).
+        // Muestra del color elegido (es un color del video, no del tema); un clic abre el
+        // selector con toda la gama.
         Rectangle {
+            id: muestra
             implicitWidth: 22
             implicitHeight: 22
             radius: 4
             color: campo.color
-            border.color: Theme.borde
+            border.color: zonaMuestra.containsMouse ? Theme.acento : Theme.borde
+            MouseArea {
+                id: zonaMuestra
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: selector.open()
+            }
+            ToolTip.visible: zonaMuestra.containsMouse
+            ToolTip.delay: 600
+            ToolTip.text: "Elegir el color"
+            SelectorColor {
+                id: selector
+                y: muestra.height + 4
+                color: campo.color
+                onElegido: (c) => campo.elegido(c)
+            }
         }
         TextField {
             id: codigo

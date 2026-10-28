@@ -479,6 +479,7 @@ Rectangle {
                     model: [
                         { clave: "croma", nombre: "Croma (pantalla verde)" },
                         { clave: "byn", nombre: "Blanco y negro" },
+                        { clave: "tinte", nombre: "Tinte de color" },
                         { clave: "desenfoque", nombre: "Desenfoque" },
                         { clave: "esquinas", nombre: "Esquinas redondeadas" },
                         { clave: "sombra", nombre: "Sombra" },

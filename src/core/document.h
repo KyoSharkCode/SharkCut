@@ -94,6 +94,12 @@ bool moveToFolder(Document& document, const std::vector<ObjectId>& items, Object
 ObjectId resourceFolder(Document& document, std::string name);
 
 // --- Medios ---
+// Color sólido nuevo en la biblioteca (en `folder`), como una imagen fija de `durationUs`
+// al ponerla en la línea de tiempo. Devuelve su id.
+ObjectId addSolidColor(Document& document, const SolidColor& solid, std::string name,
+                       std::int64_t durationUs, FrameRate rate, ObjectId folder = 0);
+// Cambia el color de un color sólido (todos sus clips cambian con él).
+bool setSolidColor(Document& document, ObjectId media, std::uint32_t color);
 // Quita el medio de la biblioteca y sus clips de todas las secuencias.
 bool removeMediaEverywhere(Document& document, ObjectId media);
 

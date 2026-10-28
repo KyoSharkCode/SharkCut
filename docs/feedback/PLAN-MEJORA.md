@@ -307,6 +307,20 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   (hoy se abren al llegar a su clip, dentro del hilo de audio) y crear las texturas de las
   transiciones antes de que hagan falta.
 - **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** sin el registro de A16 de un equipo donde pase todavía, se arreglaron las dos
+  causas que se pudieron demostrar y se añadió la red de seguridad. (1) Al cambiar el medio
+  que lee un clip (el color de un color sólido, por ejemplo), el visor seguía dando por bueno
+  el último fotograma, del mismo número, y no esperaba al nuevo hasta mover el cabezal: cada
+  fotograma mostrado guarda ahora de qué archivo salió (TrackVideo::Shown::path) y se
+  descarta si el clip ya lee de otro. (2) Los archivos de audio de la mezcla se abren 2 s
+  antes de que suenen (TimelineAudioSource, kOpenAhead), no al llegar a su clip dentro del
+  hilo del audio. Red de seguridad (Editor::rescueStalledSlots): si al reproducir un clip
+  visible no tiene su fotograma y su hilo está parado esperando (`DecodeWorker::Status::
+  waiting`, sin avanzar 250 ms), se vuelve a colocar, como un clic en el cabezal (como mucho
+  una vez cada 1,5 s por clip) y queda en el registro. Un hilo lento pero trabajando (video
+  pesado) no se toca: recolocarlo lo empeoraría. El primer juego de texturas de transición
+  ya se creaba al preparar el compositor (visto en A16). Tests: estado `waiting` del hilo.
+  Si a Kyo o a Mina les vuelve a pasar, el registro dirá si la red actuó y por qué.
 
 ---
 
@@ -339,6 +353,14 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   encaja.
 - **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
   El selector de color sirve también para los textos (M21) y el color sólido (M22).
+- **Hecho:** efecto «Tinte de color» (ClipEffects::tintOn, tintColor, tint; animable,
+  AnimProperty::Tint): en layer.frag la imagen pasa a tonos del color (de negro al color en
+  las sombras y del color a blanco en las luces) y se mezcla con la original según la
+  intensidad. Pestaña Efectos y su sección en Propiedades. Selector de color completo
+  (qml/SelectorColor.qml: cuadro de saturación y brillo, barra de tono, código #RRGGBB,
+  colores rápidos, Aplicar en un solo paso de deshacer) al pulsar cualquier muestra
+  (CampoColor: sombra, tinte, subtítulos; y el color de la pantalla verde). Archivo .sharkp
+  versión 11. Tests del núcleo; comprobado con Xvfb.
 
 ### M4 · Pistas de audio de un mismo archivo (MKV/OBS) · FB-009 · L
 - **Hacer:** detectar las pistas de audio de un medio y mostrarlas en Propiedades
@@ -535,6 +557,36 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   opacidad, keyframes, efectos). Va en el archivo .sharkp (la misma versión nueva que el
   texto de M21).
 - **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** un color sólido es un medio sin archivo cuya ruta lo describe,
+  "sharkcut-color:RRGGBB:ANCHOxALTO" (SolidColor, solidColorPath/solidColorOf en
+  project.h). VideoDecoder lo entiende y da un fotograma de ese color como una imagen fija
+  (MediaItem::still), así el visor, la exportación, las miniaturas, los efectos y los
+  keyframes funcionan sin nada más. Se crea del tamaño del lienzo de la secuencia activa
+  (addSolidColor en document.h) desde el clic derecho en un hueco de Medios (menú nuevo:
+  Importar, Nuevo color sólido, Nueva carpeta, Nueva secuencia), y su menú tiene «Cambiar el
+  color…» (setSolidColor: cambia en todos sus clips; su nombre «Color #RRGGBB» sigue al
+  color). No tiene ruta relativa ni cuenta como medio perdido. Archivo .sharkp versión 11.
+  Tests del núcleo y del decodificador; comprobado con Xvfb y exportando.
+
+### M23 · Girar 90° y ajustar al lienzo · FB-048 · S
+- **Problema:** girar un video horizontal para un lienzo vertical obliga a escalarlo a
+  mano: «Ajustar» y «Rellenar» (Editor::fitClip, con canvasBox) no tienen en cuenta la
+  rotación del clip.
+- **Hacer:** «Ajustar» y «Rellenar» usan la caja del clip ya girado (con 90° o 270°, ancho
+  y alto intercambiados; con otros ángulos, el rectángulo que lo contiene). Botones
+  «Girar 90° ↺» y «Girar 90° ↻» en Propiedades (junto a Ajustar y Rellenar) y en el menú
+  del clip de la línea de tiempo: giran el clip y lo vuelven a ajustar al lienzo en un
+  solo paso de deshacer (rellenando si ya rellenaba). Con la rotación animada, el giro se
+  guarda como keyframe en el cabezal, como el resto de cambios.
+- **Hecho cuando:** un clip 1920×1080 en una secuencia 1080×1920 queda a pantalla
+  completa con un clic en «Girar 90°».
+- **Para:** 0.1.6 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `fitToCanvas` (motion_anchor.h, con la geometría del compositor) ajusta o
+  rellena con la caja de la parte visible ya girada, centrando su centro (también con
+  recorte). Editor::rotateClip gira ±90° y vuelve a ajustar o a rellenar si el clip lo
+  estaba; si no (una cámara pequeña en una esquina), solo gira. Botones ↺ ↻ en Propiedades
+  (junto a Ajustar y Rellenar) y en el menú del clip. Test del núcleo; comprobado con Xvfb:
+  un 1920×1080 en una secuencia 1080×1920 queda a pantalla completa con un clic.
 
 ---
 
@@ -598,5 +650,5 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A17 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044, 046, 047 |
-| Media | M1–M22 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043 |
+| Media | M1–M23 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

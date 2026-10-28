@@ -10,18 +10,11 @@ Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.
 nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
 actualizar también esa página.
 
-Última actualización: 2026-10-27.
+Última actualización: 2026-10-28.
 
 ---
 
 ## Próximas versiones
-
-### 0.1.6 · Color y una vista previa más fiable
-| Punto | Qué trae | Tamaño |
-|-------|----------|--------|
-| M3 | Efecto de tinte de color y un selector de color completo en todas las muestras de color (efectos, pantalla verde, subtítulos). | Medio |
-| M22 | Crear un color sólido desde Medios (clic derecho en un hueco), para fondos y rellenos. | Medio |
-| A17 | Corregir los clips que a veces no aparecen al reproducir y las imágenes congeladas antes de una transición (con lo que diga el rastro de A16). | Medio |
 
 ### 0.1.7 · Texto y audio de las grabaciones
 | Punto | Qué trae | Tamaño |
@@ -74,6 +67,13 @@ Cambios grandes o comodidades que pueden esperar.
 ---
 
 ## Versiones publicadas
+
+### 0.1.6 · 2026-10-28
+- Efecto de tinte de color y selector de color completo en todas las muestras (M3).
+- Colores sólidos desde Medios, con clic derecho en un hueco (M22).
+- Vista previa más fiable: clips que no aparecían y archivos de audio que se abrían tarde
+  (A17).
+- Girar 90° con un botón y ajustarse solo al lienzo (M23).
 
 ### 0.1.5 · 2026-10-27
 - Los sonidos de SharkCut van a su carpeta de Medios, «Recursos de SharkCut» (M19).

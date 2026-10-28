@@ -57,6 +57,7 @@ void DecodeWorker::seek(std::int64_t index) {
             }
             m_seekTarget = -1;
             m_resumeAt = next;
+            m_resumeEarly = previous <= index;
             m_nextIndex = next;
             served = true;
         } else {
@@ -179,9 +180,10 @@ void DecodeWorker::run() {
             std::unique_lock lock(m_mutex);
             m_waiting = true;
             m_wake.wait(lock, [this] {
-                // Tras servir desde la caché, se espera a que se consuma lo servido.
+                // Tras servir desde la caché hacia atrás, se espera a que se consuma lo
+                // servido; hacia delante se sigue ya (m_resumeEarly).
                 const bool wantsMore = m_resumeAt >= 0
-                                           ? m_queue.empty()
+                                           ? m_resumeEarly || m_queue.empty()
                                            : !m_endOfStream && m_queue.size() < m_capacity;
                 return m_stop || m_seekTarget >= 0 || wantsMore;
             });

@@ -22,6 +22,7 @@ actualizar también esa página.
 | M21 | Editor de texto: textos libres en la línea de tiempo que se colocan en cualquier parte de la pantalla, con su estilo, keyframes y efectos. Pestaña nueva «Texto» en el panel. | Grande |
 | M4 | Pistas de audio por separado de las grabaciones que guardan varias (por ejemplo, micrófono y juego en un MKV). | Grande |
 | A18 | En un corte ya no aparece un momento el clip anterior al reproducir desde la mitad del clip de antes (hecho). | Pequeño |
+| A20 | La imagen ya no se queda quieta un momento al volver a reproducir desde un punto ya visto (hecho; posible causa de lo que le pasaba a Mina antes de una transición). | Pequeño |
 | A19 | Registro más claro: tildes bien escritas en Windows, sin los avisos sin importancia de FFmpeg y sin la falsa alarma de audio al final de la secuencia (hecho). | Pequeño |
 
 ### 0.1.8 · Secuencias y rendimiento

@@ -350,6 +350,21 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   falsa alarma al final); las tildes, en Windows con la versión siguiente.
 - **Para:** 0.1.7 (decidido con Kyo, 2026-10-28).
 
+### A20 · La imagen se queda quieta al volver a reproducir desde un punto ya visto · FB-046 · S
+- **Problema:** al reproducir otra vez desde un sitio por el que ya se había pasado, la
+  imagen se paraba unos 0,3 s al poco de empezar (visto con Xvfb probando A19; pasaba igual
+  en la 0.1.6). Encaja con FB-046 (Mina: se congela antes de una transición, más de una
+  vez), si repasaba el mismo tramo.
+- **Causa:** DecodeWorker sirve desde su caché los primeros fotogramas y, hasta que se
+  consumían todos, no volvía a colocarse en el archivo; esa colocación (ir al fotograma
+  clave y decodificar hasta el punto) es lo lento, y llegaba justo cuando ya no quedaba
+  nada que mostrar.
+- **Hecho:** tras servir desde la caché hacia delante, el hilo se coloca enseguida detrás de
+  lo servido (`m_resumeEarly`); hacia atrás (J) sigue esperando, porque cada paso es otra
+  búsqueda. Test del hilo; con Xvfb, 9 reproducciones repetidas sin ningún suceso (antes, 2
+  de 3) y J sigue funcionando. Falta que Mina lo pruebe.
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-28).
+
 ---
 
 ## Prioridad media (0.2.0)

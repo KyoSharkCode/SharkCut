@@ -343,6 +343,46 @@ TEST_CASE("DecodeWorker says when it is waiting with a full queue", "[media]") {
     REQUIRE(waitFor([&] { return worker.status().lastQueued == 25; }));
 }
 
+TEST_CASE("DecodeWorker resumes right away after serving forward from its cache", "[media]") {
+    TempClip clip({.frames = 300, .gopSize = 120});
+    DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 8);
+    // Reproducir del 100 al 140 deja esos fotogramas en la caché.
+    worker.seek(100);
+    std::int64_t last = 100;
+    REQUIRE(waitFor([&] {
+        if (worker.takeUpTo(last)) {
+            ++last;
+        }
+        return last > 140;
+    }));
+    // Volver a reproducir desde el 110: se sirve de la caché y, sin que nadie consuma
+    // nada, el hilo ya se coloca detrás de lo servido (no se queda esperando a vaciarlo).
+    worker.seek(110);
+    CHECK(worker.status().firstQueued == 110);
+    REQUIRE(waitFor([&] {
+        const auto s = worker.status();
+        return s.waiting && s.lastQueued > 117;
+    }));
+    CHECK(worker.status().lastQueued == 118);
+    // Lo que viene después sigue en orden.
+    last = 110;
+    for (int i = 0; i < 30; ++i) {
+        REQUIRE(waitFor([&] { return worker.hasFrame(last); }));
+        const auto f = worker.takeUpTo(last);
+        REQUIRE(f);
+        CHECK(f->index == last);
+        ++last;
+    }
+
+    // Hacia atrás (un paso de J) espera a que se consuma lo servido.
+    worker.seek(130);
+    REQUIRE(waitFor([&] { return worker.status().waiting && worker.status().firstQueued == 130; }));
+    worker.seek(125);
+    REQUIRE(waitFor([&] { return worker.status().waiting && worker.status().firstQueued == 125; }));
+    const auto back = worker.status();
+    CHECK(back.lastQueued - back.firstQueued <= 7);
+}
+
 TEST_CASE("DecodeWorker informa si el archivo no se puede abrir", "[media]") {
     std::atomic<bool> failed = false;
     DecodeWorker::Callbacks callbacks;

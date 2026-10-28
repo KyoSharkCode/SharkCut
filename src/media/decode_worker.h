@@ -90,6 +90,11 @@ private:
     // Tras servir una búsqueda desde la caché, dónde seguir decodificando cuando se acabe
     // lo servido (-1 = nada pendiente).
     std::int64_t m_resumeAt = -1;
+    // Tras servir desde la caché yendo hacia delante, colocarse ya en `m_resumeAt` (sin
+    // esperar a que se consuma lo servido): la colocación es lo lento y, si espera, la
+    // imagen se queda quieta al acabarse lo servido. Hacia atrás (J) no: cada paso es otra
+    // búsqueda y se perdería el trabajo.
+    bool m_resumeEarly = false;
     std::int64_t m_lastRequest = -1; // último destino pedido (para notar que se va atrás)
     std::int64_t m_nextIndex = -1;   // el siguiente que se pondrá en la cola
     std::map<std::int64_t, std::shared_ptr<const VideoFrame>> m_cache;

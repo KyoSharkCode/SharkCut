@@ -412,6 +412,18 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Por decidir:** PLAN.md asume grabaciones de OBS con una sola pista de audio; esto
   cambia esa decisión.
 - **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** cada clip de audio guarda qué pista del archivo suena (`Clip::audioStream`;
+  −1 = la principal, como antes; n = la n-ésima del archivo). `AudioDecoder`,
+  `computeWaveform` y `TimelineAudioSource` abren esa pista; la caché de ondas guarda una
+  por pista. `probeMedia` da el nombre de cada pista (metadato `title`, el que pone OBS) y
+  cuál es la principal. El editor las analiza en segundo plano la primera vez (los
+  proyectos no las guardan) y Propiedades, en la sección de audio, las lista: se elige cuál
+  suena, y «Cada pista en su propia pista de audio» (`separateAudioStreams`, edit.h) deja la
+  que suena en el clip y pone cada una de las demás en un clip igual, sin enlace, en la
+  primera pista de audio libre de debajo (o una nueva); también con varios clips
+  seleccionados. En la línea de tiempo, «· pista N» en el nombre. Una pista por clip: para
+  mezclarlas, se separan. Archivo .sharkp versión 12. Tests con un MKV de dos pistas;
+  comprobado con Xvfb.
 
 ### M5 · Resolución de reproducción del visor · FB-020 (segunda parte) · M
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
@@ -588,6 +600,20 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   falta»); Kyo la adelanta porque hace falta: hoy solo se puede poner texto como
   subtítulo, que no se mueve libremente ni tiene keyframes.
 - **Para:** 0.1.7 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** un texto es un clip de video sin medio (`Clip::text`: contenido y
+  `CaptionStyle`, con la alineación nueva `align`). `text_frame.h` lo dibuja con el motor de
+  los subtítulos en un fotograma NV12 del tamaño del lienzo, con su plano de transparencia
+  (`TextFrameCache`, una por dueño), centrado: el compositor lo trata como un video más, así
+  la colocación, el giro, los keyframes, los efectos (la sombra sigue la forma de las letras)
+  y los ajustes guardados funcionan igual, y la exportación lo dibuja a su tamaño. En el
+  visor, la caja es la del texto. `placeText`/`setClipText` (edit.h; primera pista de video
+  libre desde la pedida, encima de lo que se ve). Editor: addText, addTextAtPlayhead,
+  setClipText, previewTextStyle/setTextStyle, applyTextPreset/saveTextPreset (los estilos
+  guardados de los subtítulos sirven para los dos). Interfaz: pestaña Texto en PanelMedios
+  (botón y estilos que se arrastran a una pista de video) y la sección del subtítulo en
+  Propiedades, que también edita textos (sin posición x/y: se colocan como un clip). Archivo
+  .sharkp versión 12. Tests del núcleo; comprobado con Xvfb (visor y exportación a otra
+  escala).
 
 ### M22 · Crear un color sólido desde Medios · FB-045 · M
 - **Hacer:** clic derecho en un hueco de Medios → menú con «Nuevo color sólido…» (y, de

@@ -12,7 +12,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
 | [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
-| [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | En el plan |
+| [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | Hecho |
 | [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
@@ -46,7 +46,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | Hecho |
 | [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | Hecho |
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
-| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
+| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | Hecho |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | Hecho |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | Hecho |
 | [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Hecho |
@@ -167,7 +167,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** Algunos formatos (como MKV) guardan varias pistas de audio en un archivo. Sería ideal que en Propiedades salieran por separado: agrandar ese panel con secciones Propiedades · Video · Audio, y si el audio tiene varias pistas/canales, que aparezcan y se puedan manejar una a una. También poder exportarlas o sacarlas a una pista separada de la línea de tiempo.
 - **Contexto:** Grabaciones de OBS con varias pistas de audio (micro, juego, música…).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M4)
 
 <a id="fb-010"></a>
 ### FB-010 · El punto de anclaje es confuso
@@ -680,7 +680,7 @@ Formato y estados: ver [README.md](README.md).
   cabezal»), pero van en sus pistas propias, sin la colocación libre ni los keyframes de
   los clips. PLAN.md tenía la herramienta de texto genérica en la fase 6.
 - **Decisión (Kyo):** para la 0.1.5.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
 
 <a id="fb-044"></a>
 ### FB-044 · Cortar subtítulos con la cuchilla y alargarlos por el borde

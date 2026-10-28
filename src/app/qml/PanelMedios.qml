@@ -378,7 +378,7 @@ Rectangle {
             BotonIcono {
                 Layout.fillWidth: true
                 icono: "mas"
-                texto: "Añadir un subtítulo o texto en el cabezal"
+                texto: "Añadir un subtítulo en el cabezal"
                 enabled: panel.editor.hasSequence
                 ayuda: "También: doble clic en una pista de subtítulos"
                 onPulsado: panel.editor.addCaptionAtPlayhead(-1)

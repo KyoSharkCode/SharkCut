@@ -4472,9 +4472,10 @@ QString Editor::describeTraced(const PlaybackTrace::Visible& v) const {
     } else {
         const VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
         const DecodeWorker::Status st = s.worker->status();
-        QString state = s.seekIndex >= 0
-                            ? QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex)
-                            : QStringLiteral("hilo %1 ya dando fotogramas").arg(slot + 1);
+        QString state =
+            s.seekIndex >= 0
+                ? QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex)
+                : QStringLiteral("hilo %1 ya dando fotogramas").arg(slot + 1);
         if (item && s.path != item->path) {
             state += QStringLiteral(" (proxy)");
         }

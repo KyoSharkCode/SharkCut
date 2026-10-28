@@ -780,8 +780,7 @@ TEST_CASE("detectKeyColor finds the background of a green screen", "[media][crom
 // Un hilo que estaba más adelante en el archivo y se coloca para otro clip del mismo
 // archivo, antes o después (cortes que repiten o saltan una parte de la grabación):
 // su cola empieza justo en el fotograma pedido.
-TEST_CASE("DecodeWorker placed again for another part of the same file starts there",
-          "[media]") {
+TEST_CASE("DecodeWorker placed again for another part of the same file starts there", "[media]") {
     for (bool fragmented : {false, true}) {
         TempClip clip({.frames = 300, .gopSize = 120, .fragmented = fragmented});
         DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 8);

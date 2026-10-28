@@ -91,7 +91,7 @@ void Updater::check(bool quiet) {
             return;
         }
         if (reply->error() != QNetworkReply::NoError) {
-            qWarning("Actualizaciones: %s", qPrintable(reply->errorString()));
+            qWarning("Actualizaciones: %s", qUtf8Printable(reply->errorString()));
             setState(quiet ? QString() : QStringLiteral("error"),
                      quiet ? QString()
                            : QStringLiteral("No se pudo comprobar (¿sin conexión?): %1")
@@ -127,7 +127,7 @@ void Updater::check(bool quiet) {
                         .filePath(QStringLiteral("actualizaciones/") + name);
             }
         }
-        qInfo("Actualizaciones: hay una versión nueva, %s", qPrintable(m_latest));
+        qInfo("Actualizaciones: hay una versión nueva, %s", qUtf8Printable(m_latest));
         setState(QStringLiteral("disponible"),
                  QStringLiteral("SharkCut %1 está disponible").arg(m_latest));
         emit updateFound();
@@ -206,7 +206,7 @@ void Updater::runPendingInstaller() {
         return;
     }
     // Instalación con su barra de progreso, sin preguntas; al terminar abre SharkCut.
-    qInfo("Actualizaciones: se instala %s", qPrintable(path));
+    qInfo("Actualizaciones: se instala %s", qUtf8Printable(path));
     QProcess::startDetached(
         path, {QStringLiteral("/SP-"), QStringLiteral("/SILENT"), QStringLiteral("/NOCANCEL")});
 }

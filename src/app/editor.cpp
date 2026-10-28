@@ -4048,7 +4048,7 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
                 const double ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::steady_clock::now() - opening)
                                       .count();
-                qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qPrintable(name), ms);
+                qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qUtf8Printable(name), ms);
             };
         slot.worker =
             std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
@@ -4427,7 +4427,14 @@ void Editor::traceStep(qint64 frame) {
     if (!m_trace.active()) {
         return;
     }
-    m_trace.audioMissing(m_audioOutput ? m_audioOutput->takeMissingFrames() : 0);
+    std::int64_t missing = m_audioOutput ? m_audioOutput->takeMissingFrames() : 0;
+    // En los últimos 100 ms de la secuencia el audio se acaba (su último bloque sale
+    // incompleto): no es que falten muestras.
+    const sharkcut::FrameRate rate = project().settings.frameRate;
+    if (frame >= frameCount() - std::max<qint64>(1, sharkcut::mulDiv(rate.num, 1, 10 * rate.den))) {
+        missing = 0;
+    }
+    m_trace.audioMissing(missing);
     std::vector<PlaybackTrace::Visible> visible;
     for (std::size_t t : playedVideoTracks()) {
         const TrackVideo& track = m_video[t];
@@ -4594,7 +4601,7 @@ void Editor::setBusy(bool busy) {
 
 void Editor::setError(const QString& message) {
     if (!message.isEmpty()) {
-        qWarning("%s", qPrintable(message));
+        qWarning("%s", qUtf8Printable(message));
     }
     if (m_errorString != message) {
         m_errorString = message;

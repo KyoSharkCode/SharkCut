@@ -41,4 +41,9 @@ struct MediaInfo {
 // Analiza un archivo (ruta en UTF-8) sin decodificarlo. Lanza MediaError si falla.
 MediaInfo probeMedia(const std::string& path);
 
+// FFmpeg solo escribe sus errores (en stderr, que va al registro de la sesión): sus avisos
+// sobre metadatos que no entiende o referencias de H.264 que se arreglan solas llenaban el
+// registro de cientos de líneas sin importancia.
+void quietMediaLog();
+
 } // namespace sharkcut

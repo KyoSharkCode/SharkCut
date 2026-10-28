@@ -141,7 +141,7 @@ void Editor::createCaptions(const QVariantMap& options) {
 void Editor::startDownload(const std::shared_ptr<Transcription>& job) {
     const QUrl url(QString::fromLatin1(sharkcut::kSpeechModelBaseUrl) +
                    QString::fromLatin1(job->model.file));
-    qInfo("Subtítulos: descargando el modelo a %s", qPrintable(job->modelPath));
+    qInfo("Subtítulos: descargando el modelo a %s", qUtf8Printable(job->modelPath));
     auto* thread = new QThread;
     auto* download =
         new ModelDownload(url, job->modelPath, job->model.size, QByteArray(job->model.sha256));
@@ -180,7 +180,7 @@ void Editor::startDownload(const std::shared_ptr<Transcription>& job) {
 }
 
 void Editor::startTranscription(const std::shared_ptr<Transcription>& job) {
-    qInfo("Subtítulos: transcribiendo con %s", qPrintable(job->modelPath));
+    qInfo("Subtítulos: transcribiendo con %s", qUtf8Printable(job->modelPath));
     setTranscribeState(0.0, QStringLiteral("Transcribiendo el audio…"));
     checkSpeechModels(); // si se acaba de descargar, el diálogo ya lo dice
     QPointer<Editor> self(this);

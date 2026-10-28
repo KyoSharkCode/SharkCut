@@ -96,6 +96,10 @@ VideoStreamInfo describeVideoStream(const AVFormatContext* format, const AVStrea
 
 } // namespace detail
 
+void quietMediaLog() {
+    av_log_set_level(AV_LOG_ERROR);
+}
+
 MediaInfo probeMedia(const std::string& path) {
     ff::FormatContextPtr format = ff::openInput(path);
 

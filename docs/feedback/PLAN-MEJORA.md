@@ -336,6 +336,19 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   Xvfb (un clip que vuelve a una parte anterior del mismo archivo, reproduciendo desde la
   mitad del anterior): antes, 3 destellos en 6 reproducciones; después, ninguno. Test del
   hilo colocado de nuevo en otra parte del mismo archivo.
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-28).
+
+### A19 · Registro más claro · S
+- **Problema:** en los registros de Kyo (Windows) las tildes, el «·» y las comillas «»
+  salían como «�», cientos de líneas de avisos de FFmpeg sin importancia (UDTA, mmco,
+  duración estimada de un MP3) tapaban lo demás, y el rastro avisaba de «audio sin
+  muestras» al llegar al final de la secuencia.
+- **Hecho:** los mensajes del registro usan `qUtf8Printable` (qInfo espera UTF-8;
+  `qPrintable` daba la codificación local de Windows). `quietMediaLog` (media_info.h) deja
+  que FFmpeg solo escriba sus errores. traceStep no cuenta el audio que falta en los
+  últimos 100 ms de la secuencia (su último bloque sale incompleto). Comprobado con Xvfb (sin
+  falsa alarma al final); las tildes, en Windows con la versión siguiente.
+- **Para:** 0.1.7 (decidido con Kyo, 2026-10-28).
 
 ---
 

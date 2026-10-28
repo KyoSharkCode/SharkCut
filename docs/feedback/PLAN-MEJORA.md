@@ -322,6 +322,21 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   ya se creaba al preparar el compositor (visto en A16). Tests: estado `waiting` del hilo.
   Si a Kyo o a Mina les vuelve a pasar, el registro dirá si la red actuó y por qué.
 
+### A18 · El clip anterior aparece un momento en un corte · FB-049, FB-047 · S
+- **Problema:** al reproducir desde la mitad de un clip, en el corte se veía un momento el
+  último fotograma del clip anterior en lugar del siguiente (y, antes de la red de
+  seguridad de A17, más de un segundo: FB-047).
+- **Causa:** `VideoSlot::seekIndex` dice dónde se colocó un hilo, no dónde está. Al
+  reproducir un clip, su hilo avanza, pero seguía apuntado en su primer fotograma; si
+  después se reproducía desde antes de ese clip, assignTrack lo daba por preparado
+  (`seekIndex == next->index`) y no lo recolocaba, con la cola llena de fotogramas de más
+  adelante.
+- **Hecho:** takeTrackFrame pone `seekIndex = -1` en cuanto un hilo da fotogramas a un clip
+  que se ve, así vuelve a colocarse si ese clip vuelve a ser el siguiente. Reproducido con
+  Xvfb (un clip que vuelve a una parte anterior del mismo archivo, reproduciendo desde la
+  mitad del anterior): antes, 3 destellos en 6 reproducciones; después, ninguno. Test del
+  hilo colocado de nuevo en otra parte del mismo archivo.
+
 ---
 
 ## Prioridad media (0.2.0)

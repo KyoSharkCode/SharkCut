@@ -776,3 +776,44 @@ TEST_CASE("detectKeyColor finds the background of a green screen", "[media][crom
                     return std::array<int, 3>{v, v, v};
                 })).has_value());
 }
+
+// Un hilo que estaba más adelante en el archivo y se coloca para otro clip del mismo
+// archivo, antes o después (cortes que repiten o saltan una parte de la grabación):
+// su cola empieza justo en el fotograma pedido.
+TEST_CASE("DecodeWorker placed again for another part of the same file starts there",
+          "[media]") {
+    for (bool fragmented : {false, true}) {
+        TempClip clip({.frames = 300, .gopSize = 120, .fragmented = fragmented});
+        DecodeWorker worker(clip.path.string(), HwAccel::None, {}, 8);
+        // Como un clip que se reproduce del 150 al 230.
+        worker.seek(150);
+        std::int64_t last = 150;
+        REQUIRE(waitFor([&] {
+            if (auto f = worker.takeUpTo(last)) {
+                ++last;
+            }
+            return last >= 230;
+        }));
+        // Se coloca para otros clips del mismo archivo, antes y después.
+        for (std::int64_t target : {161, 200, 40, 225}) {
+            worker.seek(target);
+            REQUIRE(waitFor([&] {
+                const auto st = worker.status();
+                return st.waiting && st.seekPending < 0 && st.lastQueued >= 0 &&
+                       st.lastQueued - st.firstQueued == 7;
+            }));
+            const auto s = worker.status();
+            INFO("fragmented " << fragmented << " target " << target << " cola " << s.firstQueued
+                               << "-" << s.lastQueued);
+            CHECK(s.firstQueued == target);
+            last = target;
+            for (int i = 0; i < 20; ++i) {
+                REQUIRE(waitFor([&] { return worker.hasFrame(last) || worker.finished(); }));
+                if (auto f = worker.takeUpTo(last)) {
+                    CHECK(f->index == last);
+                }
+                ++last;
+            }
+        }
+    }
+}

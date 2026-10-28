@@ -4148,11 +4148,16 @@ bool Editor::takeTrackFrame(std::size_t t, qint64 frame) {
             all = false;
             continue;
         }
-        const VideoSlot& source = track.decoders[static_cast<std::size_t>(slot)];
+        VideoSlot& source = track.decoders[static_cast<std::size_t>(slot)];
         DecodeWorker& worker = *source.worker;
         if (auto f = worker.takeUpTo(need.index)) {
             shown[k].frame = std::move(f);
             shown[k].path = source.path;
+            // Ya ha dado fotogramas: no sigue en el punto donde se colocó. Si este clip
+            // vuelve a ser «el siguiente» (al reproducir otra vez desde antes de él), hay
+            // que colocarlo de nuevo; si no, su cola tendría fotogramas de más adelante y
+            // al entrar se vería el clip anterior hasta que llegara el bueno.
+            source.seekIndex = -1;
         } else {
             for (const TrackVideo::Shown& before : track.shown) {
                 if (before.clip == need.clip->id && before.frame == shown[k].frame) {
@@ -4467,7 +4472,9 @@ QString Editor::describeTraced(const PlaybackTrace::Visible& v) const {
     } else {
         const VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
         const DecodeWorker::Status st = s.worker->status();
-        QString state = QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex);
+        QString state = s.seekIndex >= 0
+                            ? QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex)
+                            : QStringLiteral("hilo %1 ya dando fotogramas").arg(slot + 1);
         if (item && s.path != item->path) {
             state += QStringLiteral(" (proxy)");
         }

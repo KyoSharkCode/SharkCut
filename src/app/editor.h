@@ -710,7 +710,8 @@ private:
         std::string path; // lo que tiene abierto: el original o su proxy
         std::unique_ptr<sharkcut::DecodeWorker> worker;
         sharkcut::ObjectId clip = 0; // clip para el que está colocado
-        std::int64_t seekIndex = -1; // fotograma del medio al que se colocó
+        // Fotograma del medio al que se colocó (-1 = ya ha dado fotogramas desde ahí).
+        std::int64_t seekIndex = -1;
     };
     // Reproducción de una pista de video: dos hilos, para el clip que se ve y el
     // siguiente preparado, o para los dos clips de una transición.

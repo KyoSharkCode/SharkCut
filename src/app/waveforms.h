@@ -29,9 +29,10 @@ public:
     explicit WaveformCache(QObject* parent = nullptr);
     ~WaveformCache() override; // abandona los cálculos pendientes y espera
 
-    // La forma de onda del archivo, o nullptr mientras se calcula (al terminar llega
-    // `ready`) o si no tiene audio.
-    std::shared_ptr<const sharkcut::Waveform> get(const QString& mediaPath);
+    // La forma de onda del archivo (de su pista de audio `audioStream`; −1 = la
+    // principal), o nullptr mientras se calcula (al terminar llega `ready`) o si no tiene
+    // audio.
+    std::shared_ptr<const sharkcut::Waveform> get(const QString& mediaPath, int audioStream = -1);
 
     // Carpeta de la caché en disco del proyecto activo ("" = solo en memoria).
     void setDirectory(const QString& directory);
@@ -41,7 +42,7 @@ public:
     void saveTo(const QString& directory, const QStringList& mediaPaths);
 
     // true mientras se lee de la caché o se calcula.
-    bool pending(const QString& mediaPath) const;
+    bool pending(const QString& mediaPath, int audioStream = -1) const;
 
 signals:
     void ready(const QString& mediaPath);
@@ -52,12 +53,13 @@ private:
         bool pending = false;
         bool failed = false;
     };
-    void finish(const QString& path, std::shared_ptr<const sharkcut::Waveform> waveform);
-    void save(const QString& directory, const QString& path,
+    using Key = std::pair<QString, int>; // archivo y pista de audio
+    void finish(const Key& key, std::shared_ptr<const sharkcut::Waveform> waveform);
+    void save(const QString& directory, const Key& key,
               std::shared_ptr<const sharkcut::Waveform> waveform);
 
     QThreadPool m_pool;
-    std::map<QString, Entry> m_entries;
+    std::map<Key, Entry> m_entries;
     QString m_directory;
     std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);
 };
@@ -70,6 +72,8 @@ class WaveformView : public QQuickPaintedItem {
 
     Q_PROPERTY(Editor* editor READ editor WRITE setEditor NOTIFY changed)
     Q_PROPERTY(qint64 mediaId READ mediaId WRITE setMediaId NOTIFY changed)
+    // Pista de audio del archivo (Clip::audioStream; −1 = la principal).
+    Q_PROPERTY(int audioStream READ audioStream WRITE setAudioStream NOTIFY changed)
     // Fotograma del medio (en fotogramas del proyecto) que cae en x = 0.
     Q_PROPERTY(double firstFrame READ firstFrame WRITE setFirstFrame NOTIFY changed)
     Q_PROPERTY(double framesPerPixel READ framesPerPixel WRITE setFramesPerPixel NOTIFY changed)
@@ -86,6 +90,8 @@ public:
     void setEditor(Editor* editor);
     qint64 mediaId() const { return m_mediaId; }
     void setMediaId(qint64 id);
+    int audioStream() const { return m_audioStream; }
+    void setAudioStream(int stream);
     double firstFrame() const { return m_firstFrame; }
     void setFirstFrame(double frame);
     double framesPerPixel() const { return m_framesPerPixel; }
@@ -114,6 +120,7 @@ private:
     std::shared_ptr<const sharkcut::Waveform> m_waveform;
     bool m_loading = false;
     qint64 m_mediaId = 0;
+    int m_audioStream = -1;
     double m_firstFrame = 0.0;
     double m_framesPerPixel = 1.0;
     double m_fps = 60.0;

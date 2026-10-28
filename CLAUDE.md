@@ -18,13 +18,14 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 11, que abre la 1, la 2
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 12, que abre la 1, la 2
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
   subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
   `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
   transiciones como clips, `effect` del clip, con la 9, las imágenes fijas, `still` del
-  medio, con la 10 y los colores sólidos y el tinte con la 11).
+  medio, con la 10, los colores sólidos y el tinte con la 11, y los textos libres, `text` del
+  clip, y la pista de audio del archivo de cada clip, `audioStream`, con la 12).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -119,6 +120,17 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   una imagen fija. addSolidColor/setSolidColor (document.h); en la interfaz, clic derecho en
   un hueco de Medios y «Cambiar el color…» en su menú.
   Colores elegibles: qml/SelectorColor.qml (toda la gama), se abre desde cada muestra.
+  Textos libres: Clip::text (TextClip: contenido y CaptionStyle, con `align`) en una pista
+  de video, sin medio. src/render/text_frame.h los dibuja con el motor de los subtítulos en
+  un fotograma del tamaño del lienzo con transparencia (TextFrameCache), que el compositor
+  trata como un video (visor: Editor::composition; exportación: SequenceExporter); no se
+  decodifican (Clip::hasMedia). placeText/setClipText (edit.h); Editor: addText,
+  setTextStyle… en editor_captions.cpp; interfaz: pestaña Texto de PanelMedios y la sección
+  del subtítulo en PanelPropiedades (también edita textos).
+  Varias pistas de audio en un archivo (MKV de OBS): Clip::audioStream (−1 = la principal)
+  elige cuál suena; AudioDecoder, computeWaveform y TimelineAudioSource la abren. Editor:
+  audioStreamsOf (análisis en segundo plano), setClipAudioStream y separateAudioStreams
+  (edit.h: cada pista a su propia pista de audio).
   Girar 90°: Editor::rotateClip; fitToCanvas (motion_anchor.h) ajusta con el giro.
   Los dos shaders de capa (layer.vert y layer.frag) declaran el mismo bloque de uniformes:
   un campo nuevo va en los dos (si no, OpenGL no los enlaza y el visor sale negro).
@@ -198,6 +210,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   <datos de la app>/registros/sharkcut-<fecha>.log (se guardan las últimas 8); en Windows,
   un cierre por fallo apunta el código y deja ultimo-cierre.dmp. Botón «Abrir la carpeta
   de registros» en Proyectos. SHARKCUT_LOG=consola: todo por la consola, sin archivo.
+  Mensajes con qUtf8Printable (no qPrintable: en Windows rompía las tildes); FFmpeg solo
+  escribe sus errores (quietMediaLog en media_info.h).
 - Entrega: versión en CMakeLists (project VERSION) y src/core/version.h (comparar versiones).
   Updater (src/app/updater.h, qml/DialogoActualizacion.qml): al abrir consulta
   releases/latest de GitHub (SHARKCUT_UPDATE_FEED la cambia para pruebas), descarga el

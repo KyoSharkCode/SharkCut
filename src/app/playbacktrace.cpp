@@ -118,8 +118,8 @@ void PlaybackTrace::step(qint64 frame, const std::vector<Visible>& visible,
             qInfo("Visor: pista %zu, clip %llu %s en %s: %s", v.track + 1,
                   static_cast<unsigned long long>(v.clip),
                   problem == Problem::Missing ? "sin fotograma" : "congelado",
-                  qPrintable(m_timecode ? m_timecode(frame) : QString::number(frame)),
-                  qPrintable(describe ? describe(v) : QString()));
+                  qUtf8Printable(m_timecode ? m_timecode(frame) : QString::number(frame)),
+                  qUtf8Printable(describe ? describe(v) : QString()));
         }
         next.emplace(key, state);
     }
@@ -151,8 +151,8 @@ void PlaybackTrace::audioMissing(qint64 frames) {
         qInfo("Audio: sin muestras preparadas durante %.0f ms en %s (el reloj del visor se "
               "paró)",
               static_cast<double>(m_audioBurst) / kAudioFramesPerMs,
-              qPrintable(m_timecode ? m_timecode(m_audioBurstFrame)
-                                    : QString::number(m_audioBurstFrame)));
+              qUtf8Printable(m_timecode ? m_timecode(m_audioBurstFrame)
+                                        : QString::number(m_audioBurstFrame)));
         m_audioBurst = 0;
     }
 }
@@ -175,7 +175,7 @@ void PlaybackTrace::end() {
     const QString to = m_timecode ? m_timecode(m_lastFrame) : QString::number(m_lastFrame);
     qInfo("Reproducción: de %s a %s (%lld fotogramas vistos, %lld ms); no llegaron a tiempo %lld "
           "fotogramas en %d sucesos; audio sin muestras %.0f ms en %d rachas",
-          qPrintable(from), qPrintable(to), static_cast<long long>(played),
+          qUtf8Printable(from), qUtf8Printable(to), static_cast<long long>(played),
           static_cast<long long>(m_clock.elapsed()), static_cast<long long>(m_lateFrames), m_events,
           static_cast<double>(m_audioMissingTotal) / kAudioFramesPerMs, m_audioBursts);
 }

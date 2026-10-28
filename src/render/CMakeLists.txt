@@ -5,6 +5,8 @@ add_library(sharkcut_render STATIC
     compositor.cpp
     caption_renderer.h
     caption_renderer.cpp
+    text_frame.h
+    text_frame.cpp
     sequence_exporter.h
     sequence_exporter.cpp
 )

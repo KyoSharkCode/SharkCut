@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "media/media_info.h"
 #include "thumbnails.h"
 #include "updater.h"
 
@@ -52,6 +53,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setOrganizationName(QStringLiteral("KyoSumiVT"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/SharkCut/icons/sharkcut.png")));
     logging::install();
+    sharkcut::quietMediaLog();
     // La descarga del modelo de subtítulos usa el proxy del sistema, si lo hay.
     QNetworkProxyFactory::setUseSystemConfiguration(true);
 

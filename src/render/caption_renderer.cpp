@@ -57,6 +57,7 @@ std::string keyOf(const std::string& text, const CaptionStyle& s, QSize canvas) 
     key += s.bold ? 'B' : '-';
     key += s.italic ? 'I' : '-';
     key += s.uppercase ? 'U' : '-';
+    key += static_cast<char>('1' + s.align);
     key += '\x1F' + std::to_string(canvas.width()) + 'x' + std::to_string(canvas.height());
     return key;
 }
@@ -86,7 +87,7 @@ CompositorOverlay renderCaption(const std::string& utf8, const CaptionStyle& sty
     if (lines.isEmpty()) {
         return {};
     }
-    // Contorno del texto, cada línea centrada.
+    // Contorno del texto, cada línea alineada según el estilo.
     const double lineHeight = metrics.lineSpacing();
     QPainterPath path;
     double widest = 0.0;
@@ -94,7 +95,7 @@ CompositorOverlay renderCaption(const std::string& utf8, const CaptionStyle& sty
         widest = std::max(widest, metrics.horizontalAdvance(line));
     }
     for (int i = 0; i < lines.size(); ++i) {
-        const double x = (widest - metrics.horizontalAdvance(lines[i])) / 2.0;
+        const double x = (widest - metrics.horizontalAdvance(lines[i])) * (style.align + 1) / 2.0;
         path.addText(x, metrics.ascent() + i * lineHeight, font, lines[i]);
     }
     const QSizeF textSize(widest, lineHeight * lines.size());

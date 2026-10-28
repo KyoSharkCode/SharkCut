@@ -133,6 +133,7 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectClips() const {
                     {QStringLiteral("in"), qint64{0}},
                     {QStringLiteral("media"), qint64{0}},
                     {QStringLiteral("volumeDb"), 0.0},
+                    {QStringLiteral("audioStream"), -1},
                     {QStringLiteral("transformed"), false},
                     {QStringLiteral("name"), QString()},
                 };

@@ -9,10 +9,12 @@
 #include "core/project.h"
 #include "core/project_file.h"
 #include "media/decode_worker.h"
+#include "media/media_info.h"
 #include "playbackclock.h"
 #include "playbacktrace.h"
 #include "proxies.h"
 #include "render/caption_renderer.h"
+#include "render/text_frame.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -235,8 +237,9 @@ public:
     QVariantMap selectedClip() const;
 
     // Forma de onda de un medio (nullptr mientras se calcula; llega waveformsChanged).
-    std::shared_ptr<const sharkcut::Waveform> waveform(qint64 mediaId);
-    bool waveformLoading(qint64 mediaId) const;
+    // (`audioStream`: la pista de audio del archivo, −1 = la principal.)
+    std::shared_ptr<const sharkcut::Waveform> waveform(qint64 mediaId, int audioStream = -1);
+    bool waveformLoading(qint64 mediaId, int audioStream = -1) const;
 
     QString projectName() const;
     QString canvasLabel() const;
@@ -552,6 +555,20 @@ public:
     // Vuelve a dividir la pista: {lines: "single"|"double"|"word", maxChars, minSeconds,
     // gapFrames, removePunctuation}.
     Q_INVOKABLE void relayoutCaptionTrack(int track, const QVariantMap& layout);
+
+    // --- Textos libres (editor_captions.cpp: usan el estilo de los subtítulos) ---
+    // Un texto nuevo en `frame`, en la primera pista de video libre desde `track` hacia
+    // arriba (−1: encima de lo que se ve ahí), con el estilo de un ajuste guardado
+    // (vacío: el de siempre); queda seleccionado.
+    Q_INVOKABLE void addText(int track, qint64 frame, const QString& preset = {});
+    Q_INVOKABLE void addTextAtPlayhead(const QString& preset = {});
+    Q_INVOKABLE void setClipText(qint64 clipId, const QString& text);
+    // Las mismas claves que previewCaptionStyle (salvo x e y: se coloca como un clip).
+    Q_INVOKABLE void previewTextStyle(qint64 clipId, const QVariantMap& values);
+    Q_INVOKABLE void setTextStyle(qint64 clipId, const QVariantMap& values,
+                                  const QString& label = {});
+    Q_INVOKABLE void applyTextPreset(qint64 clipId, const QString& name);
+    Q_INVOKABLE void saveTextPreset(qint64 clipId, const QString& name);
     Q_INVOKABLE void importSrt(const QUrl& file);
     Q_INVOKABLE void exportSrt(int track, const QUrl& file);
 
@@ -574,6 +591,11 @@ public:
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;
     // Volumen de un clip de audio, en dB.
     Q_INVOKABLE void setClipVolume(qint64 clipId, double volumeDb);
+    // Pistas de audio del archivo (MKV de OBS con varias): cuál suena en el clip de audio
+    // (−1 = la principal), y cada una a su propia pista de la línea de tiempo (en todos
+    // los clips de audio seleccionados de archivos con varias).
+    Q_INVOKABLE void setClipAudioStream(qint64 clipId, int stream);
+    Q_INVOKABLE void separateAudioStreams(qint64 clipId);
     // Separa el video y el audio de los clips seleccionados.
     Q_INVOKABLE void unlinkSelection();
 
@@ -710,7 +732,8 @@ private:
         std::string path; // lo que tiene abierto: el original o su proxy
         std::unique_ptr<sharkcut::DecodeWorker> worker;
         sharkcut::ObjectId clip = 0; // clip para el que está colocado
-        std::int64_t seekIndex = -1; // fotograma del medio al que se colocó
+        // Fotograma del medio al que se colocó (-1 = ya ha dado fotogramas desde ahí).
+        std::int64_t seekIndex = -1;
     };
     // Reproducción de una pista de video: dos hilos, para el clip que se ve y el
     // siguiente preparado, o para los dos clips de una transición.
@@ -863,6 +886,11 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    // Pistas de audio de cada archivo, analizadas en segundo plano la primera vez que se
+    // piden (los proyectos no las guardan): ruta → pistas (vacío = aún no se sabe).
+    mutable std::map<QString, std::vector<sharkcut::AudioStreamInfo>> m_audioStreams;
+    const std::vector<sharkcut::AudioStreamInfo>* audioStreamsOf(const QString& path) const;
+    QVariantList audioStreamList(const sharkcut::MediaItem& item, int selected) const;
     // Lo último que se anunció de la biblioteca (para avisar solo si cambia).
     void updateLibrary();
     QVariantList m_shownMedia;
@@ -935,6 +963,7 @@ private:
     void setClipsTransform(const std::vector<sharkcut::ObjectId>& clips, const QVariantMap& values,
                            const QString& label);
     mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
+    mutable sharkcut::TextFrameCache m_textFrames;       // textos libres ya convertidos
     std::vector<sharkcut::ObjectId> m_selectedCaptions;
     // Para Propiedades: por propiedad, {animated, key (hay keyframe en el cabezal), prev,
     // next}; y keyEasing: índice de la curva del keyframe del cabezal (−1 si no hay).
@@ -950,6 +979,12 @@ private:
         sharkcut::CaptionStyle style;
     };
     std::optional<CaptionPreview> m_captionPreview;
+    // Estilo provisional de un texto libre (mientras se arrastra un valor).
+    std::optional<std::pair<sharkcut::ObjectId, sharkcut::TextClip>> m_textPreview;
+    // El texto que se ve de un clip de texto (con la vista previa).
+    const sharkcut::TextClip& textOf(const sharkcut::Clip& clip) const;
+    QVariantMap textInfo(const sharkcut::Clip& clip) const; // contenido y estilo, para QML
+    void saveStylePreset(const QString& name, const sharkcut::CaptionStyle& style);
     // Transcripción en curso: lo que hace falta para terminarla (ver createCaptions).
     struct AnchorJob;
     std::shared_ptr<AnchorJob> m_anchor;

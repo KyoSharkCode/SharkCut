@@ -107,6 +107,13 @@ ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
 // quepa antes del clip siguiente).
 bool setClipEffect(Project& project, ObjectId clip, TransitionParams params);
 
+// Texto nuevo de `length` fotogramas a partir de `start`, en la pista de video `track` o
+// en la primera de encima libre en ese tramo (o en una nueva). Devuelve su id.
+ObjectId placeText(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                   TextClip text);
+// Cambia el contenido o el estilo de un texto.
+bool setClipText(Project& project, ObjectId clip, TextClip text);
+
 // Parte en dos los clips que contienen el fotograma `frame` (sin contar su primer
 // fotograma). Con `clips` vacío parte todas las pistas; si no, solo esos clips (y
 // sus enlazados).
@@ -172,6 +179,14 @@ bool setClipAnimation(Project& project, ObjectId clip, const ClipAnimation& anim
 
 // Volumen de un clip de audio, en dB (entre kMinVolumeDb y kMaxVolumeDb).
 bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
+
+// Pista de audio del archivo que suena en un clip de audio (−1 = la principal).
+bool setClipAudioStream(Project& project, ObjectId clip, int stream);
+// Archivo con varias pistas de audio (MKV de OBS): el clip de audio se queda con la que
+// suena (`main` si era la principal) y cada una de las demás va a un clip igual (mismo
+// tramo y volumen, sin enlace) en la primera pista de audio libre de debajo, o en una
+// nueva. `streams` es cuántas tiene el archivo. Devuelve los clips nuevos.
+std::vector<ObjectId> separateAudioStreams(Project& project, ObjectId clip, int streams, int main);
 
 // Separa los clips de sus enlazados: a partir de ahí se editan por separado.
 bool unlinkClips(Project& project, const std::vector<ObjectId>& clips);

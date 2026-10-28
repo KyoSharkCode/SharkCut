@@ -47,13 +47,26 @@ Rectangle {
         readonly property var anim: hayVideo && sel.animation ? sel.animation : ({})
         readonly property var sub: panel.editor.selectedCaption
         readonly property bool haySubtitulo: sub.count > 0
+        // Texto libre seleccionado (un clip de video sin medio): se edita con lo mismo que
+        // un subtítulo.
+        readonly property bool hayTexto: hayVideo && sel.text !== undefined && !haySubtitulo
         readonly property var estilo: haySubtitulo
-            ? (estiloPista ? sub.trackStyle : sub.style) : ({})
+            ? (estiloPista ? sub.trackStyle : sub.style)
+            : hayTexto ? sel.text.style : ({})
         property bool estiloPista: false // el estilo se aplica a la pista entera
-        function vistaEstilo(valores) { panel.editor.previewCaptionStyle(valores, estiloPista) }
-        function aplicarEstilo(valores, etiqueta) {
-            panel.editor.setCaptionStyle(valores, estiloPista, etiqueta)
+        function vistaEstilo(valores) {
+            if (hayTexto)
+                panel.editor.previewTextStyle(sel.video, valores)
+            else
+                panel.editor.previewCaptionStyle(valores, estiloPista)
         }
+        function aplicarEstilo(valores, etiqueta) {
+            if (hayTexto)
+                panel.editor.setTextStyle(sel.video, valores, etiqueta)
+            else
+                panel.editor.setCaptionStyle(valores, estiloPista, etiqueta)
+        }
+        readonly property string textoActual: hayTexto ? (sel.text.content || "") : (sub.text || "")
         readonly property bool hayCroma: hayVideo && croma.added === true
         readonly property bool videoEditable: hayVideo && !sel.videoLocked
 
@@ -340,19 +353,20 @@ Rectangle {
                 }
             }
 
-            // --- Subtítulo seleccionado: texto y estilo ---
+            // --- Subtítulo (o texto libre) seleccionado: texto y estilo ---
             ColumnLayout {
                 id: propiedadesSubtitulo
-                visible: propiedades.haySubtitulo
+                visible: propiedades.haySubtitulo || propiedades.hayTexto
                 Layout.fillWidth: true
                 spacing: 6
-                enabled: !propiedades.sub.locked
+                enabled: propiedades.hayTexto ? propiedades.videoEditable : !propiedades.sub.locked
 
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         Layout.fillWidth: true
-                        text: propiedades.sub.count > 1
+                        text: propiedades.hayTexto ? "Texto · " + (propiedades.sel.videoTrack || "")
+                              : propiedades.sub.count > 1
                               ? propiedades.sub.count + " subtítulos seleccionados"
                               : "Subtítulo · " + (propiedades.sub.trackName || "")
                         color: Theme.texto
@@ -360,13 +374,14 @@ Rectangle {
                         font.bold: true
                     }
                     Chip {
-                        visible: propiedades.sub.locked === true
+                        visible: propiedades.hayTexto ? propiedades.sel.videoLocked === true
+                                                      : propiedades.sub.locked === true
                         texto: "BLOQUEADA"
                         colorTexto: Theme.aviso
                     }
                 }
                 Text {
-                    visible: propiedades.sub.count === 1
+                    visible: propiedades.sub.count === 1 && !propiedades.hayTexto
                     text: panel.editor.timecodeFor(propiedades.sub.start || 0) + " → "
                           + panel.editor.timecodeFor(propiedades.sub.end || 0)
                     color: Theme.textoSecundario
@@ -374,7 +389,7 @@ Rectangle {
                 }
                 // Texto (Ctrl+Intro o al salir del campo se aplica).
                 Rectangle {
-                    visible: propiedades.sub.count === 1
+                    visible: propiedades.sub.count === 1 || propiedades.hayTexto
                     Layout.fillWidth: true
                     implicitHeight: Math.max(56, campoTexto.implicitHeight + 12)
                     radius: Theme.radio
@@ -384,15 +399,19 @@ Rectangle {
                         id: campoTexto
                         anchors.fill: parent
                         anchors.margins: 6
-                        text: propiedades.sub.text || ""
+                        text: propiedades.textoActual
                         color: Theme.texto
                         font.pixelSize: Theme.tamTexto
                         wrapMode: TextEdit.Wrap
                         selectByMouse: true
                         function aplicar() {
-                            if (text !== propiedades.sub.text)
-                                panel.editor.setCaptionText(propiedades.sub.id, text)
-                            text = Qt.binding(() => propiedades.sub.text || "")
+                            if (text !== propiedades.textoActual) {
+                                if (propiedades.hayTexto)
+                                    panel.editor.setClipText(propiedades.sel.video, text)
+                                else
+                                    panel.editor.setCaptionText(propiedades.sub.id, text)
+                            }
+                            text = Qt.binding(() => propiedades.textoActual)
                         }
                         onEditingFinished: aplicar()
                         Keys.onPressed: (e) => {
@@ -402,7 +421,7 @@ Rectangle {
                                 campoTexto.focus = false
                                 e.accepted = true
                             } else if (e.key === Qt.Key_Escape) {
-                                text = Qt.binding(() => propiedades.sub.text || "")
+                                text = Qt.binding(() => propiedades.textoActual)
                                 campoTexto.focus = false
                                 e.accepted = true
                             }
@@ -410,11 +429,14 @@ Rectangle {
                     }
                 }
                 Text {
-                    visible: propiedades.sub.count === 1
+                    visible: propiedades.sub.count === 1 || propiedades.hayTexto
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Intro: nueva línea · Ctrl+Intro: aplicar · doble clic en la pista: "
-                          + "subtítulo nuevo."
+                    text: propiedades.hayTexto
+                          ? "Intro: nueva línea · Ctrl+Intro: aplicar. Se coloca en el visor o en "
+                            + "Video (más abajo), como un clip."
+                          : "Intro: nueva línea · Ctrl+Intro: aplicar · doble clic en la pista: "
+                            + "subtítulo nuevo."
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                 }
@@ -428,6 +450,7 @@ Rectangle {
                 }
                 // A qué se aplica: a lo seleccionado o a la pista entera.
                 RowLayout {
+                    visible: !propiedades.hayTexto
                     Layout.fillWidth: true
                     spacing: 6
                     BotonIcono {
@@ -451,9 +474,13 @@ Rectangle {
                     model: ["Elegir…"].concat(panel.editor.captionPresets.map((p) => p.name))
                     indice: 0
                     onElegido: (i) => {
-                        if (i > 0)
-                            panel.editor.applyCaptionPreset(panel.editor.captionPresets[i - 1].name,
-                                                            propiedades.estiloPista)
+                        if (i <= 0)
+                            return
+                        const nombre = panel.editor.captionPresets[i - 1].name
+                        if (propiedades.hayTexto)
+                            panel.editor.applyTextPreset(propiedades.sel.video, nombre)
+                        else
+                            panel.editor.applyCaptionPreset(nombre, propiedades.estiloPista)
                     }
                 }
                 SelectorFuente {
@@ -487,6 +514,23 @@ Rectangle {
                                 valores[modelData.clave] = !propiedades.estilo[modelData.clave]
                                 propiedades.aplicarEstilo(valores, modelData.texto)
                             }
+                        }
+                    }
+                }
+                // Alineación de las líneas.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: [{ valor: -1, texto: "Izquierda" }, { valor: 0, texto: "Centro" },
+                                { valor: 1, texto: "Derecha" }]
+                        delegate: BotonIcono {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            texto: modelData.texto
+                            implicitHeight: 26
+                            activo: (propiedades.estilo.align || 0) === modelData.valor
+                            onPulsado: propiedades.aplicarEstilo({ align: modelData.valor }, "Alineación")
                         }
                     }
                 }
@@ -546,13 +590,15 @@ Rectangle {
                 }
                 Text {
                     Layout.topMargin: 4
-                    text: "POSICIÓN"
+                    text: propiedades.hayTexto ? "LÍNEAS" : "POSICIÓN"
                     color: Theme.textoDesactivado
                     font.pixelSize: Theme.tamTextoPequeno
                     font.letterSpacing: 0.6
                 }
+                // Un texto se coloca como un clip (visor y Video): aquí solo su ancho.
                 Repeater {
-                    model: [{ clave: "x", nombre: "Horizontal" }, { clave: "y", nombre: "Vertical" },
+                    model: propiedades.hayTexto ? [{ clave: "maxWidth", nombre: "Ancho máximo" }]
+                         : [{ clave: "x", nombre: "Horizontal" }, { clave: "y", nombre: "Vertical" },
                             { clave: "maxWidth", nombre: "Ancho máximo" }]
                     delegate: CampoNumero {
                         required property var modelData
@@ -585,7 +631,9 @@ Rectangle {
                         texto: "Guardar como ajuste…"
                         ayuda: "Guarda este estilo con un nombre para aplicarlo después"
                         onPulsado: dialogoAjuste.pedir("Nombre del ajuste", "", "Guardar",
-                                                       (nombre) => panel.editor.saveCaptionPreset(nombre))
+                            (nombre) => propiedades.hayTexto
+                                        ? panel.editor.saveTextPreset(propiedades.sel.video, nombre)
+                                        : panel.editor.saveCaptionPreset(nombre))
                     }
                     BotonIcono {
                         icono: "restablecer"
@@ -614,7 +662,8 @@ Rectangle {
                 BotonIcono {
                     Layout.fillWidth: true
                     icono: "quitar"
-                    texto: propiedades.sub.count > 1 ? "Quitar los subtítulos" : "Quitar el subtítulo"
+                    texto: propiedades.hayTexto ? "Quitar el texto"
+                           : propiedades.sub.count > 1 ? "Quitar los subtítulos" : "Quitar el subtítulo"
                     ayuda: "Quitar (Supr)"
                     onPulsado: panel.editor.removeSelection()
                 }
@@ -702,6 +751,7 @@ Rectangle {
                         propiedades.sel.start + Math.max(1, Math.round(v * duracionImagen.fps)))
                 }
                 BotonIcono {
+                    visible: !propiedades.hayTexto
                     Layout.fillWidth: true
                     icono: "reloj"
                     texto: "Usar para las imágenes nuevas"
@@ -823,6 +873,7 @@ Rectangle {
                     Layout.topMargin: 4
                     spacing: 6
                     BotonIcono {
+                        visible: !propiedades.hayTexto // un texto no tiene un video que ajustar
                         Layout.fillWidth: true
                         icono: "ajustar"
                         texto: "Ajustar"
@@ -830,6 +881,7 @@ Rectangle {
                         onPulsado: panel.editor.fitClip(propiedades.sel.video, false)
                     }
                     BotonIcono {
+                        visible: !propiedades.hayTexto // un texto no tiene un video que ajustar
                         Layout.fillWidth: true
                         icono: "rellenar"
                         texto: "Rellenar"
@@ -1361,6 +1413,54 @@ Rectangle {
                     ayuda: "Volumen original"
                     implicitHeight: 26
                     onPulsado: panel.editor.setClipVolume(propiedades.sel.audio, 0)
+                }
+            }
+            // Archivo con varias pistas de audio (MKV de OBS: micro, juego, música…).
+            ColumnLayout {
+                readonly property var pistas: propiedades.hayAudio && propiedades.sel.audioStreams
+                                              ? propiedades.sel.audioStreams : []
+                visible: pistas.length > 1
+                enabled: propiedades.hayAudio && !propiedades.sel.audioLocked
+                opacity: enabled ? 1 : 0.45
+                Layout.fillWidth: true
+                spacing: 6
+                Text {
+                    Layout.topMargin: 4
+                    text: "PISTAS DEL ARCHIVO"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Este archivo tiene " + parent.pistas.length + " pistas de audio. Elige "
+                          + "cuál suena en este clip, o pon cada una en su propia pista de la línea "
+                          + "de tiempo para ajustarlas por separado."
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                Repeater {
+                    model: parent.pistas
+                    delegate: BotonIcono {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 28
+                        texto: modelData.name + " · " + modelData.detail
+                               + (modelData.main ? " · principal" : "")
+                        activo: modelData.selected === true
+                        ayuda: "Que suene esta pista del archivo en el clip"
+                        onPulsado: panel.editor.setClipAudioStream(propiedades.sel.audio, modelData.index)
+                    }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "audio"
+                    texto: "Cada pista en su propia pista de audio"
+                    ayuda: "Este clip se queda con la que suena; cada una de las demás va a una "
+                           + "pista de audio de debajo, con el mismo tramo (también los demás clips "
+                           + "de audio seleccionados)"
+                    onPulsado: panel.editor.separateAudioStreams(propiedades.sel.audio)
                 }
             }
 

@@ -137,9 +137,9 @@ void install() {
     }
     qInstallMessageHandler(handler);
     std::signal(SIGABRT, onAbort);
-    qInfo("SharkCut %s · Qt %s · %s · %s", qPrintable(QCoreApplication::applicationVersion()),
-          qVersion(), qPrintable(QSysInfo::prettyProductName()),
-          qPrintable(QSysInfo::currentCpuArchitecture()));
+    qInfo("SharkCut %s · Qt %s · %s · %s", qUtf8Printable(QCoreApplication::applicationVersion()),
+          qVersion(), qUtf8Printable(QSysInfo::prettyProductName()),
+          qUtf8Printable(QSysInfo::currentCpuArchitecture()));
 }
 
 void closing() {

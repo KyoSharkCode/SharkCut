@@ -3,8 +3,8 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import SharkCut
 
-// Panel izquierdo del editor, con pestañas: Medios (biblioteca), Transiciones, Efectos y
-// Subtítulos.
+// Panel izquierdo del editor, con pestañas: Medios (biblioteca), Transiciones, Efectos,
+// Texto, Subtítulos y Sonidos.
 // Las propiedades de lo seleccionado tienen su propio panel (PanelPropiedades).
 Rectangle {
     id: panel
@@ -36,30 +36,33 @@ Rectangle {
             Layout.leftMargin: 6
             Layout.topMargin: 4
             spacing: 2
+            // `pestana` es el número de cada una (Texto llegó después: va en su sitio con el 5).
             Repeater {
-                model: ["Medios", "Transiciones", "Efectos", "Subtítulos", "Sonidos"]
+                model: [{ nombre: "Medios", pestana: 0 }, { nombre: "Transiciones", pestana: 1 },
+                        { nombre: "Efectos", pestana: 2 }, { nombre: "Texto", pestana: 5 },
+                        { nombre: "Subtítulos", pestana: 3 }, { nombre: "Sonidos", pestana: 4 }]
                 delegate: Item {
-                    required property string modelData
-                    required property int index
-                    width: etiqueta.implicitWidth + 16
+                    required property var modelData
+                    readonly property bool activa: panel.pestana === modelData.pestana
+                    width: etiqueta.implicitWidth + 12
                     height: 36
                     Text {
                         id: etiqueta
                         anchors.centerIn: parent
-                        text: parent.modelData
-                        color: panel.pestana === parent.index ? Theme.texto : Theme.textoSecundario
+                        text: parent.modelData.nombre
+                        color: parent.activa ? Theme.texto : Theme.textoSecundario
                         font.pixelSize: Theme.tamTexto
-                        font.bold: panel.pestana === parent.index
+                        font.bold: parent.activa
                     }
                     Rectangle {
                         anchors.bottom: parent.bottom
                         width: parent.width
                         height: 2
-                        color: panel.pestana === parent.index ? Theme.acento : "transparent"
+                        color: parent.activa ? Theme.acento : "transparent"
                     }
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: panel.pestana = parent.index
+                        onClicked: panel.pestana = parent.modelData.pestana
                     }
                 }
             }
@@ -375,7 +378,7 @@ Rectangle {
             BotonIcono {
                 Layout.fillWidth: true
                 icono: "mas"
-                texto: "Añadir un subtítulo o texto en el cabezal"
+                texto: "Añadir un subtítulo en el cabezal"
                 enabled: panel.editor.hasSequence
                 ayuda: "También: doble clic en una pista de subtítulos"
                 onPulsado: panel.editor.addCaptionAtPlayhead(-1)
@@ -567,6 +570,67 @@ Rectangle {
             }
         }
 
+        // --- Texto: textos libres, con el estilo de siempre o el de un ajuste guardado ---
+        Flickable {
+            id: vistaTexto
+            visible: panel.pestana === 5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentHeight: columnaTexto.implicitHeight + 24
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: BarraDesplazamiento {}
+            ColumnLayout {
+                id: columnaTexto
+                x: 12
+                y: 12
+                width: vistaTexto.width - 24
+                spacing: 8
+                BotonIcono {
+                    Layout.fillWidth: true
+                    implicitHeight: 36
+                    acentuado: true
+                    icono: "mas"
+                    texto: "Añadir texto en el cabezal"
+                    enabled: panel.editor.hasSequence
+                    ayuda: "Encima de lo que se ve; luego se escribe en Propiedades"
+                    onPulsado: panel.editor.addTextAtPlayhead("")
+                }
+                FilaTexto {
+                    ajuste: ""
+                    nombre: "Texto"
+                    detalle: "Blanco con contorno, centrado"
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Arrastra un texto a una pista de video de la línea de tiempo (o pulsa "
+                          + "Añadir para ponerlo en el cabezal). Se escribe y se le da estilo en "
+                          + "Propiedades; se mueve, escala y gira en el visor como un clip, con "
+                          + "keyframes, efectos y ajustes guardados."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                Text {
+                    Layout.topMargin: 6
+                    text: "ESTILOS GUARDADOS"
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 1
+                }
+                // Los mismos ajustes de estilo que los subtítulos.
+                Repeater {
+                    model: panel.editor.captionPresets
+                    delegate: FilaTexto {
+                        required property var modelData
+                        ajuste: modelData.name
+                        nombre: modelData.name
+                        detalle: modelData.builtin ? "De fábrica" : "Guardado por ti"
+                    }
+                }
+            }
+        }
+
     }
 
     // Archivos arrastrados desde el explorador: a la biblioteca.
@@ -583,6 +647,84 @@ Rectangle {
     }
 
     DialogoNombre { id: dialogoNombreAjuste }
+
+    // Un texto de la pestaña Texto (con el estilo de un ajuste guardado, o el de siempre si
+    // `ajuste` está vacío): se arrastra a una pista de video o se añade en el cabezal.
+    component FilaTexto: Rectangle {
+        id: filaTexto
+        property string ajuste
+        property string nombre
+        property string detalle
+        Layout.fillWidth: true
+        implicitHeight: 48
+        radius: Theme.radio
+        color: arrastreTexto.containsMouse ? Theme.panelElevado : "transparent"
+        border.color: arrastreTexto.containsMouse ? Theme.acento : Theme.borde
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 8
+            spacing: 6
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+                Text {
+                    Layout.fillWidth: true
+                    text: filaTexto.nombre
+                    elide: Text.ElideRight
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTexto
+                }
+                Text {
+                    visible: filaTexto.detalle.length > 0
+                    Layout.fillWidth: true
+                    text: filaTexto.detalle
+                    elide: Text.ElideRight
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+            }
+            BotonIcono {
+                id: botonAnadirTexto
+                texto: "Añadir"
+                implicitHeight: 26
+                enabled: panel.editor.hasSequence
+                ayuda: "En el cabezal"
+                onPulsado: panel.editor.addTextAtPlayhead(filaTexto.ajuste)
+            }
+        }
+        MouseArea {
+            id: arrastreTexto
+            anchors.fill: parent
+            anchors.rightMargin: botonAnadirTexto.width + 12
+            hoverEnabled: true
+            drag.target: panel.fantasma
+            drag.threshold: 6
+            cursorShape: Qt.OpenHandCursor
+            onPressed: (m) => {
+                const f = panel.fantasma
+                const p = mapToItem(f.parent, m.x, m.y)
+                f.x = p.x - 10
+                f.y = p.y - 14
+                f.mediaId = undefined
+                f.transicion = -1
+                f.efecto = ""
+                f.ajusteTexto = filaTexto.ajuste
+                f.nombre = filaTexto.ajuste.length > 0 ? "Texto · " + filaTexto.ajuste : "Texto"
+                f.Drag.keys = ["sharkcut/texto"]
+            }
+            onPositionChanged: {
+                if (drag.active && !panel.fantasma.Drag.active)
+                    panel.fantasma.Drag.active = true
+            }
+            onReleased: {
+                if (panel.fantasma.Drag.active) {
+                    panel.fantasma.Drag.drop()
+                    panel.fantasma.Drag.active = false
+                }
+            }
+        }
+    }
 
     // Un efecto (o un ajuste guardado) de la pestaña Efectos: se arrastra sobre un clip de
     // video o se aplica al seleccionado. Los hijos van como botones a la derecha.

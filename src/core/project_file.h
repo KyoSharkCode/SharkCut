@@ -29,9 +29,10 @@ namespace sharkcut {
 // (captionTracks de cada secuencia). 7: keyframes de los clips (animation). 8: efectos
 // de imagen (transform.effects). 9: transiciones como clips (clip.effect, sin medio).
 // 10: imágenes fijas (media.still; sus clips pueden tener `in` negativo). 11: colores
-// sólidos (medios con ruta "sharkcut-color:…") y tinte (transform.effects.tint*).
-// Abre también la 1 a la 10.
-inline constexpr int kProjectFileVersion = 11;
+// sólidos (medios con ruta "sharkcut-color:…") y tinte (transform.effects.tint*). 12: textos
+// libres (clip.text, sin medio) y pista de audio del archivo de cada clip
+// (clip.audioStream). Abre también la 1 a la 11.
+inline constexpr int kProjectFileVersion = 12;
 inline constexpr std::string_view kProjectExtension = ".sharkp";
 
 class ProjectError : public std::runtime_error {

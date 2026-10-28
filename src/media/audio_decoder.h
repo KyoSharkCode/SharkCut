@@ -22,8 +22,10 @@ inline constexpr Rational kAudioSampleDuration{1, kAudioSampleRate};
 // No es seguro usar una misma instancia desde varios hilos a la vez.
 class AudioDecoder : public AudioSource {
 public:
-    // Abre `path` (UTF-8). Lanza MediaError si no se puede abrir o no tiene audio.
-    explicit AudioDecoder(const std::string& path);
+    // Abre `path` (UTF-8): su pista de audio principal o, con `audioStream` ≥ 0, la
+    // n-ésima del archivo (Clip::audioStream). Lanza MediaError si no se puede abrir o no
+    // tiene esa pista.
+    explicit AudioDecoder(const std::string& path, int audioStream = -1);
     ~AudioDecoder() override;
 
     AudioDecoder(const AudioDecoder&) = delete;

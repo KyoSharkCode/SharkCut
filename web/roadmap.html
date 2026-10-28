@@ -162,17 +162,6 @@
   </div>
 
   <ol class="ruta" id="ruta">
-    <li class="parada" data-version="0.1.7">
-      <div class="marcador"></div>
-      <div class="tarjeta">
-        <div class="cabecera"><span class="numero">0.1.7</span><span class="chip">Próximamente</span></div>
-        <p class="tema">Texto y el audio de tus grabaciones</p>
-        <ul class="puntos">
-          <li><b>Editor de texto:</b> textos libres que colocas en cualquier parte de la pantalla, con su estilo, keyframes y efectos. Pestaña nueva «Texto».</li>
-          <li><b>Pistas de audio por separado</b> de las grabaciones que guardan varias (por ejemplo, micrófono y juego en un MKV).</li>
-        </ul>
-      </div>
-    </li>
     <li class="parada" data-version="0.1.8">
       <div class="marcador"></div>
       <div class="tarjeta">
@@ -235,6 +224,15 @@
   <h2>Ya publicadas ✨</h2>
   <div class="historial">
     <details open>
+      <summary>0.1.7 <span class="fecha">28 de octubre de 2026</span></summary>
+      <ul>
+        <li>Editor de texto: textos libres que colocas en cualquier parte de la pantalla, con su estilo, keyframes y efectos.</li>
+        <li>Las pistas de audio de tus grabaciones por separado (por ejemplo, micrófono y juego en un MKV de OBS).</li>
+        <li>Cortes sin sorpresas: en un corte ya no aparece un instante el clip anterior.</li>
+        <li>La imagen ya no se queda quieta al volver a reproducir desde un punto ya visto.</li>
+      </ul>
+    </details>
+    <details>
       <summary>0.1.6 <span class="fecha">28 de octubre de 2026</span></summary>
       <ul>
         <li>Tinte de color como efecto y un selector de color completo en todas las muestras.</li>
@@ -349,7 +347,7 @@
   }
 
   // Sin conexión con GitHub se queda con la última versión conocida al escribir la página.
-  marcar("0.1.6");
+  marcar("0.1.7");
   fetch("https://api.github.com/repos/KyoSharkCode/SharkCut/releases/latest")
     .then((r) => r.ok ? r.json() : Promise.reject(r.status))
     .then((release) => marcar(release.tag_name.replace(/^v/, "")))

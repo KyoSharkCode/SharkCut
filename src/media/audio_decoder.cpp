@@ -55,12 +55,24 @@ struct AudioDecoder::Impl {
 
     ~Impl() { av_channel_layout_uninit(&swrLayout); }
 
-    void open(const std::string& path) {
+    void open(const std::string& path, int audioStream) {
         format = ff::openInput(path);
 
         const AVCodec* decoder = nullptr;
-        const int index =
-            av_find_best_stream(format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
+        int index = -1;
+        if (audioStream < 0) {
+            index = av_find_best_stream(format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
+        } else {
+            // La n-ésima pista de audio del archivo, en su orden.
+            int seen = 0;
+            for (unsigned i = 0; i < format->nb_streams && index < 0; ++i) {
+                const AVCodecParameters* par = format->streams[i]->codecpar;
+                if (par->codec_type == AVMEDIA_TYPE_AUDIO && seen++ == audioStream) {
+                    index = static_cast<int>(i);
+                    decoder = avcodec_find_decoder(par->codec_id);
+                }
+            }
+        }
         if (index < 0 || !decoder) {
             throw MediaError("El archivo no tiene audio compatible");
         }
@@ -249,8 +261,8 @@ struct AudioDecoder::Impl {
     }
 };
 
-AudioDecoder::AudioDecoder(const std::string& path) : d(std::make_unique<Impl>()) {
-    d->open(path);
+AudioDecoder::AudioDecoder(const std::string& path, int audioStream) : d(std::make_unique<Impl>()) {
+    d->open(path, audioStream);
 }
 
 AudioDecoder::~AudioDecoder() = default;

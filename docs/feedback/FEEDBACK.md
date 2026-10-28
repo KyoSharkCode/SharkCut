@@ -12,7 +12,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
 | [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
 | [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
-| [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | En el plan |
+| [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | Hecho |
 | [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
@@ -46,12 +46,13 @@ Formato y estados: ver [README.md](README.md).
 | [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | Hecho |
 | [FB-041](#fb-041) | 2026-10-27 | Medios | Propuesta | Vista con miniaturas como predeterminada en Medios | Hecho |
 | [FB-042](#fb-042) | 2026-10-27 | Instalación | Propuesta | Varios idiomas, elegibles en el instalador | En el plan |
-| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | En el plan |
+| [FB-043](#fb-043) | 2026-10-27 | Efectos | Propuesta | Editor de texto | Hecho |
 | [FB-044](#fb-044) | 2026-10-27 | Subtítulos | Usabilidad | Cortar subtítulos con la cuchilla y alargarlos por el borde | Hecho |
 | [FB-045](#fb-045) | 2026-10-27 | Medios | Propuesta | Crear un color sólido desde Medios | Hecho |
 | [FB-046](#fb-046) | 2026-10-27 | Visor | Error | La vista previa se congela un momento antes de una transición | Hecho |
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Hecho |
 | [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
+| [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
 
 ---
 
@@ -166,7 +167,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** Algunos formatos (como MKV) guardan varias pistas de audio en un archivo. Sería ideal que en Propiedades salieran por separado: agrandar ese panel con secciones Propiedades · Video · Audio, y si el audio tiene varias pistas/canales, que aparezcan y se puedan manejar una a una. También poder exportarlas o sacarlas a una pista separada de la línea de tiempo.
 - **Contexto:** Grabaciones de OBS con varias pistas de audio (micro, juego, música…).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M4)
 
 <a id="fb-010"></a>
 ### FB-010 · El punto de anclaje es confuso
@@ -679,7 +680,7 @@ Formato y estados: ver [README.md](README.md).
   cabezal»), pero van en sus pistas propias, sin la colocación libre ni los keyframes de
   los clips. PLAN.md tenía la herramienta de texto genérica en la fase 6.
 - **Decisión (Kyo):** para la 0.1.5.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M21)
 
 <a id="fb-044"></a>
 ### FB-044 · Cortar subtítulos con la cuchilla y alargarlos por el borde
@@ -792,3 +793,25 @@ Formato y estados: ver [README.md](README.md).
   un lienzo 9:16 se queda pequeño y hay que escalarlo a mano (×1,78).
 - **Decisión (Kyo):** para la 0.1.6.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M23)
+
+<a id="fb-049"></a>
+### FB-049 · En un corte se ve un momento el clip anterior en lugar del siguiente
+- **Fecha:** 2026-10-28
+- **Quién:** Kyo
+- **Versión:** 0.1.6
+- **Área:** Visor
+- **Tipo:** Error
+- **Qué dijo:** en la vista previa, en un corte, de la nada sale el clip anterior como si
+  fuera el siguiente; es un destello y después sale el clip normal.
+- **Contexto:** solo reproduciendo y empezando desde la mitad del clip anterior (no muy
+  cerca del corte, ni moviendo el cabezal con el ratón o fotograma a fotograma). Cortes
+  del mismo archivo (una grabación) en V2, con otro trozo del mismo archivo con pantalla
+  verde en V3. Registro de la sesión con el rastro de A16.
+- **Notas:** el registro lo cazó: el clip nuevo tenía su hilo «colocado» en su primer
+  fotograma (2661), pero la cola tenía fotogramas de más adelante (2741–2748) y el hilo
+  estaba parado; la red de seguridad de A17 lo recolocó a los 250 ms (el destello). Causa
+  (reproducida con Xvfb): la reproducción anterior se paró dentro de ese clip, y su hilo se
+  quedó apuntado como «colocado en su inicio» aunque ya había avanzado; al volver a
+  reproducir desde antes, el editor lo daba por preparado y no lo recolocaba. Es también la
+  causa más probable de FB-047.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A18)

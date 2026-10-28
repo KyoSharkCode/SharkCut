@@ -16,12 +16,6 @@ actualizar también esa página.
 
 ## Próximas versiones
 
-### 0.1.7 · Texto y audio de las grabaciones
-| Punto | Qué trae | Tamaño |
-|-------|----------|--------|
-| M21 | Editor de texto: textos libres en la línea de tiempo que se colocan en cualquier parte de la pantalla, con su estilo, keyframes y efectos. Pestaña nueva «Texto» en el panel. | Grande |
-| M4 | Pistas de audio por separado de las grabaciones que guardan varias (por ejemplo, micrófono y juego en un MKV). | Grande |
-
 ### 0.1.8 · Secuencias y rendimiento
 | Punto | Qué trae | Tamaño |
 |-------|----------|--------|
@@ -67,6 +61,16 @@ Cambios grandes o comodidades que pueden esperar.
 ---
 
 ## Versiones publicadas
+
+### 0.1.7 · 2026-10-28
+- Editor de texto: textos libres en la línea de tiempo, con su estilo, keyframes y
+  efectos. Pestaña nueva «Texto» (M21).
+- Pistas de audio por separado de las grabaciones que guardan varias, como los MKV de OBS
+  (M4).
+- En un corte ya no aparece un instante el clip anterior (A18), y la imagen ya no se queda
+  quieta al repetir desde un punto ya visto (A20).
+- Registro más claro: tildes en Windows, sin los avisos de FFmpeg ni la falsa alarma de
+  audio al final (A19).
 
 ### 0.1.6 · 2026-10-28
 - Efecto de tinte de color y selector de color completo en todas las muestras (M3).

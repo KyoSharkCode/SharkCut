@@ -946,6 +946,7 @@ Rectangle {
                                 radius: 3
                                 color: {
                                     const base = elemento.modelData.effect ? Theme.clipTransicion
+                                               : elemento.modelData.text ? Theme.clipTexto
                                                : esVideo ? Theme.clipVideo : Theme.clipAudio
                                     return seleccionado ? Qt.lighter(base, 1.3) : base
                                 }
@@ -973,6 +974,7 @@ Rectangle {
                                             height: elemento.height - 16
                                             editor: raiz.editor
                                             mediaId: elemento.modelData.media
+                                            audioStream: elemento.modelData.audioStream
                                             firstFrame: elemento.entradaVista + izquierda / raiz.escala
                                             framesPerPixel: 1 / raiz.escala
                                             fps: raiz.editor.fps
@@ -1059,7 +1061,10 @@ Rectangle {
                                         spacing: 4
                                         Text {
                                             Layout.fillWidth: true
+                                            // Una pista concreta de un archivo con varias: su número.
                                             text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                                  + (!elemento.esVideo && elemento.modelData.audioStream >= 0
+                                                     ? " · pista " + (elemento.modelData.audioStream + 1) : "")
                                             color: Theme.texto
                                             // Contorno oscuro: legible sobre las miniaturas
                                             style: elemento.esVideo ? Text.Outline : Text.Normal
@@ -1529,7 +1534,7 @@ Rectangle {
                             width: parent.width
                             height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
                             keys: ["sharkcut/medio", "sharkcut/transicion", "sharkcut/efecto",
-                                   "sharkcut/sonido", "text/uri-list"]
+                                   "sharkcut/sonido", "sharkcut/texto", "text/uri-list"]
                             function esSonido(d) {
                                 return d.keys.indexOf("sharkcut/sonido") >= 0
                             }
@@ -1538,6 +1543,9 @@ Rectangle {
                             }
                             function esEfecto(d) {
                                 return d.keys.indexOf("sharkcut/efecto") >= 0
+                            }
+                            function esTexto(d) {
+                                return d.keys.indexOf("sharkcut/texto") >= 0
                             }
                             function actualizar(d) {
                                 const p = raiz.pistaEnY(d.y + y)
@@ -1548,6 +1556,11 @@ Rectangle {
                                 if (esSonido(d)) {
                                     raiz.marcaSoltar = raiz.frameEn(d.x)
                                     raiz.pistaSoltar = p && !p.video ? p.index : -1
+                                    return
+                                }
+                                if (esTexto(d)) {
+                                    raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
+                                    raiz.pistaSoltar = p && p.video ? p.index : -1
                                     return
                                 }
                                 if (esTransicion(d)) {
@@ -1589,6 +1602,12 @@ Rectangle {
                                     if (d.source)
                                         Qt.callLater(raiz.editor.addSound, d.source.sonido,
                                                      p && !p.video ? p.index : -1, raiz.frameEn(d.x))
+                                    d.accept()
+                                } else if (esTexto(d)) {
+                                    // Un texto: en esa pista si está libre (si no, más arriba).
+                                    if (d.source)
+                                        Qt.callLater(raiz.editor.addText, p && p.video ? p.index : -1,
+                                                     f, d.source.ajusteTexto)
                                     d.accept()
                                 } else if (esTransicion(d)) {
                                     // Una transición-clip: afecta a todo lo que hay debajo.

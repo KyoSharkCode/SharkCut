@@ -36,16 +36,18 @@ struct Waveform {
 // Decodifica todo el audio del archivo (UTF-8). Lanza MediaError si no tiene audio o
 // no se puede leer. Con `cancel` a true se abandona (y también lanza MediaError).
 // `parts`: en cuántos tramos se reparte, cada uno en su hilo; 0 = según la duración (un
-// tramo por minuto, como mucho 4 y no más que núcleos), 1 = todo seguido.
+// tramo por minuto, como mucho 4 y no más que núcleos), 1 = todo seguido. `audioStream`:
+// la pista de audio del archivo (como en AudioDecoder; −1 = la principal).
 Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel = nullptr,
-                         int parts = 0);
+                         int parts = 0, int audioStream = -1);
 
 // Caché en disco. Se escribe con un temporal que se renombra al terminar.
 bool saveWaveform(const Waveform& waveform, const std::filesystem::path& file);
 std::optional<Waveform> loadWaveform(const std::filesystem::path& file);
 
-// Nombre del archivo de caché de un medio: cambia si el archivo cambia (ruta, tamaño
-// o fecha de modificación). Vacío si el archivo no existe.
-std::string waveformCacheName(const std::string& mediaPath);
+// Nombre del archivo de caché de un medio (y de una de sus pistas de audio, si no es la
+// principal): cambia si el archivo cambia (ruta, tamaño o fecha de modificación). Vacío
+// si el archivo no existe.
+std::string waveformCacheName(const std::string& mediaPath, int audioStream = -1);
 
 } // namespace sharkcut

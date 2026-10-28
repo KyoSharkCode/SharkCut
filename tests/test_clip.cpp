@@ -7,6 +7,7 @@ extern "C" {
 #include <libavutil/opt.h>
 }
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <random>
@@ -179,31 +180,39 @@ std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& 
     check(avcodec_parameters_from_context(stream->codecpar, enc), "parameters");
     stream->time_base = enc->time_base;
 
-    AudioTrack audio;
+    std::vector<AudioTrack> audio;
     if (o.audio != ClipOptions::Audio::None) {
         const AVCodec* audioCodec = avcodec_find_encoder(
             o.audio == ClipOptions::Audio::Pcm ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_AAC);
         if (!audioCodec) {
             throw std::runtime_error("no hay codificador de audio disponible");
         }
-        audio.stream = avformat_new_stream(out, nullptr);
-        audio.enc = avcodec_alloc_context3(audioCodec);
-        audio.enc->sample_rate = 48'000;
-        audio.enc->sample_fmt =
-            o.audio == ClipOptions::Audio::Pcm ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLTP;
-        av_channel_layout_default(&audio.enc->ch_layout, 2);
-        audio.enc->time_base = {1, 48'000};
-        audio.enc->bit_rate = 192'000;
-        if (out->oformat->flags & AVFMT_GLOBALHEADER) {
-            audio.enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        audio.resize(static_cast<std::size_t>(std::max(1, o.audioTracks)));
+        for (std::size_t k = 0; k < audio.size(); ++k) {
+            AudioTrack& track = audio[k];
+            track.stream = avformat_new_stream(out, nullptr);
+            if (k < o.audioTitles.size()) {
+                av_dict_set(&track.stream->metadata, "title", o.audioTitles[k].c_str(), 0);
+            }
+            track.enc = avcodec_alloc_context3(audioCodec);
+            track.enc->sample_rate = 48'000;
+            track.enc->sample_fmt =
+                o.audio == ClipOptions::Audio::Pcm ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLTP;
+            av_channel_layout_default(&track.enc->ch_layout, 2);
+            track.enc->time_base = {1, 48'000};
+            track.enc->bit_rate = 192'000;
+            if (out->oformat->flags & AVFMT_GLOBALHEADER) {
+                track.enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            }
+            check(avcodec_open2(track.enc, audioCodec, nullptr), "open audio encoder");
+            check(avcodec_parameters_from_context(track.stream->codecpar, track.enc),
+                  "audio params");
+            track.stream->time_base = track.enc->time_base;
+            track.frame = av_frame_alloc();
+            track.chunk = track.enc->frame_size > 0 ? track.enc->frame_size : 800;
+            track.nextPts =
+                static_cast<std::int64_t>(o.audioDelayFrames) * 48'000 * o.rate.den / o.rate.num;
         }
-        check(avcodec_open2(audio.enc, audioCodec, nullptr), "open audio encoder");
-        check(avcodec_parameters_from_context(audio.stream->codecpar, audio.enc), "audio params");
-        audio.stream->time_base = audio.enc->time_base;
-        audio.frame = av_frame_alloc();
-        audio.chunk = audio.enc->frame_size > 0 ? audio.enc->frame_size : 800;
-        audio.nextPts =
-            static_cast<std::int64_t>(o.audioDelayFrames) * 48'000 * o.rate.den / o.rate.num;
     }
 
     check(avio_open(&out->pb, file.c_str(), AVIO_FLAG_WRITE), "avio_open");
@@ -241,26 +250,28 @@ std::string writeTestClip(const std::filesystem::path& path, const ClipOptions& 
         frame->pts = i;
         writePackets(enc, out, stream, frame, o.packetDurations);
 
-        if (audio.enc) {
-            // Durante el fotograma i, todas las muestras valen audioLevelFor(i).
-            const auto value = static_cast<std::int16_t>(audioLevelFor(i) * 32768.0f);
-            audio.push(
+        for (std::size_t k = 0; k < audio.size(); ++k) {
+            // Durante el fotograma i, todas las muestras de la pista k valen
+            // audioLevelFor(i) / (k + 1).
+            const auto value =
+                static_cast<std::int16_t>(audioLevelFor(i) * 32768.0f / static_cast<float>(k + 1));
+            audio[k].push(
                 std::vector<std::int16_t>(static_cast<std::size_t>(samplesPerFrame) * 2, value));
-            audio.encode(out, false);
+            audio[k].encode(out, false);
         }
     }
     writePackets(enc, out, stream, nullptr, o.packetDurations);
-    if (audio.enc) {
-        audio.encode(out, true);
+    for (AudioTrack& track : audio) {
+        track.encode(out, true);
     }
     check(av_write_trailer(out), "write_trailer");
 
     const std::string used = codec->name;
     av_frame_free(&frame);
     avcodec_free_context(&enc);
-    if (audio.enc) {
-        av_frame_free(&audio.frame);
-        avcodec_free_context(&audio.enc);
+    for (AudioTrack& track : audio) {
+        av_frame_free(&track.frame);
+        avcodec_free_context(&track.enc);
     }
     avio_closep(&out->pb);
     avformat_free_context(out);

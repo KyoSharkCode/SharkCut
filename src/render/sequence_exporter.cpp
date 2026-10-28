@@ -7,6 +7,7 @@
 #include "media/video_decoder.h"
 #include "render/caption_renderer.h"
 #include "render/compositor.h"
+#include "render/text_frame.h"
 
 #include <QOffscreenSurface>
 #include <rhi/qrhi.h>
@@ -150,6 +151,16 @@ public:
     CompositorInput at(std::int64_t frame) override {
         CompositorInput input;
         for (const Project::Layer& layer : m_project.videoLayersAt(frame)) {
+            if (layer.clip->isText()) {
+                // Texto libre, dibujado al tamaño de la exportación.
+                const auto text = m_texts.get(*layer.clip->text, m_outputSize);
+                if (text.frame) {
+                    CompositorLayer& out = input.layers.emplace_back();
+                    out.a = text.frame;
+                    out.transform = scaled(transformAt(*layer.clip, frame));
+                }
+                continue;
+            }
             CompositorLayer& out = input.layers.emplace_back();
             if (layer.clip->isEffect()) {
                 // Transición-clip: transforma todo lo de debajo.
@@ -228,6 +239,7 @@ private:
     QSize m_outputSize;
     double m_scale = 1.0;
     CaptionImageCache m_captions;
+    TextFrameCache m_texts;
     std::vector<Entry> m_readers;
     std::uint64_t m_clock = 0;
 };

@@ -98,9 +98,9 @@ struct PartResult {
 };
 
 // Picos de los bloques [firstBlock, lastBlock) (lastBlock < 0: hasta el final del audio).
-PartResult computePart(const std::string& path, std::int64_t firstBlock, std::int64_t lastBlock,
-                       const std::atomic<bool>* cancel) {
-    AudioDecoder decoder(path);
+PartResult computePart(const std::string& path, int audioStream, std::int64_t firstBlock,
+                       std::int64_t lastBlock, const std::atomic<bool>* cancel) {
+    AudioDecoder decoder(path, audioStream);
     constexpr std::size_t kBlock = Waveform::kBlockSamples;
     constexpr std::size_t kChunkBlocks = 200; // un segundo por lectura
     std::vector<float> buffer(kChunkBlocks * Waveform::kBlockSamples * kAudioChannels);
@@ -161,7 +161,8 @@ PartResult computePart(const std::string& path, std::int64_t firstBlock, std::in
 
 } // namespace
 
-Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel, int parts) {
+Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cancel, int parts,
+                         int audioStream) {
     // Decodificar el audio es lo que más tarda (y va en un solo hilo): un VOD largo se
     // reparte en tramos que se decodifican a la vez y se juntan en orden.
     std::int64_t totalBlocks = 0;
@@ -181,7 +182,7 @@ Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cance
     }
     if (parts <= 1) {
         Waveform waveform;
-        waveform.peaks = computePart(path, 0, -1, cancel).peaks;
+        waveform.peaks = computePart(path, audioStream, 0, -1, cancel).peaks;
         return waveform;
     }
 
@@ -191,7 +192,8 @@ Waveform computeWaveform(const std::string& path, const std::atomic<bool>* cance
         const std::int64_t first = totalBlocks * part / parts;
         const std::int64_t last = part + 1 == parts ? -1 : totalBlocks * (part + 1) / parts;
         try {
-            results[static_cast<std::size_t>(part)] = computePart(path, first, last, cancel);
+            results[static_cast<std::size_t>(part)] =
+                computePart(path, audioStream, first, last, cancel);
         } catch (...) {
             errors[static_cast<std::size_t>(part)] = std::current_exception();
         }
@@ -274,7 +276,7 @@ std::optional<Waveform> loadWaveform(const std::filesystem::path& file) {
     return waveform;
 }
 
-std::string waveformCacheName(const std::string& mediaPath) {
+std::string waveformCacheName(const std::string& mediaPath, int audioStream) {
     const std::filesystem::path path = pathFromUtf8(mediaPath);
     std::error_code error;
     const auto size = std::filesystem::file_size(path, error);
@@ -299,8 +301,13 @@ std::string waveformCacheName(const std::string& mediaPath) {
     mix(&sizeValue, sizeof(sizeValue));
     const auto ticks = static_cast<std::int64_t>(modified.time_since_epoch().count());
     mix(&ticks, sizeof(ticks));
-    char name[32];
-    std::snprintf(name, sizeof(name), "%016llx.onda", static_cast<unsigned long long>(hash));
+    char name[48];
+    if (audioStream < 0) {
+        std::snprintf(name, sizeof(name), "%016llx.onda", static_cast<unsigned long long>(hash));
+    } else {
+        std::snprintf(name, sizeof(name), "%016llx-a%d.onda", static_cast<unsigned long long>(hash),
+                      audioStream);
+    }
     return name;
 }
 

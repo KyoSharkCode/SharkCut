@@ -29,16 +29,23 @@ struct AudioStreamInfo {
     std::string codec;
     int sampleRate = 0;
     int channels = 0;
+    std::string title; // nombre de la pista en el archivo (OBS: el de sus ajustes), si lo tiene
+    bool main = false; // la que suena si no se elige otra (Clip::audioStream = −1)
 };
 
 struct MediaInfo {
     std::string container; // p. ej. "mov,mp4,m4a,3gp,3g2,mj2"
     std::int64_t durationUs = 0;
     std::optional<VideoStreamInfo> video;
-    std::vector<AudioStreamInfo> audio;
+    std::vector<AudioStreamInfo> audio; // en el orden del archivo (Clip::audioStream)
 };
 
 // Analiza un archivo (ruta en UTF-8) sin decodificarlo. Lanza MediaError si falla.
 MediaInfo probeMedia(const std::string& path);
+
+// FFmpeg solo escribe sus errores (en stderr, que va al registro de la sesión): sus avisos
+// sobre metadatos que no entiende o referencias de H.264 que se arreglan solas llenaban el
+// registro de cientos de líneas sin importancia.
+void quietMediaLog();
 
 } // namespace sharkcut

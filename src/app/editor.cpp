@@ -129,6 +129,16 @@ QString fromView(std::string_view text) {
 }
 
 // Carpeta de los efectos de sonido, junto al ejecutable.
+// Nombre de un texto libre: su primera línea con algo (o «Texto» si está vacío).
+QString textClipName(const sharkcut::TextClip& text) {
+    for (const QString& line : QString::fromStdString(text.text).split(QLatin1Char('\n'))) {
+        if (!line.trimmed().isEmpty()) {
+            return line.trimmed();
+        }
+    }
+    return QStringLiteral("Texto");
+}
+
 QString soundFolder() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
 }
@@ -461,6 +471,7 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
     entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
     entry[QStringLiteral("volumeDb")] = clip.volumeDb;
+    entry[QStringLiteral("audioStream")] = clip.audioStream;
     sharkcut::ClipTransform placement = clip.transform;
     placement.chromaKey = {}; // el icono indica solo cambios de colocación
     placement.effects = {};
@@ -470,6 +481,11 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("effect")] = clip.isEffect();
     if (clip.isEffect()) {
         entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(clip.effect->type).name);
+    }
+    // Texto libre: se dibuja con su color y con el texto (su primera línea) como nombre.
+    entry[QStringLiteral("text")] = clip.isText();
+    if (clip.isText()) {
+        entry[QStringLiteral("name")] = textClipName(*clip.text);
     }
     // Keyframes (de cualquier propiedad) que caen dentro del clip, en la línea de tiempo.
     QVariantList keyframes;
@@ -693,10 +709,14 @@ QVariantMap Editor::selectedClip() const {
     result[QStringLiteral("start")] = static_cast<qint64>(first->start);
     result[QStringLiteral("end")] = static_cast<qint64>(first->end());
     const MediaItem* item = p.findMedia(first->media);
-    // Imagen fija: su duración se cambia desde Propiedades.
-    result[QStringLiteral("still")] = item && item->still;
+    // Imagen fija (o texto): su duración se cambia desde Propiedades.
+    result[QStringLiteral("still")] = (item && item->still) || first->isText();
     result[QStringLiteral("name")] =
         item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    if (first->isText()) {
+        result[QStringLiteral("name")] = textClipName(*first->text);
+        result[QStringLiteral("text")] = textInfo(*first);
+    }
     result[QStringLiteral("video")] = qint64{0};
     result[QStringLiteral("audio")] = qint64{0};
     for (ObjectId id : group) {
@@ -730,22 +750,26 @@ QVariantMap Editor::selectedClip() const {
             result[QStringLiteral("audioTrack")] = trackName;
             result[QStringLiteral("audioLocked")] = track.locked;
             result[QStringLiteral("volumeDb")] = clip.volumeDb;
+            result[QStringLiteral("audioStream")] = clip.audioStream;
+            if (const MediaItem* source = p.findMedia(clip.media); source && source->hasAudio) {
+                result[QStringLiteral("audioStreams")] = audioStreamList(*source, clip.audioStream);
+            }
         }
     }
     return result;
 }
 
-std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId) {
+std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId, int audioStream) {
     const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
     if (!item || !item->hasAudio) {
         return nullptr;
     }
-    return m_waveforms.get(QString::fromStdString(item->path));
+    return m_waveforms.get(QString::fromStdString(item->path), audioStream);
 }
 
-bool Editor::waveformLoading(qint64 mediaId) const {
+bool Editor::waveformLoading(qint64 mediaId, int audioStream) const {
     const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
-    return item && m_waveforms.pending(QString::fromStdString(item->path));
+    return item && m_waveforms.pending(QString::fromStdString(item->path), audioStream);
 }
 
 QStringList Editor::mediaPaths() const {
@@ -863,6 +887,30 @@ Editor::CanvasBox Editor::canvasBox(const Clip& clip, const sharkcut::ClipTransf
     const MediaItem* item = project().findMedia(clip.media);
     const double canvasW = project().settings.width;
     const double canvasH = project().settings.height;
+    if (clip.isText()) {
+        // El fotograma de un texto es del tamaño del lienzo; la caja es la del texto.
+        const QRectF rect =
+            m_textFrames
+                .get(textOf(clip), QSize(project().settings.width, project().settings.height))
+                .rect;
+        if (rect.isEmpty()) {
+            return box;
+        }
+        box.fullWidth = rect.width() * t.scale;
+        box.fullHeight = rect.height() * t.scale;
+        const double left = canvasW / 2 + t.x + (rect.left() - canvasW / 2) * t.scale;
+        const double top = canvasH / 2 + t.y + (rect.top() - canvasH / 2) * t.scale;
+        // El recorte va sobre el lienzo entero: lo que quede del texto dentro.
+        const double cropLeft = canvasW / 2 + t.x + (t.cropLeft - 0.5) * canvasW * t.scale;
+        const double cropTop = canvasH / 2 + t.y + (t.cropTop - 0.5) * canvasH * t.scale;
+        const double cropRight = canvasW / 2 + t.x + (0.5 - t.cropRight) * canvasW * t.scale;
+        const double cropBottom = canvasH / 2 + t.y + (0.5 - t.cropBottom) * canvasH * t.scale;
+        box.left = std::max(left, cropLeft);
+        box.top = std::max(top, cropTop);
+        box.width = std::max(0.0, std::min(left + box.fullWidth, cropRight) - box.left);
+        box.height = std::max(0.0, std::min(top + box.fullHeight, cropBottom) - box.top);
+        return box;
+    }
     if (!item || item->width <= 0 || item->height <= 0) {
         return box;
     }
@@ -933,8 +981,9 @@ QString Editor::selectionDescription() const {
     const QString name =
         first->isEffect() ? QStringLiteral("Transición %1")
                                 .arg(fromView(sharkcut::transitionInfo(first->effect->type).name))
-        : item ? QString::fromStdString(item->name)
-               : QStringLiteral("?");
+        : first->isText() ? QStringLiteral("Texto «%1»").arg(textClipName(*first->text))
+        : item            ? QString::fromStdString(item->name)
+                          : QStringLiteral("?");
     return QStringLiteral("%1\n%2 → %3 · %4")
         .arg(name, tc(first->start), tc(first->end()), tc(first->length));
 }
@@ -968,7 +1017,18 @@ QSize Editor::canvasSize() const {
 
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
+    const QSize canvas(project().settings.width, project().settings.height);
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
+        if (layer.clip->isText()) {
+            // Texto libre: un fotograma del tamaño del lienzo, sin decodificar nada.
+            const auto text = m_textFrames.get(textOf(*layer.clip), canvas);
+            if (text.frame) {
+                sharkcut::CompositorLayer& out = input.layers.emplace_back();
+                out.a = text.frame;
+                out.transform = transformOf(layer.clip->id);
+            }
+            continue;
+        }
         if (layer.clip->isEffect()) {
             // Transición-clip: transforma todo lo de debajo.
             sharkcut::CompositorLayer& out = input.layers.emplace_back();
@@ -1007,7 +1067,6 @@ sharkcut::CompositorInput Editor::composition() const {
             out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
         }
     }
-    const QSize canvas(project().settings.width, project().settings.height);
     sharkcut::CaptionImageCache::StyleOverride preview;
     if (m_captionPreview) {
         preview = [this](std::size_t track, const sharkcut::Caption& c) {
@@ -2912,6 +2971,16 @@ void Editor::rotateClip(qint64 clipId, bool clockwise) {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);
     const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
+    if (clip && clip->isText()) {
+        // Un texto solo gira: no hay un video que ajustar al lienzo.
+        sharkcut::ClipTransform t = transformOf(id);
+        t.rotation += clockwise ? 90.0 : -90.0;
+        m_previewClip = 0;
+        const std::int64_t frame = m_currentFrame;
+        edit(QStringLiteral("Girar 90°"),
+             [id, t, frame](Project& p) { return sharkcut::setClipTransformAt(p, id, t, frame); });
+        return;
+    }
     if (!item || item->width <= 0 || item->height <= 0) {
         return;
     }
@@ -3151,6 +3220,119 @@ void Editor::setClipVolume(qint64 clipId, double volumeDb) {
     const auto id = static_cast<ObjectId>(clipId);
     edit(QStringLiteral("Volumen"),
          [id, volumeDb](Project& p) { return sharkcut::setClipVolume(p, id, volumeDb); });
+}
+
+const std::vector<sharkcut::AudioStreamInfo>* Editor::audioStreamsOf(const QString& path) const {
+    if (const auto it = m_audioStreams.find(path); it != m_audioStreams.end()) {
+        return it->second.empty() ? nullptr : &it->second;
+    }
+    m_audioStreams[path] = {}; // pedido: se analiza una sola vez
+    QPointer<Editor> self(const_cast<Editor*>(this));
+    QThreadPool::globalInstance()->start([self, path] {
+        std::vector<sharkcut::AudioStreamInfo> streams;
+        try {
+            streams = sharkcut::probeMedia(path.toStdString()).audio;
+        } catch (const std::exception&) {
+            // archivo que falta: sin lista
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, path, streams = std::move(streams)] {
+                if (self && !streams.empty()) {
+                    self->m_audioStreams[path] = streams;
+                    emit self->selectedClipChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+    return nullptr;
+}
+
+QVariantList Editor::audioStreamList(const MediaItem& item, int selected) const {
+    QVariantList list;
+    const auto* streams = audioStreamsOf(QString::fromStdString(item.path));
+    if (!streams) {
+        return list;
+    }
+    for (std::size_t i = 0; i < streams->size(); ++i) {
+        const sharkcut::AudioStreamInfo& s = (*streams)[i];
+        const QString title = QString::fromStdString(s.title).trimmed();
+        QString name = QStringLiteral("Pista %1").arg(i + 1);
+        if (!title.isEmpty()) {
+            name += QStringLiteral(" · ") + title;
+        }
+        const QString channels = s.channels == 1   ? QStringLiteral("mono")
+                                 : s.channels == 2 ? QStringLiteral("estéreo")
+                                                   : QStringLiteral("%1 canales").arg(s.channels);
+        list.append(QVariantMap{
+            {QStringLiteral("index"), static_cast<int>(i)},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("detail"), channels},
+            {QStringLiteral("main"), s.main},
+            {QStringLiteral("selected"),
+             selected == static_cast<int>(i) || (selected < 0 && s.main)},
+        });
+    }
+    return list;
+}
+
+void Editor::setClipAudioStream(qint64 clipId, int stream) {
+    const auto id = static_cast<ObjectId>(clipId);
+    edit(QStringLiteral("Pista de audio del archivo"),
+         [id, stream](Project& p) { return sharkcut::setClipAudioStream(p, id, stream); });
+}
+
+void Editor::separateAudioStreams(qint64 clipId) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Project& current = project();
+    // El clip y los demás clips de audio seleccionados (con sus enlazados).
+    std::vector<ObjectId> group = sharkcut::withLinked(current, m_selection);
+    if (std::find(group.begin(), group.end(), id) == group.end()) {
+        group = {id};
+    }
+    struct Target {
+        ObjectId clip;
+        int streams;
+        int main;
+    };
+    std::vector<Target> targets;
+    for (ObjectId c : group) {
+        const auto ref = current.findClip(c);
+        if (!ref || current.tracks[ref->track].kind != sharkcut::TrackKind::Audio) {
+            continue;
+        }
+        const MediaItem* item =
+            current.findMedia(current.tracks[ref->track].clips[ref->index].media);
+        const auto* streams = item ? audioStreamsOf(QString::fromStdString(item->path)) : nullptr;
+        if (!streams || streams->size() < 2) {
+            continue;
+        }
+        int main = 0;
+        for (std::size_t i = 0; i < streams->size(); ++i) {
+            if ((*streams)[i].main) {
+                main = static_cast<int>(i);
+            }
+        }
+        targets.push_back({c, static_cast<int>(streams->size()), main});
+    }
+    if (targets.empty()) {
+        return;
+    }
+    std::vector<ObjectId> created;
+    const bool done = edit(QStringLiteral("Separar las pistas de audio"), [&](Project& p) {
+        for (const Target& t : targets) {
+            const auto ids = sharkcut::separateAudioStreams(p, t.clip, t.streams, t.main);
+            created.insert(created.end(), ids.begin(), ids.end());
+        }
+        return !created.empty();
+    });
+    if (done) {
+        // Quedan seleccionados, con los originales: se mueven juntos.
+        for (ObjectId c : created) {
+            m_selection.push_back(c);
+        }
+        emit selectionChanged();
+    }
 }
 
 void Editor::unlinkSelection() {
@@ -3858,6 +4040,7 @@ void Editor::onProjectChanged() {
     if (m_previewClip != 0 && !project().clip(m_previewClip)) {
         m_previewClip = 0;
     }
+    m_textPreview.reset();
     if (m_selectedTransition != 0 && !project().transition(m_selectedTransition)) {
         m_selectedTransition = 0;
     }
@@ -3971,7 +4154,7 @@ std::vector<Editor::Need> Editor::needsAt(std::size_t track, std::int64_t frame)
             return {{a, p.mediaFrameIndex(*a, frame)}, {b, p.mediaFrameIndex(*b, frame)}};
         }
     }
-    if (const Clip* clip = p.clipAt(track, frame); clip && !clip->isEffect()) {
+    if (const Clip* clip = p.clipAt(track, frame); clip && clip->hasMedia()) {
         return {{clip, p.mediaFrameIndex(*clip, frame)}};
     }
     return {};
@@ -3981,7 +4164,7 @@ std::optional<Editor::Need> Editor::upcoming(std::size_t track, std::int64_t fra
     const Project& p = project();
     const std::vector<Need> now = needsAt(track, frame);
     for (const Clip& clip : p.tracks[track].clips) {
-        if (clip.isEffect()) {
+        if (!clip.hasMedia()) {
             continue; // sin video que decodificar
         }
         if (clip.start <= frame || std::any_of(now.begin(), now.end(), [&clip](const Need& n) {
@@ -4048,7 +4231,7 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
                 const double ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::steady_clock::now() - opening)
                                       .count();
-                qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qPrintable(name), ms);
+                qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qUtf8Printable(name), ms);
             };
         slot.worker =
             std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
@@ -4148,11 +4331,16 @@ bool Editor::takeTrackFrame(std::size_t t, qint64 frame) {
             all = false;
             continue;
         }
-        const VideoSlot& source = track.decoders[static_cast<std::size_t>(slot)];
+        VideoSlot& source = track.decoders[static_cast<std::size_t>(slot)];
         DecodeWorker& worker = *source.worker;
         if (auto f = worker.takeUpTo(need.index)) {
             shown[k].frame = std::move(f);
             shown[k].path = source.path;
+            // Ya ha dado fotogramas: no sigue en el punto donde se colocó. Si este clip
+            // vuelve a ser «el siguiente» (al reproducir otra vez desde antes de él), hay
+            // que colocarlo de nuevo; si no, su cola tendría fotogramas de más adelante y
+            // al entrar se vería el clip anterior hasta que llegara el bueno.
+            source.seekIndex = -1;
         } else {
             for (const TrackVideo::Shown& before : track.shown) {
                 if (before.clip == need.clip->id && before.frame == shown[k].frame) {
@@ -4422,7 +4610,14 @@ void Editor::traceStep(qint64 frame) {
     if (!m_trace.active()) {
         return;
     }
-    m_trace.audioMissing(m_audioOutput ? m_audioOutput->takeMissingFrames() : 0);
+    std::int64_t missing = m_audioOutput ? m_audioOutput->takeMissingFrames() : 0;
+    // En los últimos 100 ms de la secuencia el audio se acaba (su último bloque sale
+    // incompleto): no es que falten muestras.
+    const sharkcut::FrameRate rate = project().settings.frameRate;
+    if (frame >= frameCount() - std::max<qint64>(1, sharkcut::mulDiv(rate.num, 1, 10 * rate.den))) {
+        missing = 0;
+    }
+    m_trace.audioMissing(missing);
     std::vector<PlaybackTrace::Visible> visible;
     for (std::size_t t : playedVideoTracks()) {
         const TrackVideo& track = m_video[t];
@@ -4467,7 +4662,10 @@ QString Editor::describeTraced(const PlaybackTrace::Visible& v) const {
     } else {
         const VideoSlot& s = track.decoders[static_cast<std::size_t>(slot)];
         const DecodeWorker::Status st = s.worker->status();
-        QString state = QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex);
+        QString state =
+            s.seekIndex >= 0
+                ? QStringLiteral("hilo %1 colocado en %2").arg(slot + 1).arg(s.seekIndex)
+                : QStringLiteral("hilo %1 ya dando fotogramas").arg(slot + 1);
         if (item && s.path != item->path) {
             state += QStringLiteral(" (proxy)");
         }
@@ -4586,7 +4784,7 @@ void Editor::setBusy(bool busy) {
 
 void Editor::setError(const QString& message) {
     if (!message.isEmpty()) {
-        qWarning("%s", qPrintable(message));
+        qWarning("%s", qUtf8Printable(message));
     }
     if (m_errorString != message) {
         m_errorString = message;

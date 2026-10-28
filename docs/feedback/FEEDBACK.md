@@ -53,7 +53,6 @@ Formato y estados: ver [README.md](README.md).
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Hecho |
 | [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
 | [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
-| [FB-050](#fb-050) | 2026-10-28 | Propiedades | Error | Cierre tras separar las pistas de audio y subirles el volumen | Investigando |
 
 ---
 
@@ -816,26 +815,3 @@ Formato y estados: ver [README.md](README.md).
   reproducir desde antes, el editor lo daba por preparado y no lo recolocaba. Es también la
   causa más probable de FB-047.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A18)
-
-<a id="fb-050"></a>
-### FB-050 · Cierre tras separar las pistas de audio y subirles el volumen
-- **Fecha:** 2026-10-28
-- **Quién:** Mina (vía Kyo)
-- **Versión:** 0.1.7
-- **Área:** Propiedades
-- **Tipo:** Error
-- **Qué dijo:** separar las pistas de audio de un MKV funciona, pero al separarlas y
-  subirles el volumen SharkCut se cerró.
-- **Contexto:** grabación MKV de OBS de más de 20 minutos con 3 pistas de audio, en V1/A1
-  con cortes. Registro de la sesión: separó hacia las 11:44 y siguió editando y
-  reproduciendo unos 20 minutos sin problemas; lo último es la mezcla abriendo las 3
-  pistas (12:04:46) y el registro acaba sin «Cierre inesperado» (ni excepción ni abort():
-  algo que el aviso no alcanza, como un desbordamiento de pila, memoria dañada o Windows
-  cerrando la app por no responder).
-- **Notas:** no se reproduce con Xvfb (MKV de 3 pistas, separar, +15 dB y reproducir) ni a
-  Kyo en Windows (MKV de 6 pistas, separar, volúmenes de −∞ a +15 dB). Falta: el momento
-  exacto, si se repite, y el evento del Visor de eventos de Windows (código de excepción
-  y módulo con errores). No dejó `ultimo-cierre.dmp`: el filtro de excepciones no llegó a
-  actuar (fallo rápido por memoria dañada, desbordamiento de pila o cierre por no
-  responder).
-- **Estado:** Investigando

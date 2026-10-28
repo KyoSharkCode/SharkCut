@@ -834,6 +834,8 @@ Formato y estados: ver [README.md](README.md).
   cerrando la app por no responder).
 - **Notas:** no se reproduce con Xvfb (MKV de 3 pistas, separar, +15 dB y reproducir) ni a
   Kyo en Windows (MKV de 6 pistas, separar, volúmenes de −∞ a +15 dB). Falta: el momento
-  exacto, si se repite, `ultimo-cierre.dmp` si existe y el evento del Visor de eventos de
-  Windows (código de excepción y módulo con errores).
+  exacto, si se repite, y el evento del Visor de eventos de Windows (código de excepción
+  y módulo con errores). No dejó `ultimo-cierre.dmp`: el filtro de excepciones no llegó a
+  actuar (fallo rápido por memoria dañada, desbordamiento de pila o cierre por no
+  responder).
 - **Estado:** Investigando

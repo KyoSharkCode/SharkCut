@@ -29,13 +29,15 @@ struct AudioStreamInfo {
     std::string codec;
     int sampleRate = 0;
     int channels = 0;
+    std::string title; // nombre de la pista en el archivo (OBS: el de sus ajustes), si lo tiene
+    bool main = false; // la que suena si no se elige otra (Clip::audioStream = −1)
 };
 
 struct MediaInfo {
     std::string container; // p. ej. "mov,mp4,m4a,3gp,3g2,mj2"
     std::int64_t durationUs = 0;
     std::optional<VideoStreamInfo> video;
-    std::vector<AudioStreamInfo> audio;
+    std::vector<AudioStreamInfo> audio; // en el orden del archivo (Clip::audioStream)
 };
 
 // Analiza un archivo (ruta en UTF-8) sin decodificarlo. Lanza MediaError si falla.

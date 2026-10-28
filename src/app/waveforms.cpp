@@ -16,8 +16,9 @@
 
 namespace {
 
-std::filesystem::path cacheFile(const QString& directory, const QString& mediaPath) {
-    const std::string name = sharkcut::waveformCacheName(mediaPath.toStdString());
+std::filesystem::path cacheFile(const QString& directory, const QString& mediaPath,
+                                int audioStream) {
+    const std::string name = sharkcut::waveformCacheName(mediaPath.toStdString(), audioStream);
     if (directory.isEmpty() || name.empty()) {
         return {};
     }
@@ -39,8 +40,10 @@ WaveformCache::~WaveformCache() {
     m_pool.waitForDone();
 }
 
-std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& mediaPath) {
-    Entry& entry = m_entries[mediaPath];
+std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& mediaPath,
+                                                             int audioStream) {
+    const Key key{mediaPath, audioStream};
+    Entry& entry = m_entries[key];
     if (entry.waveform || entry.pending || entry.failed) {
         return entry.waveform;
     }
@@ -48,15 +51,15 @@ std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& medi
     const QString directory = m_directory;
     const auto cancel = m_cancel;
     QPointer<WaveformCache> self(this);
-    m_pool.start([self, mediaPath, directory, cancel] {
+    m_pool.start([self, key, mediaPath, audioStream, directory, cancel] {
         std::shared_ptr<const sharkcut::Waveform> result;
-        const std::filesystem::path file = cacheFile(directory, mediaPath);
+        const std::filesystem::path file = cacheFile(directory, mediaPath, audioStream);
         try {
             if (auto cached = file.empty() ? std::nullopt : sharkcut::loadWaveform(file)) {
                 result = std::make_shared<const sharkcut::Waveform>(std::move(*cached));
             } else {
-                result = std::make_shared<const sharkcut::Waveform>(
-                    sharkcut::computeWaveform(mediaPath.toStdString(), cancel.get()));
+                result = std::make_shared<const sharkcut::Waveform>(sharkcut::computeWaveform(
+                    mediaPath.toStdString(), cancel.get(), 0, audioStream));
                 if (!file.empty()) {
                     sharkcut::saveWaveform(*result, file);
                 }
@@ -69,9 +72,9 @@ std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& medi
         }
         QMetaObject::invokeMethod(
             QCoreApplication::instance(),
-            [self, mediaPath, result] {
+            [self, key, result] {
                 if (self) {
-                    self->finish(mediaPath, result);
+                    self->finish(key, result);
                 }
             },
             Qt::QueuedConnection);
@@ -79,13 +82,12 @@ std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& medi
     return nullptr;
 }
 
-void WaveformCache::finish(const QString& path,
-                           std::shared_ptr<const sharkcut::Waveform> waveform) {
-    Entry& entry = m_entries[path];
+void WaveformCache::finish(const Key& key, std::shared_ptr<const sharkcut::Waveform> waveform) {
+    Entry& entry = m_entries[key];
     entry.pending = false;
     entry.failed = !waveform;
     entry.waveform = std::move(waveform);
-    emit ready(path);
+    emit ready(key.first);
 }
 
 void WaveformCache::setDirectory(const QString& directory) {
@@ -99,23 +101,22 @@ void WaveformCache::saveTo(const QString& directory, const QStringList& mediaPat
     if (directory.isEmpty()) {
         return;
     }
-    for (const QString& path : mediaPaths) {
-        const auto it = m_entries.find(path);
-        if (it != m_entries.end() && it->second.waveform) {
-            save(directory, path, it->second.waveform);
+    for (const auto& [key, entry] : m_entries) {
+        if (entry.waveform && mediaPaths.contains(key.first)) {
+            save(directory, key, entry.waveform);
         }
     }
 }
 
-bool WaveformCache::pending(const QString& mediaPath) const {
-    const auto it = m_entries.find(mediaPath);
+bool WaveformCache::pending(const QString& mediaPath, int audioStream) const {
+    const auto it = m_entries.find(Key{mediaPath, audioStream});
     return it != m_entries.end() && it->second.pending;
 }
 
-void WaveformCache::save(const QString& directory, const QString& path,
+void WaveformCache::save(const QString& directory, const Key& key,
                          std::shared_ptr<const sharkcut::Waveform> waveform) {
-    m_pool.start([path, directory, waveform] {
-        const std::filesystem::path file = cacheFile(directory, path);
+    m_pool.start([key, directory, waveform] {
+        const std::filesystem::path file = cacheFile(directory, key.first, key.second);
         std::error_code ignored;
         if (!file.empty() && !std::filesystem::exists(file, ignored)) {
             sharkcut::saveWaveform(*waveform, file);
@@ -153,8 +154,9 @@ void WaveformView::setEditor(Editor* editor) {
 }
 
 void WaveformView::refresh() {
-    m_waveform = m_editor ? m_editor->waveform(m_mediaId) : nullptr;
-    const bool loading = !m_waveform && m_editor && m_editor->waveformLoading(m_mediaId);
+    m_waveform = m_editor ? m_editor->waveform(m_mediaId, m_audioStream) : nullptr;
+    const bool loading =
+        !m_waveform && m_editor && m_editor->waveformLoading(m_mediaId, m_audioStream);
     if (loading != m_loading) {
         m_loading = loading;
         emit loadingChanged();
@@ -165,6 +167,13 @@ void WaveformView::refresh() {
 void WaveformView::setMediaId(qint64 id) {
     if (m_mediaId != id) {
         m_mediaId = id;
+        refresh();
+        emit changed();
+    }
+}
+void WaveformView::setAudioStream(int stream) {
+    if (m_audioStream != stream) {
+        m_audioStream = stream;
         refresh();
         emit changed();
     }

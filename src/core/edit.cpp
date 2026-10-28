@@ -1056,6 +1056,60 @@ bool setClipVolume(Project& project, ObjectId clip, double volumeDb) {
     return true;
 }
 
+bool setClipAudioStream(Project& project, ObjectId clip, int stream) {
+    const auto ref = project.findClip(clip);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Audio ||
+        project.tracks[ref->track].locked || stream < -1) {
+        return false;
+    }
+    Clip& c = project.tracks[ref->track].clips[ref->index];
+    if (c.audioStream == stream) {
+        return false;
+    }
+    c.audioStream = stream;
+    return true;
+}
+
+std::vector<ObjectId> separateAudioStreams(Project& project, ObjectId clip, int streams, int main) {
+    const auto ref = project.findClip(clip);
+    if (!ref || project.tracks[ref->track].kind != TrackKind::Audio ||
+        project.tracks[ref->track].locked || streams < 2 || main < 0 || main >= streams) {
+        return {};
+    }
+    Clip& c = project.tracks[ref->track].clips[ref->index];
+    if (c.audioStream < 0) {
+        c.audioStream = main;
+    }
+    const Clip original = c; // `c` deja de valer al añadir pistas o clips
+    std::vector<ObjectId> created;
+    for (int s = 0; s < streams; ++s) {
+        if (s == original.audioStream) {
+            continue;
+        }
+        std::optional<std::size_t> target;
+        for (std::size_t t = ref->track + 1; t < project.tracks.size(); ++t) {
+            const Track& candidate = project.tracks[t];
+            if (candidate.kind == TrackKind::Audio && !candidate.locked &&
+                std::none_of(candidate.clips.begin(), candidate.clips.end(), [&](const Clip& o) {
+                    return o.start < original.end() && o.end() > original.start;
+                })) {
+                target = t;
+                break;
+            }
+        }
+        if (!target) {
+            target = addTrack(project, TrackKind::Audio);
+        }
+        Clip copy = original;
+        copy.id = newId(project);
+        copy.link = 0;
+        copy.audioStream = s;
+        insertSorted(project.tracks[*target], copy);
+        created.push_back(copy.id);
+    }
+    return created;
+}
+
 bool unlinkClips(Project& project, const std::vector<ObjectId>& clips) {
     bool changed = false;
     for (ObjectId id : clips) {

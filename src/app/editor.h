@@ -9,6 +9,7 @@
 #include "core/project.h"
 #include "core/project_file.h"
 #include "media/decode_worker.h"
+#include "media/media_info.h"
 #include "playbackclock.h"
 #include "playbacktrace.h"
 #include "proxies.h"
@@ -236,8 +237,9 @@ public:
     QVariantMap selectedClip() const;
 
     // Forma de onda de un medio (nullptr mientras se calcula; llega waveformsChanged).
-    std::shared_ptr<const sharkcut::Waveform> waveform(qint64 mediaId);
-    bool waveformLoading(qint64 mediaId) const;
+    // (`audioStream`: la pista de audio del archivo, −1 = la principal.)
+    std::shared_ptr<const sharkcut::Waveform> waveform(qint64 mediaId, int audioStream = -1);
+    bool waveformLoading(qint64 mediaId, int audioStream = -1) const;
 
     QString projectName() const;
     QString canvasLabel() const;
@@ -589,6 +591,11 @@ public:
     Q_INVOKABLE qint64 clipAtCanvas(double x, double y) const;
     // Volumen de un clip de audio, en dB.
     Q_INVOKABLE void setClipVolume(qint64 clipId, double volumeDb);
+    // Pistas de audio del archivo (MKV de OBS con varias): cuál suena en el clip de audio
+    // (−1 = la principal), y cada una a su propia pista de la línea de tiempo (en todos
+    // los clips de audio seleccionados de archivos con varias).
+    Q_INVOKABLE void setClipAudioStream(qint64 clipId, int stream);
+    Q_INVOKABLE void separateAudioStreams(qint64 clipId);
     // Separa el video y el audio de los clips seleccionados.
     Q_INVOKABLE void unlinkSelection();
 
@@ -879,6 +886,11 @@ private:
     sharkcut::ObjectId m_previewClip = 0;
     sharkcut::ClipTransform m_previewTransform;
     WaveformCache m_waveforms;
+    // Pistas de audio de cada archivo, analizadas en segundo plano la primera vez que se
+    // piden (los proyectos no las guardan): ruta → pistas (vacío = aún no se sabe).
+    mutable std::map<QString, std::vector<sharkcut::AudioStreamInfo>> m_audioStreams;
+    const std::vector<sharkcut::AudioStreamInfo>* audioStreamsOf(const QString& path) const;
+    QVariantList audioStreamList(const sharkcut::MediaItem& item, int selected) const;
     // Lo último que se anunció de la biblioteca (para avisar solo si cambia).
     void updateLibrary();
     QVariantList m_shownMedia;

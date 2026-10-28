@@ -1415,6 +1415,54 @@ Rectangle {
                     onPulsado: panel.editor.setClipVolume(propiedades.sel.audio, 0)
                 }
             }
+            // Archivo con varias pistas de audio (MKV de OBS: micro, juego, música…).
+            ColumnLayout {
+                readonly property var pistas: propiedades.hayAudio && propiedades.sel.audioStreams
+                                              ? propiedades.sel.audioStreams : []
+                visible: pistas.length > 1
+                enabled: propiedades.hayAudio && !propiedades.sel.audioLocked
+                opacity: enabled ? 1 : 0.45
+                Layout.fillWidth: true
+                spacing: 6
+                Text {
+                    Layout.topMargin: 4
+                    text: "PISTAS DEL ARCHIVO"
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                    font.letterSpacing: 0.6
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Este archivo tiene " + parent.pistas.length + " pistas de audio. Elige "
+                          + "cuál suena en este clip, o pon cada una en su propia pista de la línea "
+                          + "de tiempo para ajustarlas por separado."
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+                Repeater {
+                    model: parent.pistas
+                    delegate: BotonIcono {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 28
+                        texto: modelData.name + " · " + modelData.detail
+                               + (modelData.main ? " · principal" : "")
+                        activo: modelData.selected === true
+                        ayuda: "Que suene esta pista del archivo en el clip"
+                        onPulsado: panel.editor.setClipAudioStream(propiedades.sel.audio, modelData.index)
+                    }
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "audio"
+                    texto: "Cada pista en su propia pista de audio"
+                    ayuda: "Este clip se queda con la que suena; cada una de las demás va a una "
+                           + "pista de audio de debajo, con el mismo tramo (también los demás clips "
+                           + "de audio seleccionados)"
+                    onPulsado: panel.editor.separateAudioStreams(propiedades.sel.audio)
+                }
+            }
 
             // --- Enlace entre video y audio ---
             Separador { visible: propiedades.uno && propiedades.sel.linked }

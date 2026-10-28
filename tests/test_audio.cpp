@@ -3,6 +3,7 @@
 #include "audio/ring_buffer.h"
 #include "audio/sound_preview.h"
 #include "core/edit.h"
+#include "core/project_file.h"
 #include "core/sfx.h"
 #include "media/audio_decoder.h"
 #include "media/media_error.h"
@@ -500,4 +501,65 @@ TEST_CASE("SoundPreview plays a sound until it ends or is stopped", "[audio]") {
     CHECK_THROWS(preview.play((wav.parent_path() / "no-existe.wav").string()));
     CHECK_FALSE(preview.playing());
     std::filesystem::remove(wav);
+}
+
+TEST_CASE("Files with several audio tracks play each one separately", "[audio][streams]") {
+    ClipOptions o = pcmClip();
+    o.audioTracks = 2;
+    o.audioTitles = {"Juego", "Micro"};
+    TempClip clip(o, "pistas.mkv");
+
+    const MediaInfo info = probeMedia(clip.path.string());
+    REQUIRE(info.audio.size() == 2);
+    CHECK(info.audio[0].title == "Juego");
+    CHECK(info.audio[1].title == "Micro");
+    CHECK((info.audio[0].main ? 1 : 0) + (info.audio[1].main ? 1 : 0) == 1);
+
+    // Cada pista por su número (la segunda vale la mitad).
+    const auto middleOf = [](AudioDecoder& decoder, int frame) {
+        decoder.seekToSample(frame * kSamplesPerFrame + 400);
+        float stereo[2] = {};
+        REQUIRE(decoder.read(stereo, 1) == 1);
+        return stereo[0];
+    };
+    AudioDecoder first(clip.path.string(), 0);
+    AudioDecoder second(clip.path.string(), 1);
+    CHECK(middleOf(first, 10) == Catch::Approx(audioLevelFor(10)).margin(1e-4));
+    CHECK(middleOf(second, 10) == Catch::Approx(audioLevelFor(10) / 2).margin(1e-4));
+    CHECK_THROWS_AS(AudioDecoder(clip.path.string(), 2), MediaError);
+
+    // En la línea de tiempo: la pista elegida y, al separarlas, las dos a la vez.
+    Project p = audioProject(clip.path);
+    const ObjectId video = placeClip(p, p.media[0].id, 0, 0, 60);
+    const ObjectId audio = p.clip(video)->link;
+    REQUIRE(audio != 0);
+    REQUIRE(setClipAudioStream(p, audio, 1));
+    const auto at = static_cast<std::size_t>(10 * kSamplesPerFrame + 400) * 2;
+    {
+        TimelineAudioSource source(p);
+        CHECK(readAll(source)[at] == Catch::Approx(audioLevelFor(10) / 2).margin(1e-4));
+    }
+    const std::vector<ObjectId> created = separateAudioStreams(p, audio, 2, 0);
+    REQUIRE(created.size() == 1);
+    CHECK(p.clip(audio)->audioStream == 1); // se queda con la que sonaba
+    CHECK(p.clip(audio)->link == video);
+    const Clip* other = p.clip(created[0]);
+    REQUIRE(other);
+    CHECK(other->audioStream == 0);
+    CHECK(other->link == 0);
+    CHECK(other->start == 0);
+    CHECK(other->length == 60);
+    CHECK(p.findClip(created[0])->track != p.findClip(audio)->track);
+    {
+        TimelineAudioSource source(p);
+        CHECK(readAll(source)[at] == Catch::Approx(audioLevelFor(10) * 1.5f).margin(1e-4));
+    }
+    CHECK(projectFromJson(projectToJson(p, {}), {}).tracks == p.tracks);
+
+    // Onda de cada pista, cada una en su archivo de caché.
+    const Waveform main = computeWaveform(clip.path.string(), nullptr, 1);
+    const Waveform half = computeWaveform(clip.path.string(), nullptr, 1, 1);
+    REQUIRE(main.peaks.size() == half.peaks.size());
+    CHECK(half.peaks[100] < main.peaks[100]);
+    CHECK(waveformCacheName(clip.path.string(), 1) != waveformCacheName(clip.path.string()));
 }

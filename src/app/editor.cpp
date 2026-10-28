@@ -471,6 +471,7 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     entry[QStringLiteral("length")] = static_cast<qint64>(clip.length);
     entry[QStringLiteral("in")] = static_cast<qint64>(clip.in);
     entry[QStringLiteral("volumeDb")] = clip.volumeDb;
+    entry[QStringLiteral("audioStream")] = clip.audioStream;
     sharkcut::ClipTransform placement = clip.transform;
     placement.chromaKey = {}; // el icono indica solo cambios de colocación
     placement.effects = {};
@@ -749,22 +750,26 @@ QVariantMap Editor::selectedClip() const {
             result[QStringLiteral("audioTrack")] = trackName;
             result[QStringLiteral("audioLocked")] = track.locked;
             result[QStringLiteral("volumeDb")] = clip.volumeDb;
+            result[QStringLiteral("audioStream")] = clip.audioStream;
+            if (const MediaItem* source = p.findMedia(clip.media); source && source->hasAudio) {
+                result[QStringLiteral("audioStreams")] = audioStreamList(*source, clip.audioStream);
+            }
         }
     }
     return result;
 }
 
-std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId) {
+std::shared_ptr<const sharkcut::Waveform> Editor::waveform(qint64 mediaId, int audioStream) {
     const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
     if (!item || !item->hasAudio) {
         return nullptr;
     }
-    return m_waveforms.get(QString::fromStdString(item->path));
+    return m_waveforms.get(QString::fromStdString(item->path), audioStream);
 }
 
-bool Editor::waveformLoading(qint64 mediaId) const {
+bool Editor::waveformLoading(qint64 mediaId, int audioStream) const {
     const MediaItem* item = project().findMedia(static_cast<ObjectId>(mediaId));
-    return item && m_waveforms.pending(QString::fromStdString(item->path));
+    return item && m_waveforms.pending(QString::fromStdString(item->path), audioStream);
 }
 
 QStringList Editor::mediaPaths() const {
@@ -3215,6 +3220,119 @@ void Editor::setClipVolume(qint64 clipId, double volumeDb) {
     const auto id = static_cast<ObjectId>(clipId);
     edit(QStringLiteral("Volumen"),
          [id, volumeDb](Project& p) { return sharkcut::setClipVolume(p, id, volumeDb); });
+}
+
+const std::vector<sharkcut::AudioStreamInfo>* Editor::audioStreamsOf(const QString& path) const {
+    if (const auto it = m_audioStreams.find(path); it != m_audioStreams.end()) {
+        return it->second.empty() ? nullptr : &it->second;
+    }
+    m_audioStreams[path] = {}; // pedido: se analiza una sola vez
+    QPointer<Editor> self(const_cast<Editor*>(this));
+    QThreadPool::globalInstance()->start([self, path] {
+        std::vector<sharkcut::AudioStreamInfo> streams;
+        try {
+            streams = sharkcut::probeMedia(path.toStdString()).audio;
+        } catch (const std::exception&) {
+            // archivo que falta: sin lista
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, path, streams = std::move(streams)] {
+                if (self && !streams.empty()) {
+                    self->m_audioStreams[path] = streams;
+                    emit self->selectedClipChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+    return nullptr;
+}
+
+QVariantList Editor::audioStreamList(const MediaItem& item, int selected) const {
+    QVariantList list;
+    const auto* streams = audioStreamsOf(QString::fromStdString(item.path));
+    if (!streams) {
+        return list;
+    }
+    for (std::size_t i = 0; i < streams->size(); ++i) {
+        const sharkcut::AudioStreamInfo& s = (*streams)[i];
+        const QString title = QString::fromStdString(s.title).trimmed();
+        QString name = QStringLiteral("Pista %1").arg(i + 1);
+        if (!title.isEmpty()) {
+            name += QStringLiteral(" · ") + title;
+        }
+        const QString channels = s.channels == 1   ? QStringLiteral("mono")
+                                 : s.channels == 2 ? QStringLiteral("estéreo")
+                                                   : QStringLiteral("%1 canales").arg(s.channels);
+        list.append(QVariantMap{
+            {QStringLiteral("index"), static_cast<int>(i)},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("detail"), channels},
+            {QStringLiteral("main"), s.main},
+            {QStringLiteral("selected"),
+             selected == static_cast<int>(i) || (selected < 0 && s.main)},
+        });
+    }
+    return list;
+}
+
+void Editor::setClipAudioStream(qint64 clipId, int stream) {
+    const auto id = static_cast<ObjectId>(clipId);
+    edit(QStringLiteral("Pista de audio del archivo"),
+         [id, stream](Project& p) { return sharkcut::setClipAudioStream(p, id, stream); });
+}
+
+void Editor::separateAudioStreams(qint64 clipId) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const Project& current = project();
+    // El clip y los demás clips de audio seleccionados (con sus enlazados).
+    std::vector<ObjectId> group = sharkcut::withLinked(current, m_selection);
+    if (std::find(group.begin(), group.end(), id) == group.end()) {
+        group = {id};
+    }
+    struct Target {
+        ObjectId clip;
+        int streams;
+        int main;
+    };
+    std::vector<Target> targets;
+    for (ObjectId c : group) {
+        const auto ref = current.findClip(c);
+        if (!ref || current.tracks[ref->track].kind != sharkcut::TrackKind::Audio) {
+            continue;
+        }
+        const MediaItem* item =
+            current.findMedia(current.tracks[ref->track].clips[ref->index].media);
+        const auto* streams = item ? audioStreamsOf(QString::fromStdString(item->path)) : nullptr;
+        if (!streams || streams->size() < 2) {
+            continue;
+        }
+        int main = 0;
+        for (std::size_t i = 0; i < streams->size(); ++i) {
+            if ((*streams)[i].main) {
+                main = static_cast<int>(i);
+            }
+        }
+        targets.push_back({c, static_cast<int>(streams->size()), main});
+    }
+    if (targets.empty()) {
+        return;
+    }
+    std::vector<ObjectId> created;
+    const bool done = edit(QStringLiteral("Separar las pistas de audio"), [&](Project& p) {
+        for (const Target& t : targets) {
+            const auto ids = sharkcut::separateAudioStreams(p, t.clip, t.streams, t.main);
+            created.insert(created.end(), ids.begin(), ids.end());
+        }
+        return !created.empty();
+    });
+    if (done) {
+        // Quedan seleccionados, con los originales: se mueven juntos.
+        for (ObjectId c : created) {
+            m_selection.push_back(c);
+        }
+        emit selectionChanged();
+    }
 }
 
 void Editor::unlinkSelection() {

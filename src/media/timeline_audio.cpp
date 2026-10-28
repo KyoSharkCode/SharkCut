@@ -40,6 +40,7 @@ TimelineAudioSource::TimelineAudioSource(Project project) : m_project(std::move(
             segment.end = samplesOf(clip.end());
             segment.sourceFirst = samplesOf(clip.in);
             segment.media = clip.media;
+            segment.audioStream = clip.audioStream;
             segment.gain = static_cast<float>(gainFromDb(clip.volumeDb));
             if (segment.end > segment.start) {
                 segments.push_back(segment);
@@ -50,7 +51,7 @@ TimelineAudioSource::TimelineAudioSource(Project project) : m_project(std::move(
             Segment& s = segments[i];
             const bool continuesPrevious =
                 i > 0 && segments[i - 1].end == s.start && segments[i - 1].media == s.media &&
-                segments[i - 1].gain == s.gain &&
+                segments[i - 1].audioStream == s.audioStream && segments[i - 1].gain == s.gain &&
                 segments[i - 1].sourceFirst + (segments[i - 1].end - segments[i - 1].start) ==
                     s.sourceFirst;
             s.fadeIn = !continuesPrevious;
@@ -71,12 +72,12 @@ std::int64_t TimelineAudioSource::samplesOf(std::int64_t frames) const {
     return rescale(frames, m_project.settings.frameRate.frameDuration(), kAudioSampleDuration);
 }
 
-AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media) {
-    const DecoderKey key{track, media};
+AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media, int audioStream) {
+    const DecoderKey key{track, media, audioStream};
     if (const auto it = m_decoders.find(key); it != m_decoders.end()) {
         return it->second.get();
     }
-    if (m_unavailable.contains(media)) {
+    if (m_unavailable.contains(Source{media, audioStream})) {
         return nullptr;
     }
     const MediaItem* item = m_project.findMedia(media);
@@ -85,7 +86,7 @@ AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media) {
             // Se abre al llegar a su primer clip, en el hilo del audio: si tarda, el
             // audio se queda sin muestras (queda en el registro de la sesión).
             const auto began = std::chrono::steady_clock::now();
-            auto opened = std::make_unique<AudioDecoder>(item->path);
+            auto opened = std::make_unique<AudioDecoder>(item->path, audioStream);
             const auto ms =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began)
                     .count();
@@ -98,7 +99,7 @@ AudioDecoder* TimelineAudioSource::decoder(std::size_t track, ObjectId media) {
     } catch (const std::exception&) {
         // archivo movido o sin audio: silencio
     }
-    m_unavailable.insert(media);
+    m_unavailable.insert(Source{media, audioStream});
     return nullptr;
 }
 
@@ -108,7 +109,7 @@ void TimelineAudioSource::seekToSample(std::int64_t sample) {
 
 void TimelineAudioSource::mixSegment(std::size_t track, const Segment& segment, std::int64_t from,
                                      std::int64_t to, float* out) {
-    AudioDecoder* source = decoder(track, segment.media);
+    AudioDecoder* source = decoder(track, segment.media, segment.audioStream);
     if (!source || segment.gain <= 0.0f) {
         return; // silencio: no suma nada
     }
@@ -170,7 +171,7 @@ std::size_t TimelineAudioSource::read(float* out, std::size_t frames) {
         // Los archivos de lo que va a sonar pronto se abren ya, con margen: abrirlos al
         // llegar a su clip dejaba al audio sin muestras un momento (y el visor se paraba).
         for (; it != segments.end() && it->start < end + kOpenAhead; ++it) {
-            decoder(track, it->media);
+            decoder(track, it->media, it->audioStream);
         }
     }
     m_position = end;

@@ -115,6 +115,8 @@ MediaInfo probeMedia(const std::string& path) {
         info.video = detail::describeVideoStream(format.get(), format->streams[videoIndex]);
     }
 
+    // La principal, como la elige AudioDecoder.
+    const int mainAudio = av_find_best_stream(format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
     for (unsigned i = 0; i < format->nb_streams; ++i) {
         const AVStream* stream = format->streams[i];
         if (stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
@@ -125,6 +127,10 @@ MediaInfo probeMedia(const std::string& path) {
         audio.codec = avcodec_get_name(stream->codecpar->codec_id);
         audio.sampleRate = stream->codecpar->sample_rate;
         audio.channels = stream->codecpar->ch_layout.nb_channels;
+        if (const AVDictionaryEntry* title = av_dict_get(stream->metadata, "title", nullptr, 0)) {
+            audio.title = title->value;
+        }
+        audio.main = stream->index == mainAudio;
         info.audio.push_back(audio);
     }
     return info;

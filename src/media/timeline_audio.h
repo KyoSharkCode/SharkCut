@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -43,15 +44,18 @@ private:
         std::int64_t end = 0;
         std::int64_t sourceFirst = 0; // muestra del medio que suena en `start`
         ObjectId media = 0;
+        int audioStream = -1; // pista de audio del archivo (Clip::audioStream)
         float gain = 1.0f;
         bool fadeIn = false;
         bool fadeOut = false;
     };
-    // Un decodificador por pista y medio: dos pistas con el mismo archivo no se pisan.
-    using DecoderKey = std::pair<std::size_t, ObjectId>;
+    // Un decodificador por pista, medio y pista de audio del archivo: dos pistas con el
+    // mismo archivo no se pisan.
+    using DecoderKey = std::tuple<std::size_t, ObjectId, int>;
+    using Source = std::pair<ObjectId, int>; // medio y pista de audio del archivo
 
     std::int64_t samplesOf(std::int64_t frames) const;
-    AudioDecoder* decoder(std::size_t track, ObjectId media);
+    AudioDecoder* decoder(std::size_t track, ObjectId media, int audioStream);
     // Suma el tramo [from, to) del segmento a `out`.
     void mixSegment(std::size_t track, const Segment& segment, std::int64_t from, std::int64_t to,
                     float* out);
@@ -60,7 +64,7 @@ private:
     AudioStreamInfo m_info;
     std::vector<std::vector<Segment>> m_tracks; // segmentos de cada pista que suena
     std::map<DecoderKey, std::unique_ptr<AudioDecoder>> m_decoders;
-    std::set<ObjectId> m_unavailable; // medios que no se pudieron abrir
+    std::set<Source> m_unavailable; // los que no se pudieron abrir
     std::vector<float> m_scratch;
     std::int64_t m_total = 0;
     std::int64_t m_position = 0;

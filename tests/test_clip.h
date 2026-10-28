@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace sharkcut::test {
 
@@ -28,6 +29,10 @@ struct ClipOptions {
     Audio audio = Audio::None;
     std::string container = "mp4";
     int audioDelayFrames = 0; // el audio empieza este número de fotogramas más tarde
+    // Pistas de audio (como un MKV de OBS con varias): la k-ésima vale
+    // audioLevelFor(i) / (k + 1). Con nombre (metadato "title") si se da.
+    int audioTracks = 1;
+    std::vector<std::string> audioTitles{};
     // Codificador de video concreto (p. ej. "libsvtav1"); vacío = H.264 o MPEG-4.
     std::string videoEncoder{};
 };

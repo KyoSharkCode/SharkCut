@@ -590,6 +590,9 @@ json tracksToJson(const std::vector<Track>& tracks) {
             if (!video && clip.volumeDb != 0.0) {
                 entry["volumeDb"] = clip.volumeDb;
             }
+            if (!video && clip.audioStream >= 0) {
+                entry["audioStream"] = clip.audioStream;
+            }
             if (video && clip.effect) {
                 entry["effect"] = effectToJson(*clip.effect);
             }
@@ -651,6 +654,9 @@ std::vector<Track> tracksFromJson(const json& value) {
                 clip.animation = animationFromJson(*a);
             }
             clip.volumeDb = c.value("volumeDb", 0.0);
+            if (track.kind == TrackKind::Audio) {
+                clip.audioStream = std::max(-1, c.value("audioStream", -1));
+            }
             if (const auto e = c.find("effect"); e != c.end() && track.kind == TrackKind::Video) {
                 clip.effect = effectFromJson(*e);
                 clip.media = 0;

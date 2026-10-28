@@ -260,6 +260,10 @@ struct Clip {
     ClipTransform transform;   // solo clips de video
     ClipAnimation animation{}; // solo clips de video
     double volumeDb = 0.0;     // solo clips de audio
+    // Pista de audio del archivo que suena (solo clips de audio): −1 = la principal (la
+    // única, casi siempre), n = la n-ésima del archivo (0 = la primera). Las grabaciones
+    // de OBS en MKV pueden llevar varias (micro, juego, música…).
+    int audioStream = -1;
     // Transición como clip (pistas de video, sin medio: media = 0): en su tramo se aplica
     // a todo lo que hay debajo (como una capa de ajuste). Su efecto dura
     // effect->durationFrames y avanza con `in`, como un medio: al cortarla o recortarla,

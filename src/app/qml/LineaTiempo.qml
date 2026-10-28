@@ -974,6 +974,7 @@ Rectangle {
                                             height: elemento.height - 16
                                             editor: raiz.editor
                                             mediaId: elemento.modelData.media
+                                            audioStream: elemento.modelData.audioStream
                                             firstFrame: elemento.entradaVista + izquierda / raiz.escala
                                             framesPerPixel: 1 / raiz.escala
                                             fps: raiz.editor.fps
@@ -1060,7 +1061,10 @@ Rectangle {
                                         spacing: 4
                                         Text {
                                             Layout.fillWidth: true
+                                            // Una pista concreta de un archivo con varias: su número.
                                             text: (elemento.esVideo ? "" : "♪ ") + elemento.modelData.name
+                                                  + (!elemento.esVideo && elemento.modelData.audioStream >= 0
+                                                     ? " · pista " + (elemento.modelData.audioStream + 1) : "")
                                             color: Theme.texto
                                             // Contorno oscuro: legible sobre las miniaturas
                                             style: elemento.esVideo ? Text.Outline : Text.Normal

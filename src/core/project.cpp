@@ -296,6 +296,13 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
             }
         }
         const Clip* c = clipAt(t, frame);
+        if (c && c->isText()) {
+            Layer layer;
+            layer.track = t;
+            layer.clip = c;
+            layers.push_back(layer);
+            continue;
+        }
         if (c && c->isEffect()) {
             Layer layer;
             layer.track = t;

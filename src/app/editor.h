@@ -13,6 +13,7 @@
 #include "playbacktrace.h"
 #include "proxies.h"
 #include "render/caption_renderer.h"
+#include "render/text_frame.h"
 #include "waveforms.h"
 
 #include <QElapsedTimer>
@@ -552,6 +553,20 @@ public:
     // Vuelve a dividir la pista: {lines: "single"|"double"|"word", maxChars, minSeconds,
     // gapFrames, removePunctuation}.
     Q_INVOKABLE void relayoutCaptionTrack(int track, const QVariantMap& layout);
+
+    // --- Textos libres (editor_captions.cpp: usan el estilo de los subtítulos) ---
+    // Un texto nuevo en `frame`, en la primera pista de video libre desde `track` hacia
+    // arriba (−1: encima de lo que se ve ahí), con el estilo de un ajuste guardado
+    // (vacío: el de siempre); queda seleccionado.
+    Q_INVOKABLE void addText(int track, qint64 frame, const QString& preset = {});
+    Q_INVOKABLE void addTextAtPlayhead(const QString& preset = {});
+    Q_INVOKABLE void setClipText(qint64 clipId, const QString& text);
+    // Las mismas claves que previewCaptionStyle (salvo x e y: se coloca como un clip).
+    Q_INVOKABLE void previewTextStyle(qint64 clipId, const QVariantMap& values);
+    Q_INVOKABLE void setTextStyle(qint64 clipId, const QVariantMap& values,
+                                  const QString& label = {});
+    Q_INVOKABLE void applyTextPreset(qint64 clipId, const QString& name);
+    Q_INVOKABLE void saveTextPreset(qint64 clipId, const QString& name);
     Q_INVOKABLE void importSrt(const QUrl& file);
     Q_INVOKABLE void exportSrt(int track, const QUrl& file);
 
@@ -936,6 +951,7 @@ private:
     void setClipsTransform(const std::vector<sharkcut::ObjectId>& clips, const QVariantMap& values,
                            const QString& label);
     mutable sharkcut::CaptionImageCache m_captionImages; // subtítulos ya dibujados
+    mutable sharkcut::TextFrameCache m_textFrames;       // textos libres ya convertidos
     std::vector<sharkcut::ObjectId> m_selectedCaptions;
     // Para Propiedades: por propiedad, {animated, key (hay keyframe en el cabezal), prev,
     // next}; y keyEasing: índice de la curva del keyframe del cabezal (−1 si no hay).
@@ -951,6 +967,12 @@ private:
         sharkcut::CaptionStyle style;
     };
     std::optional<CaptionPreview> m_captionPreview;
+    // Estilo provisional de un texto libre (mientras se arrastra un valor).
+    std::optional<std::pair<sharkcut::ObjectId, sharkcut::TextClip>> m_textPreview;
+    // El texto que se ve de un clip de texto (con la vista previa).
+    const sharkcut::TextClip& textOf(const sharkcut::Clip& clip) const;
+    QVariantMap textInfo(const sharkcut::Clip& clip) const; // contenido y estilo, para QML
+    void saveStylePreset(const QString& name, const sharkcut::CaptionStyle& style);
     // Transcripción en curso: lo que hace falta para terminarla (ver createCaptions).
     struct AnchorJob;
     std::shared_ptr<AnchorJob> m_anchor;

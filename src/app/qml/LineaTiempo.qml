@@ -946,6 +946,7 @@ Rectangle {
                                 radius: 3
                                 color: {
                                     const base = elemento.modelData.effect ? Theme.clipTransicion
+                                               : elemento.modelData.text ? Theme.clipTexto
                                                : esVideo ? Theme.clipVideo : Theme.clipAudio
                                     return seleccionado ? Qt.lighter(base, 1.3) : base
                                 }
@@ -1529,7 +1530,7 @@ Rectangle {
                             width: parent.width
                             height: Math.max(raiz.altoPistas + 2 * raiz.separacion, contenido.height - y)
                             keys: ["sharkcut/medio", "sharkcut/transicion", "sharkcut/efecto",
-                                   "sharkcut/sonido", "text/uri-list"]
+                                   "sharkcut/sonido", "sharkcut/texto", "text/uri-list"]
                             function esSonido(d) {
                                 return d.keys.indexOf("sharkcut/sonido") >= 0
                             }
@@ -1538,6 +1539,9 @@ Rectangle {
                             }
                             function esEfecto(d) {
                                 return d.keys.indexOf("sharkcut/efecto") >= 0
+                            }
+                            function esTexto(d) {
+                                return d.keys.indexOf("sharkcut/texto") >= 0
                             }
                             function actualizar(d) {
                                 const p = raiz.pistaEnY(d.y + y)
@@ -1548,6 +1552,11 @@ Rectangle {
                                 if (esSonido(d)) {
                                     raiz.marcaSoltar = raiz.frameEn(d.x)
                                     raiz.pistaSoltar = p && !p.video ? p.index : -1
+                                    return
+                                }
+                                if (esTexto(d)) {
+                                    raiz.marcaSoltar = raiz.ajustar(raiz.frameEn(d.x), [])
+                                    raiz.pistaSoltar = p && p.video ? p.index : -1
                                     return
                                 }
                                 if (esTransicion(d)) {
@@ -1589,6 +1598,12 @@ Rectangle {
                                     if (d.source)
                                         Qt.callLater(raiz.editor.addSound, d.source.sonido,
                                                      p && !p.video ? p.index : -1, raiz.frameEn(d.x))
+                                    d.accept()
+                                } else if (esTexto(d)) {
+                                    // Un texto: en esa pista si está libre (si no, más arriba).
+                                    if (d.source)
+                                        Qt.callLater(raiz.editor.addText, p && p.video ? p.index : -1,
+                                                     f, d.source.ajusteTexto)
                                     d.accept()
                                 } else if (esTransicion(d)) {
                                     // Una transición-clip: afecta a todo lo que hay debajo.

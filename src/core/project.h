@@ -214,6 +214,39 @@ inline constexpr double kMaxVolumeDb = 15.0;
 // Ganancia lineal de un volumen en dB (0 si es kMinVolumeDb o menos).
 double gainFromDb(double db);
 
+// Aspecto de un subtítulo. Las medidas en píxeles son para un lienzo de 1080 de lado
+// corto (1920×1080 o 1080×1920); con otros tamaños se escalan.
+struct CaptionStyle {
+    std::string font = "Arial";
+    double size = 64.0; // alto de letra
+    bool bold = true;
+    bool italic = false;
+    bool uppercase = false;
+    std::uint32_t color = 0xFFFFFF;        // 0xRRGGBB
+    std::uint32_t outlineColor = 0x000000; // contorno
+    double outline = 6.0;                  // grosor del contorno (0 = sin contorno)
+    std::uint32_t shadowColor = 0x000000;
+    double shadow = 0.0;               // opacidad de la sombra (0 = sin sombra)
+    std::uint32_t boxColor = 0x000000; // caja de fondo
+    double box = 0.0;                  // opacidad de la caja (0 = sin caja)
+    double x = 0.5;                    // centro del texto, en fracción del lienzo
+    double y = 0.82;
+    double maxWidth = 0.86; // ancho máximo del texto (fracción); las líneas se parten
+    int align = 0;          // líneas alineadas: −1 a la izquierda, 0 centradas, 1 a la derecha
+
+    friend bool operator==(const CaptionStyle&, const CaptionStyle&) = default;
+};
+
+// Texto libre de la línea de tiempo (un clip de video sin medio): su contenido y su estilo,
+// el mismo que el de los subtítulos (su posición x, y no se usa: el texto se dibuja en el
+// centro del lienzo y se coloca con la transformación del clip, como un video).
+struct TextClip {
+    std::string text; // con '\n' entre líneas
+    CaptionStyle style{};
+
+    friend bool operator==(const TextClip&, const TextClip&) = default;
+};
+
 struct Clip {
     ObjectId id = 0;
     ObjectId media = 0;
@@ -232,12 +265,18 @@ struct Clip {
     // effect->durationFrames y avanza con `in`, como un medio: al cortarla o recortarla,
     // cada trozo sigue donde iba.
     std::optional<TransitionParams> effect{};
+    // Texto libre (pistas de video, sin medio: media = 0). Se alarga sin límite, como una
+    // imagen fija, y tiene todo lo de un clip de video (colocación, keyframes, efectos).
+    std::optional<TextClip> text{};
 
     std::int64_t end() const { return start + length; } // primer fotograma excluido
     std::int64_t out() const { return in + length; }    // fin del tramo en el medio
     // Posición en el medio de un fotograma de la línea de tiempo (la de los keyframes).
     std::int64_t mediaFrameAt(std::int64_t frame) const { return in + (frame - start); }
     bool isEffect() const { return effect.has_value(); }
+    bool isText() const { return text.has_value(); }
+    // Lee un medio (ni transición-clip ni texto).
+    bool hasMedia() const { return !isEffect() && !isText(); }
 
     friend bool operator==(const Clip&, const Clip&) = default;
 };
@@ -292,28 +331,6 @@ struct Marker {
 // Van en pistas propias (S1, S2…), aparte de las de video y audio, y se dibujan encima
 // de todo. Cada subtítulo es un texto con su tramo; puede guardar el momento de cada
 // palabra (de la transcripción automática) para volver a dividirlo con otras medidas.
-
-// Aspecto de un subtítulo. Las medidas en píxeles son para un lienzo de 1080 de lado
-// corto (1920×1080 o 1080×1920); con otros tamaños se escalan.
-struct CaptionStyle {
-    std::string font = "Arial";
-    double size = 64.0; // alto de letra
-    bool bold = true;
-    bool italic = false;
-    bool uppercase = false;
-    std::uint32_t color = 0xFFFFFF;        // 0xRRGGBB
-    std::uint32_t outlineColor = 0x000000; // contorno
-    double outline = 6.0;                  // grosor del contorno (0 = sin contorno)
-    std::uint32_t shadowColor = 0x000000;
-    double shadow = 0.0;               // opacidad de la sombra (0 = sin sombra)
-    std::uint32_t boxColor = 0x000000; // caja de fondo
-    double box = 0.0;                  // opacidad de la caja (0 = sin caja)
-    double x = 0.5;                    // centro del texto, en fracción del lienzo
-    double y = 0.82;
-    double maxWidth = 0.86; // ancho máximo del texto (fracción); las líneas se parten
-
-    friend bool operator==(const CaptionStyle&, const CaptionStyle&) = default;
-};
 
 // Palabra de un subtítulo: dónde empieza y acaba, en fotogramas desde el inicio del
 // subtítulo.
@@ -394,6 +411,7 @@ struct Project {
         // Transición-clip (clip->isEffect(), sin medio): se aplica a las capas de debajo,
         // en este fotograma de su efecto.
         std::int64_t effectFrame = 0;
+        // Un texto (clip->isText()) tampoco tiene medio: se dibuja con su estilo.
     };
 
     struct TransitionRef {

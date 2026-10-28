@@ -87,16 +87,21 @@ void validateSequence(Project& project, int version, IdSet& ids) {
     for (Track& track : project.tracks) {
         for (const Clip& clip : track.clips) {
             claim(ids, clip.id);
-            const MediaItem* item = clip.isEffect() ? nullptr : project.findMedia(clip.media);
-            if (!clip.isEffect() && !item) {
+            const MediaItem* item = clip.hasMedia() ? project.findMedia(clip.media) : nullptr;
+            if (clip.hasMedia() && !item) {
                 throw ProjectError("Un clip hace referencia a un medio que no existe");
             }
-            // Una imagen fija se alarga también hacia la izquierda: su `in` puede ser < 0.
-            if (clip.length <= 0 || clip.start < 0 || (clip.in < 0 && !(item && item->still))) {
+            // Una imagen fija (o un texto) se alarga también hacia la izquierda: su `in`
+            // puede ser < 0.
+            const bool stretches = clip.isText() || (item && item->still);
+            if (clip.length <= 0 || clip.start < 0 || (clip.in < 0 && !stretches)) {
                 throw ProjectError("Clip con posición o duración no válida en el proyecto");
             }
         }
         for (Clip& clip : track.clips) {
+            if (clip.text) {
+                clip.text->style = clampCaptionStyle(clip.text->style);
+            }
             clip.transform = clampTransform(clip.transform);
             if (!std::isfinite(clip.volumeDb)) {
                 clip.volumeDb = 0.0;
@@ -447,6 +452,7 @@ json captionStyleToJson(const CaptionStyle& st) {
         {"x", st.x},
         {"y", st.y},
         {"maxWidth", st.maxWidth},
+        {"align", st.align},
     };
 }
 
@@ -468,6 +474,7 @@ CaptionStyle captionStyleFromJson(const json& v) {
     st.x = v.value("x", d.x);
     st.y = v.value("y", d.y);
     st.maxWidth = v.value("maxWidth", d.maxWidth);
+    st.align = v.value("align", d.align);
     return st;
 }
 
@@ -586,6 +593,10 @@ json tracksToJson(const std::vector<Track>& tracks) {
             if (video && clip.effect) {
                 entry["effect"] = effectToJson(*clip.effect);
             }
+            if (video && clip.text) {
+                entry["text"] = {{"text", clip.text->text},
+                                 {"style", captionStyleToJson(clip.text->style)}};
+            }
             clips.push_back(std::move(entry));
         }
         json entry = {{"kind", kindName(track.kind)}, {"clips", std::move(clips)}};
@@ -642,6 +653,11 @@ std::vector<Track> tracksFromJson(const json& value) {
             clip.volumeDb = c.value("volumeDb", 0.0);
             if (const auto e = c.find("effect"); e != c.end() && track.kind == TrackKind::Video) {
                 clip.effect = effectFromJson(*e);
+                clip.media = 0;
+            } else if (const auto x = c.find("text");
+                       x != c.end() && x->is_object() && track.kind == TrackKind::Video) {
+                clip.text = TextClip{x->value("text", std::string()),
+                                     captionStyleFromJson(x->value("style", json::object()))};
                 clip.media = 0;
             }
             track.clips.push_back(clip);

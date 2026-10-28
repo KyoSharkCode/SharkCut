@@ -239,8 +239,12 @@ bool transitionLocked(const Project& project, ObjectId id) {
     return !ref || project.tracks[ref->track].locked;
 }
 
-// Clip de una imagen fija: se alarga sin límite, también hacia la izquierda (`in` < 0).
+// Clip de una imagen fija (o un texto): se alarga sin límite, también hacia la izquierda
+// (`in` < 0).
 bool isStill(const Project& project, const Clip& clip) {
+    if (clip.isText()) {
+        return true;
+    }
     const MediaItem* item = clip.isEffect() ? nullptr : project.findMedia(clip.media);
     return item && item->still;
 }
@@ -455,12 +459,12 @@ std::vector<ObjectId> pasteClips(Project& project, const Clipboard& clipboard, s
         }
         const std::size_t track = project.trackIndex(c.kind, c.trackNumber).value();
         const auto media = mediaIds.find(c.clip.media);
-        if (project.tracks[track].locked || (media == mediaIds.end() && !c.clip.isEffect())) {
+        if (project.tracks[track].locked || (media == mediaIds.end() && c.clip.hasMedia())) {
             continue;
         }
         Clip clip = c.clip;
         clip.id = newId(project);
-        clip.media = c.clip.isEffect() ? 0 : media->second;
+        clip.media = c.clip.hasMedia() ? media->second : 0;
         clip.start += at;
         ids[c.clip.id] = clip.id;
         pasting.push_back({track, clip, c.clip.link});
@@ -520,6 +524,51 @@ ObjectId placeEffect(Project& project, std::size_t track, std::int64_t start,
     clip.effect = params;
     insertSorted(project.tracks[*target], clip);
     return clip.id;
+}
+
+ObjectId placeText(Project& project, std::size_t track, std::int64_t start, std::int64_t length,
+                   TextClip text) {
+    if (track >= project.tracks.size() || project.tracks[track].kind != TrackKind::Video ||
+        start < 0 || length <= 0) {
+        return 0;
+    }
+    const std::int64_t end = start + length;
+    // Como una transición-clip: la primera pista de video libre en ese tramo, desde `track`
+    // hacia arriba (un texto va encima de lo demás), o una nueva.
+    std::optional<std::size_t> target;
+    for (std::size_t t = track; t < project.tracks.size(); ++t) {
+        const Track& candidate = project.tracks[t];
+        if (candidate.kind == TrackKind::Video && !candidate.locked && !candidate.hidden &&
+            std::none_of(candidate.clips.begin(), candidate.clips.end(),
+                         [&](const Clip& c) { return c.start < end && c.end() > start; })) {
+            target = t;
+            break;
+        }
+    }
+    if (!target) {
+        target = addTrack(project, TrackKind::Video);
+    }
+    text.style = clampCaptionStyle(text.style);
+    Clip clip;
+    clip.id = newId(project);
+    clip.start = start;
+    clip.length = length;
+    clip.text = std::move(text);
+    insertSorted(project.tracks[*target], clip);
+    return clip.id;
+}
+
+bool setClipText(Project& project, ObjectId id, TextClip text) {
+    Clip* clip = findMutable(project, id);
+    if (!clip || !clip->isText() || inLockedTrack(project, id)) {
+        return false;
+    }
+    text.style = clampCaptionStyle(text.style);
+    if (*clip->text == text) {
+        return false;
+    }
+    clip->text = std::move(text);
+    return true;
 }
 
 bool setClipEffect(Project& project, ObjectId id, TransitionParams params) {
@@ -1629,6 +1678,7 @@ CaptionStyle clampCaptionStyle(CaptionStyle style) {
     style.x = std::clamp(finite(style.x, d.x), 0.0, 1.0);
     style.y = std::clamp(finite(style.y, d.y), 0.0, 1.0);
     style.maxWidth = std::clamp(finite(style.maxWidth, d.maxWidth), 0.1, 1.0);
+    style.align = std::clamp(style.align, -1, 1);
     style.color &= 0xFFFFFFu;
     style.outlineColor &= 0xFFFFFFu;
     style.shadowColor &= 0xFFFFFFu;

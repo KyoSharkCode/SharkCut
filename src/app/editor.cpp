@@ -129,6 +129,16 @@ QString fromView(std::string_view text) {
 }
 
 // Carpeta de los efectos de sonido, junto al ejecutable.
+// Nombre de un texto libre: su primera línea con algo (o «Texto» si está vacío).
+QString textClipName(const sharkcut::TextClip& text) {
+    for (const QString& line : QString::fromStdString(text.text).split(QLatin1Char('\n'))) {
+        if (!line.trimmed().isEmpty()) {
+            return line.trimmed();
+        }
+    }
+    return QStringLiteral("Texto");
+}
+
 QString soundFolder() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("presets/sfx"));
 }
@@ -471,6 +481,11 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     if (clip.isEffect()) {
         entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(clip.effect->type).name);
     }
+    // Texto libre: se dibuja con su color y con el texto (su primera línea) como nombre.
+    entry[QStringLiteral("text")] = clip.isText();
+    if (clip.isText()) {
+        entry[QStringLiteral("name")] = textClipName(*clip.text);
+    }
     // Keyframes (de cualquier propiedad) que caen dentro del clip, en la línea de tiempo.
     QVariantList keyframes;
     if (!clip.animation.empty()) {
@@ -693,10 +708,14 @@ QVariantMap Editor::selectedClip() const {
     result[QStringLiteral("start")] = static_cast<qint64>(first->start);
     result[QStringLiteral("end")] = static_cast<qint64>(first->end());
     const MediaItem* item = p.findMedia(first->media);
-    // Imagen fija: su duración se cambia desde Propiedades.
-    result[QStringLiteral("still")] = item && item->still;
+    // Imagen fija (o texto): su duración se cambia desde Propiedades.
+    result[QStringLiteral("still")] = (item && item->still) || first->isText();
     result[QStringLiteral("name")] =
         item ? QString::fromStdString(item->name) : QStringLiteral("?");
+    if (first->isText()) {
+        result[QStringLiteral("name")] = textClipName(*first->text);
+        result[QStringLiteral("text")] = textInfo(*first);
+    }
     result[QStringLiteral("video")] = qint64{0};
     result[QStringLiteral("audio")] = qint64{0};
     for (ObjectId id : group) {
@@ -863,6 +882,30 @@ Editor::CanvasBox Editor::canvasBox(const Clip& clip, const sharkcut::ClipTransf
     const MediaItem* item = project().findMedia(clip.media);
     const double canvasW = project().settings.width;
     const double canvasH = project().settings.height;
+    if (clip.isText()) {
+        // El fotograma de un texto es del tamaño del lienzo; la caja es la del texto.
+        const QRectF rect =
+            m_textFrames
+                .get(textOf(clip), QSize(project().settings.width, project().settings.height))
+                .rect;
+        if (rect.isEmpty()) {
+            return box;
+        }
+        box.fullWidth = rect.width() * t.scale;
+        box.fullHeight = rect.height() * t.scale;
+        const double left = canvasW / 2 + t.x + (rect.left() - canvasW / 2) * t.scale;
+        const double top = canvasH / 2 + t.y + (rect.top() - canvasH / 2) * t.scale;
+        // El recorte va sobre el lienzo entero: lo que quede del texto dentro.
+        const double cropLeft = canvasW / 2 + t.x + (t.cropLeft - 0.5) * canvasW * t.scale;
+        const double cropTop = canvasH / 2 + t.y + (t.cropTop - 0.5) * canvasH * t.scale;
+        const double cropRight = canvasW / 2 + t.x + (0.5 - t.cropRight) * canvasW * t.scale;
+        const double cropBottom = canvasH / 2 + t.y + (0.5 - t.cropBottom) * canvasH * t.scale;
+        box.left = std::max(left, cropLeft);
+        box.top = std::max(top, cropTop);
+        box.width = std::max(0.0, std::min(left + box.fullWidth, cropRight) - box.left);
+        box.height = std::max(0.0, std::min(top + box.fullHeight, cropBottom) - box.top);
+        return box;
+    }
     if (!item || item->width <= 0 || item->height <= 0) {
         return box;
     }
@@ -933,8 +976,9 @@ QString Editor::selectionDescription() const {
     const QString name =
         first->isEffect() ? QStringLiteral("Transición %1")
                                 .arg(fromView(sharkcut::transitionInfo(first->effect->type).name))
-        : item ? QString::fromStdString(item->name)
-               : QStringLiteral("?");
+        : first->isText() ? QStringLiteral("Texto «%1»").arg(textClipName(*first->text))
+        : item            ? QString::fromStdString(item->name)
+                          : QStringLiteral("?");
     return QStringLiteral("%1\n%2 → %3 · %4")
         .arg(name, tc(first->start), tc(first->end()), tc(first->length));
 }
@@ -968,7 +1012,18 @@ QSize Editor::canvasSize() const {
 
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
+    const QSize canvas(project().settings.width, project().settings.height);
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
+        if (layer.clip->isText()) {
+            // Texto libre: un fotograma del tamaño del lienzo, sin decodificar nada.
+            const auto text = m_textFrames.get(textOf(*layer.clip), canvas);
+            if (text.frame) {
+                sharkcut::CompositorLayer& out = input.layers.emplace_back();
+                out.a = text.frame;
+                out.transform = transformOf(layer.clip->id);
+            }
+            continue;
+        }
         if (layer.clip->isEffect()) {
             // Transición-clip: transforma todo lo de debajo.
             sharkcut::CompositorLayer& out = input.layers.emplace_back();
@@ -1007,7 +1062,6 @@ sharkcut::CompositorInput Editor::composition() const {
             out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
         }
     }
-    const QSize canvas(project().settings.width, project().settings.height);
     sharkcut::CaptionImageCache::StyleOverride preview;
     if (m_captionPreview) {
         preview = [this](std::size_t track, const sharkcut::Caption& c) {
@@ -2912,6 +2966,16 @@ void Editor::rotateClip(qint64 clipId, bool clockwise) {
     const auto id = static_cast<ObjectId>(clipId);
     const Clip* clip = project().clip(id);
     const MediaItem* item = clip ? project().findMedia(clip->media) : nullptr;
+    if (clip && clip->isText()) {
+        // Un texto solo gira: no hay un video que ajustar al lienzo.
+        sharkcut::ClipTransform t = transformOf(id);
+        t.rotation += clockwise ? 90.0 : -90.0;
+        m_previewClip = 0;
+        const std::int64_t frame = m_currentFrame;
+        edit(QStringLiteral("Girar 90°"),
+             [id, t, frame](Project& p) { return sharkcut::setClipTransformAt(p, id, t, frame); });
+        return;
+    }
     if (!item || item->width <= 0 || item->height <= 0) {
         return;
     }
@@ -3858,6 +3922,7 @@ void Editor::onProjectChanged() {
     if (m_previewClip != 0 && !project().clip(m_previewClip)) {
         m_previewClip = 0;
     }
+    m_textPreview.reset();
     if (m_selectedTransition != 0 && !project().transition(m_selectedTransition)) {
         m_selectedTransition = 0;
     }
@@ -3971,7 +4036,7 @@ std::vector<Editor::Need> Editor::needsAt(std::size_t track, std::int64_t frame)
             return {{a, p.mediaFrameIndex(*a, frame)}, {b, p.mediaFrameIndex(*b, frame)}};
         }
     }
-    if (const Clip* clip = p.clipAt(track, frame); clip && !clip->isEffect()) {
+    if (const Clip* clip = p.clipAt(track, frame); clip && clip->hasMedia()) {
         return {{clip, p.mediaFrameIndex(*clip, frame)}};
     }
     return {};
@@ -3981,7 +4046,7 @@ std::optional<Editor::Need> Editor::upcoming(std::size_t track, std::int64_t fra
     const Project& p = project();
     const std::vector<Need> now = needsAt(track, frame);
     for (const Clip& clip : p.tracks[track].clips) {
-        if (clip.isEffect()) {
+        if (!clip.hasMedia()) {
             continue; // sin video que decodificar
         }
         if (clip.start <= frame || std::any_of(now.begin(), now.end(), [&clip](const Need& n) {

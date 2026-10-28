@@ -49,6 +49,7 @@ QVariantMap styleToMap(const CaptionStyle& s) {
         {QStringLiteral("x"), s.x},
         {QStringLiteral("y"), s.y},
         {QStringLiteral("maxWidth"), s.maxWidth},
+        {QStringLiteral("align"), s.align},
     };
 }
 
@@ -92,6 +93,9 @@ CaptionStyle styleWith(CaptionStyle s, const QVariantMap& values) {
     number("x", s.x);
     number("y", s.y);
     number("maxWidth", s.maxWidth);
+    if (const auto it = values.find(QStringLiteral("align")); it != values.end()) {
+        s.align = it->toInt();
+    }
     return sharkcut::clampCaptionStyle(s);
 }
 
@@ -558,9 +562,14 @@ void Editor::resetCaptionStyle() {
 }
 
 void Editor::saveCaptionPreset(const QString& name) {
+    if (const auto style = captionStyleWith({}, false)) {
+        saveStylePreset(name, *style);
+    }
+}
+
+void Editor::saveStylePreset(const QString& name, const CaptionStyle& style) {
     const QString trimmed = name.trimmed();
-    const auto style = captionStyleWith({}, false);
-    if (trimmed.isEmpty() || !style) {
+    if (trimmed.isEmpty()) {
         return;
     }
     for (const auto& [builtin, ignored] : builtinPresets()) {
@@ -574,9 +583,9 @@ void Editor::saveCaptionPreset(const QString& name) {
     const auto it = std::find_if(list.begin(), list.end(),
                                  [&trimmed](const auto& entry) { return entry.first == trimmed; });
     if (it != list.end()) {
-        it->second = *style;
+        it->second = style;
     } else {
-        list.emplace_back(trimmed, *style);
+        list.emplace_back(trimmed, style);
     }
     storeUserPresets(list);
     emit captionPresetsChanged();
@@ -695,4 +704,129 @@ void Editor::exportSrt(int track, const QUrl& file) {
             },
             Qt::QueuedConnection);
     });
+}
+
+// --- Textos libres ----------------------------------------------------------------------
+
+const sharkcut::TextClip& Editor::textOf(const sharkcut::Clip& clip) const {
+    if (m_textPreview && m_textPreview->first == clip.id) {
+        return m_textPreview->second;
+    }
+    return *clip.text;
+}
+
+QVariantMap Editor::textInfo(const sharkcut::Clip& clip) const {
+    const sharkcut::TextClip& text = textOf(clip);
+    return {{QStringLiteral("content"), QString::fromStdString(clip.text->text)},
+            {QStringLiteral("style"), styleToMap(text.style)}};
+}
+
+void Editor::addTextAtPlayhead(const QString& preset) {
+    addText(-1, m_currentFrame, preset);
+}
+
+void Editor::addText(int track, qint64 at, const QString& preset) {
+    const Project& current = project();
+    const std::int64_t frame = std::max<qint64>(0, at);
+    const sharkcut::FrameRate rate = current.settings.frameRate;
+    const std::int64_t length = std::max<std::int64_t>(
+        1, std::llround(stillSeconds() * static_cast<double>(rate.num) / rate.den));
+    std::size_t above = 0;
+    if (track >= 0) {
+        above = static_cast<std::size_t>(track);
+    } else {
+        // Encima de la pista de video más alta que tenga algo ahí.
+        for (std::size_t t = 0; t < current.tracks.size(); ++t) {
+            if (current.tracks[t].kind == sharkcut::TrackKind::Video && current.clipAt(t, frame)) {
+                above = t + 1;
+            }
+        }
+    }
+    sharkcut::TextClip text;
+    text.text = "Texto";
+    if (!preset.isEmpty()) {
+        text.style = presetStyle(preset);
+    } else {
+        text.style.size = 96.0; // un título: más grande que un subtítulo
+    }
+    ObjectId created = 0;
+    const bool done = edit(QStringLiteral("Añadir texto"), [&](Project& p) {
+        std::size_t track = above;
+        if (track >= p.tracks.size() || p.tracks[track].kind != sharkcut::TrackKind::Video) {
+            track = sharkcut::addTrack(p, sharkcut::TrackKind::Video);
+        }
+        created = sharkcut::placeText(p, track, frame, length, text);
+        return created != 0;
+    });
+    if (done) {
+        m_selectedCaptions.clear();
+        m_selectedTransition = 0;
+        m_selection = {created};
+        emit selectionChanged();
+    }
+}
+
+void Editor::setClipText(qint64 clipId, const QString& text) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const sharkcut::Clip* clip = project().clip(id);
+    if (!clip || !clip->isText()) {
+        return;
+    }
+    sharkcut::TextClip changed = *clip->text;
+    changed.text = text.toStdString();
+    edit(QStringLiteral("Texto"),
+         [&](Project& p) { return sharkcut::setClipText(p, id, std::move(changed)); });
+}
+
+void Editor::previewTextStyle(qint64 clipId, const QVariantMap& values) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const sharkcut::Clip* clip = project().clip(id);
+    if (!clip || !clip->isText()) {
+        return;
+    }
+    // Mientras se arrastra, la base es lo que ya se previsualiza.
+    sharkcut::TextClip text = textOf(*clip);
+    text.style = sharkcut::clampCaptionStyle(styleWith(text.style, values));
+    m_textPreview.emplace(id, std::move(text));
+    emit selectedClipChanged();
+    emit compositionChanged();
+}
+
+void Editor::setTextStyle(qint64 clipId, const QVariantMap& values, const QString& label) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const sharkcut::Clip* clip = project().clip(id);
+    if (!clip || !clip->isText()) {
+        m_textPreview.reset();
+        return;
+    }
+    sharkcut::TextClip text = textOf(*clip);
+    text.style = styleWith(text.style, values);
+    m_textPreview.reset();
+    const bool changed =
+        edit(label.isEmpty() ? QStringLiteral("Estilo del texto") : label,
+             [&](Project& p) { return sharkcut::setClipText(p, id, std::move(text)); });
+    if (!changed) {
+        emit selectedClipChanged();
+        emit compositionChanged();
+    }
+}
+
+void Editor::applyTextPreset(qint64 clipId, const QString& name) {
+    const auto id = static_cast<ObjectId>(clipId);
+    const sharkcut::Clip* clip = project().clip(id);
+    if (!clip || !clip->isText()) {
+        return;
+    }
+    sharkcut::TextClip text = *clip->text;
+    text.style = presetStyle(name);
+    m_textPreview.reset();
+    edit(QStringLiteral("Ajuste «%1»").arg(name),
+         [&](Project& p) { return sharkcut::setClipText(p, id, std::move(text)); });
+}
+
+void Editor::saveTextPreset(qint64 clipId, const QString& name) {
+    const sharkcut::Clip* clip = project().clip(static_cast<ObjectId>(clipId));
+    if (clip && clip->isText()) {
+        saveStylePreset(name, clip->text->style);
+    }
 }

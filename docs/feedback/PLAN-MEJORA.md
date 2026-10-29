@@ -668,6 +668,23 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hecho cuando:** abrir la app y elegir un reciente deja un solo proyecto abierto.
 - **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
 
+### M25 · Desplazamiento automático al arrastrar hasta el borde · FB-051 · S
+- **Problema:** al arrastrar un clip hasta el borde izquierdo o derecho de la línea de
+  tiempo, esta no se desplaza: con zoom cercano no se puede llevar un clip lejos sin
+  alejar el zoom o soltarlo y volver a cogerlo.
+- **Hacer:** mientras se arrastra (mover o recortar un clip, un subtítulo, una transición,
+  el cabezal, el cuadro de selección y lo que llega desde Medios, Transiciones, Efectos,
+  Texto o Sonidos), si el ratón está cerca de un borde de la vista, la línea de tiempo se
+  desplaza sola hacia ese lado, más deprisa cuanto más cerca (o más allá) del borde, con un
+  temporizador que sigue aunque el ratón no se mueva. El arrastre sigue al contenido: el
+  clip se queda bajo el ratón y el imán y las guías siguen funcionando.
+- **Cuidado:** no pasar del inicio (0) y, hacia la derecha, dejar avanzar un poco más allá
+  del final para poder alargar la secuencia. Que no se dispare al pasar el ratón por el
+  borde sin arrastrar.
+- **Hecho cuando:** con zoom cercano en mitad de un VOD, se puede arrastrar un clip hasta
+  el comienzo sin soltarlo.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad baja (más adelante)

@@ -54,6 +54,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
 | [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
 | [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | En el plan |
+| [FB-051](#fb-051) | 2026-10-29 | Línea de tiempo | Usabilidad | La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde | En el plan |
 
 ---
 
@@ -831,4 +832,19 @@ Formato y estados: ver [README.md](README.md).
   con una secuencia); al abrir otro, el vacío se queda en Abiertos y en las pestañas.
 - **Decisión (Kyo):** para la 0.1.8.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M24)
+
+<a id="fb-051"></a>
+### FB-051 · La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde
+- **Fecha:** 2026-10-29
+- **Quién:** Kyo
+- **Versión:** 0.1.7
+- **Área:** Línea de tiempo
+- **Tipo:** Usabilidad
+- **Qué dijo:** al arrastrar un clip y pegarse al borde izquierdo o derecho de la línea de
+  tiempo, esta no se desplaza. Para llevar un clip desde la mitad hasta el comienzo hay que
+  alejar el zoom, cortarlo, o soltarlo en el borde, mover la barra y volver a arrastrarlo.
+- **Contexto:** VODs largos con zoom cercano.
+- **Notas:** LineaTiempo.qml no tiene desplazamiento automático en ningún arrastre.
+- **Decisión (Kyo):** para la 0.1.8.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M25)
 

@@ -53,6 +53,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Hecho |
 | [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
 | [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
+| [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | En el plan |
 
 ---
 
@@ -815,3 +816,19 @@ Formato y estados: ver [README.md](README.md).
   reproducir desde antes, el editor lo daba por preparado y no lo recolocaba. Es también la
   causa más probable de FB-047.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), A18)
+
+<a id="fb-050"></a>
+### FB-050 · Al abrir la app se crea solo un proyecto «Sin título»
+- **Fecha:** 2026-10-29
+- **Quién:** Kyo
+- **Versión:** 0.1.7
+- **Área:** Proyectos
+- **Tipo:** Usabilidad
+- **Qué dijo:** al abrir SharkCut se crea solo un proyecto sin título, y es molesto tener
+  que cerrarlo cada vez.
+- **Contexto:** casi siempre se abre la app para seguir con un proyecto que ya existe.
+- **Notas:** el editor siempre tiene un proyecto abierto (Editor::Editor crea uno nuevo
+  con una secuencia); al abrir otro, el vacío se queda en Abiertos y en las pestañas.
+- **Decisión (Kyo):** para la 0.1.8.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M24)
+

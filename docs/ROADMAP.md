@@ -10,7 +10,7 @@ Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.
 nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
 actualizar también esa página.
 
-Última actualización: 2026-10-28.
+Última actualización: 2026-10-29.
 
 ---
 
@@ -22,6 +22,7 @@ actualizar también esa página.
 | M2 | Cambiar el lienzo y los fps de una secuencia ya creada y guardar presets propios. | Medio |
 | M5 | Resolución de reproducción del visor (completa, 1/2, 1/4) para que vaya más fluido. | Medio |
 | M11 | Caché en una carpeta común, con opción para limpiarla. | Medio |
+| M24 | Al abrir la app ya no se queda un proyecto «Sin título» que hay que cerrar a mano. | Pequeño |
 
 ### 0.1.9 · Línea de tiempo
 | Punto | Qué trae | Tamaño |

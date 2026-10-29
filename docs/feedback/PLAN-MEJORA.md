@@ -657,6 +657,17 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   (junto a Ajustar y Rellenar) y en el menú del clip. Test del núcleo; comprobado con Xvfb:
   un 1920×1080 en una secuencia 1080×1920 queda a pantalla completa con un clic.
 
+### M24 · Sin proyecto «Sin título» al abrir la app · FB-050 · S
+- **Problema:** al abrir SharkCut se crea un proyecto nuevo sin título (el editor siempre
+  tiene uno abierto); al abrir el que se quería, el vacío se queda en Abiertos y en las
+  pestañas, y hay que cerrarlo a mano cada vez.
+- **Hacer:** el proyecto del arranque se sustituye solo al abrir o crear otro, si sigue
+  intacto (sin archivo, sin cambios y sin medios). Si se ha usado, se queda como ahora.
+- **Cuidado:** la recuperación de copias de seguridad al arrancar y abrir un proyecto con
+  doble clic en el archivo (o arrastrándolo) también deben sustituirlo.
+- **Hecho cuando:** abrir la app y elegir un reciente deja un solo proyecto abierto.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad baja (más adelante)

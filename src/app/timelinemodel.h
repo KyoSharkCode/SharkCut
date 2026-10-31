@@ -9,6 +9,9 @@
 #include <vector>
 
 class Editor;
+namespace sharkcut {
+struct Caption;
+}
 
 // Los clips de la secuencia activa que caen en la parte visible de la línea de tiempo
 // (con un margen de media pantalla a cada lado), para la línea de tiempo.
@@ -36,6 +39,9 @@ class TimelineClipsModel : public QAbstractListModel {
     // Subtítulos en vez de clips: filas {id, track (pista de subtítulos), start, length,
     // text} (o bloques {block: true, count, track, start, length}).
     Q_PROPERTY(bool captions READ captions WRITE setCaptions NOTIFY editorChanged)
+    // Ids que siempre se cargan aunque estén fuera del tramo visible (lo que se arrastra:
+    // si la vista se desplaza lejos, su elemento no se destruye a mitad del arrastre).
+    Q_PROPERTY(QVariantList pinned READ pinned WRITE setPinned NOTIFY pinnedChanged)
 
 public:
     explicit TimelineClipsModel(QObject* parent = nullptr);
@@ -50,6 +56,8 @@ public:
     bool captions() const { return m_captions; }
     void setCaptions(bool captions);
     void setPixelsPerFrame(double scale);
+    QVariantList pinned() const;
+    void setPinned(const QVariantList& ids);
 
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -58,6 +66,7 @@ public:
 signals:
     void editorChanged();
     void rangeChanged();
+    void pinnedChanged();
 
 private:
     // Rehace la ventana de clips cargados si lo visible se sale de ella (o siempre, con
@@ -73,6 +82,7 @@ private:
     };
     std::vector<Row> collectClips() const;
     std::vector<Row> collectCaptions() const;
+    static Row captionRow(std::size_t track, const sharkcut::Caption& caption);
 
     QPointer<Editor> m_editor;
     double m_first = 0.0;
@@ -82,6 +92,8 @@ private:
     std::int64_t m_windowEnd = -1;
     std::vector<Row> m_rows;
     bool m_captions = false;
+    std::vector<qint64> m_pinned;
+    bool isPinned(qint64 id) const;
     bool m_refreshPending = false;
     bool m_forcePending = false;
 };

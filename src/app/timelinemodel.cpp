@@ -13,6 +13,7 @@ constexpr int kClipRole = Qt::UserRole + 1;
 constexpr double kMinClipPixels = 16.0;
 // Si cambian más filas que esto, es más rápido rehacer el modelo que avisar de cada una.
 constexpr std::size_t kMaxIndividualChanges = 64;
+
 } // namespace
 
 TimelineClipsModel::TimelineClipsModel(QObject* parent) : QAbstractListModel(parent) {}
@@ -72,6 +73,30 @@ void TimelineClipsModel::setCaptions(bool captions) {
         emit editorChanged();
         refresh(true);
     }
+}
+
+QVariantList TimelineClipsModel::pinned() const {
+    QVariantList list;
+    for (qint64 id : m_pinned) {
+        list.append(id);
+    }
+    return list;
+}
+
+void TimelineClipsModel::setPinned(const QVariantList& ids) {
+    std::vector<qint64> fresh;
+    for (const QVariant& v : ids) {
+        fresh.push_back(v.toLongLong());
+    }
+    if (fresh != m_pinned) {
+        m_pinned = std::move(fresh);
+        emit pinnedChanged();
+        scheduleRefresh(true);
+    }
+}
+
+bool TimelineClipsModel::isPinned(qint64 id) const {
+    return std::find(m_pinned.begin(), m_pinned.end(), id) != m_pinned.end();
 }
 
 void TimelineClipsModel::setPixelsPerFrame(double scale) {
@@ -141,7 +166,8 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectClips() const {
                 block = {};
             };
             for (; it != clips.end() && it->start <= m_windowEnd; ++it) {
-                const bool tiny = static_cast<double>(it->length) * m_scale < kMinClipPixels;
+                const bool tiny = static_cast<double>(it->length) * m_scale < kMinClipPixels &&
+                                  !isPinned(static_cast<qint64>(it->id));
                 const bool joins =
                     block.count > 0 &&
                     static_cast<double>(it->start - block.end) * m_scale < kMinClipPixels;
@@ -167,9 +193,30 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectClips() const {
             }
             closeBlock();
         }
+        // Los fijados que quedan fuera del tramo.
+        for (qint64 id : m_pinned) {
+            const auto ref = p.findClip(static_cast<sharkcut::ObjectId>(id));
+            if (ref && std::none_of(fresh.begin(), fresh.end(),
+                                    [id](const Row& r) { return r.id == id; })) {
+                fresh.push_back(
+                    {id, m_editor->clipEntry(ref->track, p.tracks[ref->track].clips[ref->index])});
+            }
+        }
     }
 
     return fresh;
+}
+
+TimelineClipsModel::Row TimelineClipsModel::captionRow(std::size_t track,
+                                                       const sharkcut::Caption& c) {
+    return {static_cast<qint64>(c.id),
+            {{QStringLiteral("id"), static_cast<qint64>(c.id)},
+             {QStringLiteral("block"), false},
+             {QStringLiteral("track"), static_cast<int>(track)},
+             {QStringLiteral("start"), static_cast<qint64>(c.start)},
+             {QStringLiteral("length"), static_cast<qint64>(c.length)},
+             {QStringLiteral("text"), QString::fromStdString(c.text)},
+             {QStringLiteral("styled"), c.style.has_value()}}};
 }
 
 std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectCaptions() const {
@@ -205,7 +252,8 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectCaptions() const
             block = {};
         };
         for (; it != list.end() && it->start <= m_windowEnd; ++it) {
-            const bool tiny = static_cast<double>(it->length) * m_scale < kMinClipPixels;
+            const bool tiny = static_cast<double>(it->length) * m_scale < kMinClipPixels &&
+                              !isPinned(static_cast<qint64>(it->id));
             const bool joins =
                 block.count > 0 &&
                 static_cast<double>(it->start - block.end) * m_scale < kMinClipPixels;
@@ -223,16 +271,18 @@ std::vector<TimelineClipsModel::Row> TimelineClipsModel::collectCaptions() const
                 block = {-static_cast<qint64>(it->id), it->start, it->end(), 1};
                 continue;
             }
-            fresh.push_back({static_cast<qint64>(it->id),
-                             {{QStringLiteral("id"), static_cast<qint64>(it->id)},
-                              {QStringLiteral("block"), false},
-                              {QStringLiteral("track"), static_cast<int>(t)},
-                              {QStringLiteral("start"), static_cast<qint64>(it->start)},
-                              {QStringLiteral("length"), static_cast<qint64>(it->length)},
-                              {QStringLiteral("text"), QString::fromStdString(it->text)},
-                              {QStringLiteral("styled"), it->style.has_value()}}});
+            fresh.push_back(captionRow(t, *it));
         }
         closeBlock();
+    }
+    // Los fijados que quedan fuera del tramo.
+    for (qint64 id : m_pinned) {
+        const auto ref = p.findCaption(static_cast<sharkcut::ObjectId>(id));
+        if (ref &&
+            std::none_of(fresh.begin(), fresh.end(), [id](const Row& r) { return r.id == id; })) {
+            fresh.push_back(
+                captionRow(ref->track, p.captionTracks[ref->track].captions[ref->index]));
+        }
     }
     return fresh;
 }
@@ -266,7 +316,8 @@ void TimelineClipsModel::refresh(bool force) {
             ++changed;
         }
     }
-    if (kept * 2 < m_rows.size() || changed > kMaxIndividualChanges) {
+    // Mientras se arrastra algo fijado, nunca de una vez: se destruiría su elemento.
+    if (m_pinned.empty() && (kept * 2 < m_rows.size() || changed > kMaxIndividualChanges)) {
         beginResetModel();
         m_rows = std::move(fresh);
         endResetModel();

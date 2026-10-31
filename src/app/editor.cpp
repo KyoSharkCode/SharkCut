@@ -1580,15 +1580,38 @@ void Editor::setFileBusy(bool busy) {
     }
 }
 
+void Editor::dropUntouchedProject() {
+    // El proyecto «Sin título» del arranque (o el que queda al cerrar el último), si no se
+    // llegó a usar: se sustituye por el que se abre o se crea.
+    if (m_projects.size() != 1) {
+        return;
+    }
+    const OpenProject& only = *m_projects.front();
+    const sharkcut::Document& d = only.history.state();
+    const bool untouched = only.path.isEmpty() && only.newName.isEmpty() &&
+                           only.recoveryKey.isEmpty() && !only.history.modified() &&
+                           !only.history.canUndo() && !only.history.canRedo() && d.media.empty();
+    if (!untouched) {
+        return;
+    }
+    const quint64 uid = only.uid;
+    std::erase_if(m_tabs, [uid](const Tab& t) { return t.project == uid; });
+    m_projects.clear();
+    m_activeTab = -1;
+}
+
 void Editor::newProject(const QString& name, int width, int height, int fps) {
     if (m_fileBusy) {
         return;
     }
+    pause();
+    dropUntouchedProject();
     const QString trimmed = name.trimmed();
     OpenProject& project = addProject(
         newDocument(trimmed.isEmpty() ? std::string("Secuencia 1") : trimmed.toStdString(), width,
                     height, fps),
         {}, trimmed);
+    m_activeProject = project.uid;
     m_tabs.push_back({project.uid, project.history.state().sequences.front().id, 0});
     setError({});
     switchTo(static_cast<int>(m_tabs.size()) - 1);
@@ -1681,20 +1704,9 @@ void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
         emit opened(false);
         return;
     }
-    // Un proyecto nuevo que no se llegó a usar se sustituye por el que se abre.
-    if (m_projects.size() == 1) {
-        const OpenProject& only = *m_projects.front();
-        const sharkcut::Document& d = only.history.state();
-        const bool untouched = only.path.isEmpty() && !only.history.modified() &&
-                               !only.history.canUndo() && d.media.empty();
-        if (untouched) {
-            const quint64 uid = only.uid;
-            std::erase_if(m_tabs, [uid](const Tab& t) { return t.project == uid; });
-            m_projects.clear();
-            m_activeTab = -1;
-        }
-    }
+    dropUntouchedProject();
     OpenProject& project = addProject(std::move(loaded->document), path, recoveredName);
+    m_activeProject = project.uid; // ya no apunta al que se quitó
     if (!recoveryKey.isEmpty()) {
         // Recuperado: tiene cambios que no están en su archivo (sigue usando la misma
         // copia de recuperación hasta que se guarde).

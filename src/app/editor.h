@@ -788,6 +788,9 @@ private:
     sharkcut::ObjectId activeSequenceId() const;
     QString nameOf(const OpenProject& project) const;
     OpenProject& addProject(sharkcut::Document document, QString path, QString newName);
+    // Quita el proyecto «Sin título» si es el único y sigue intacto (antes de abrir o
+    // crear otro).
+    void dropUntouchedProject();
     // Cambia la pestaña activa (-1 = ninguna) y pone al día la vista y la reproducción.
     void switchTo(int tab);
     void refreshView();

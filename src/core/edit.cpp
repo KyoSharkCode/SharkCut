@@ -1056,6 +1056,89 @@ bool setClipVolume(Project& project, ObjectId clip, double volumeDb) {
     return true;
 }
 
+bool setSequenceSettings(Project& project, int width, int height, FrameRate rate) {
+    if (width < 16 || height < 16 || width > 8192 || height > 8192 || rate.num <= 0 ||
+        rate.den <= 0) {
+        return false;
+    }
+    // Lienzo par (como lo exporta el codificador).
+    width &= ~1;
+    height &= ~1;
+    ProjectSettings& s = project.settings;
+    const FrameRate old = s.frameRate;
+    const bool sameRate = old.num * rate.den == rate.num * old.den;
+    if (s.width == width && s.height == height && sameRate && !s.adoptCanvas && !s.adoptFrameRate) {
+        return false;
+    }
+    s.width = width;
+    s.height = height;
+    s.adoptCanvas = false;
+    s.adoptFrameRate = false;
+    if (sameRate) {
+        return true;
+    }
+    s.frameRate = rate;
+    // Mismo instante en los fotogramas nuevos.
+    const auto at = [&](std::int64_t frame) {
+        return rescale(frame, old.frameDuration(), rate.frameDuration());
+    };
+    // Un tramo [start, start + length): sus dos bordes, para no abrir huecos ni solapes.
+    const auto span = [&](std::int64_t& start, std::int64_t& length) {
+        const std::int64_t end = at(start + length);
+        start = at(start);
+        length = std::max<std::int64_t>(1, end - start);
+    };
+    for (Track& track : project.tracks) {
+        // Las transiciones, con el corte aún en su sitio (el inicio de B): antes y
+        // después, con los mismos segundos.
+        for (Transition& t : track.transitions) {
+            const auto to = std::find_if(track.clips.begin(), track.clips.end(),
+                                         [&t](const Clip& c) { return c.id == t.to; });
+            if (to == track.clips.end()) {
+                continue;
+            }
+            const std::int64_t cut = to->start;
+            t.before = std::max<std::int64_t>(0, at(cut) - at(cut - t.before));
+            t.after = std::max<std::int64_t>(0, at(cut + t.after) - at(cut));
+            t.params.durationFrames = std::max<std::int64_t>(1, t.before + t.after);
+        }
+        for (Clip& clip : track.clips) {
+            const std::int64_t oldIn = clip.in;
+            span(clip.start, clip.length);
+            clip.in = at(oldIn);
+            for (auto& keys : clip.animation.keys) {
+                for (Keyframe& k : keys) {
+                    k.frame = at(k.frame);
+                }
+                // Dos que caen en el mismo fotograma nuevo: se queda el último.
+                for (std::size_t i = keys.size(); i-- > 1;) {
+                    if (keys[i - 1].frame == keys[i].frame) {
+                        keys.erase(keys.begin() + static_cast<std::ptrdiff_t>(i - 1));
+                    }
+                }
+            }
+            if (clip.effect) {
+                clip.effect->durationFrames =
+                    std::max<std::int64_t>(1, at(clip.effect->durationFrames));
+            }
+        }
+    }
+    for (CaptionTrack& track : project.captionTracks) {
+        for (Caption& c : track.captions) {
+            const std::int64_t oldStart = c.start;
+            span(c.start, c.length);
+            for (CaptionWord& w : c.words) {
+                w.start = at(oldStart + w.start) - c.start;
+                w.end = at(oldStart + w.end) - c.start;
+            }
+        }
+    }
+    for (Marker& m : project.markers) {
+        m.frame = at(m.frame);
+    }
+    return true;
+}
+
 bool setClipAudioStream(Project& project, ObjectId clip, int stream) {
     const auto ref = project.findClip(clip);
     if (!ref || project.tracks[ref->track].kind != TrackKind::Audio ||

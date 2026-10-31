@@ -39,6 +39,14 @@ Rectangle {
     property var corteSoltar: null // {track, cut} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
+    // Con otros fps (otra secuencia, o los de esta cambiados), el mismo zoom en segundos.
+    property real fpsVisto: editor ? editor.fps : 0
+    readonly property real fpsActual: editor ? editor.fps : 0
+    onFpsActualChanged: {
+        if (fpsVisto > 0 && fpsActual > 0 && fpsActual !== fpsVisto)
+            escala = escala * fpsVisto / fpsActual
+        fpsVisto = fpsActual
+    }
     readonly property real escalaMaxima: 24
     readonly property real escalaMinima: Math.min(escalaMaxima,
         Math.max(0.0005, (vista.width - 40) / Math.max(editor.frameCount, editor.fps * 10)))
@@ -1732,7 +1740,9 @@ Rectangle {
                                     Text {
                                         x: 3
                                         y: 2
-                                        text: raiz.editor.timecodeFor(parent.frame)
+                                        // Depende también de los fps (al cambiarlos, el mismo
+                                        // fotograma es otro instante).
+                                        text: raiz.editor.fps > 0 ? raiz.editor.timecodeFor(parent.frame) : ""
                                         color: Theme.textoSecundario
                                         font.pixelSize: 10
                                         font.family: "Consolas, monospace"

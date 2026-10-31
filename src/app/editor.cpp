@@ -25,6 +25,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
@@ -179,15 +180,16 @@ ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
 constexpr double kSoundVolumeDb = -6.0;
 
 // Documento nuevo con una secuencia (V1 y V2 encima, A1 y A2 debajo).
-sharkcut::Document newDocument(const std::string& sequenceName, int width, int height, int fps) {
+sharkcut::Document newDocument(const std::string& sequenceName, int width, int height, int fps,
+                               int fpsDen = 1) {
     sharkcut::ProjectSettings settings;
     if (width > 0 && height > 0) {
-        settings.width = width;
-        settings.height = height;
+        settings.width = width & ~1;
+        settings.height = height & ~1;
         settings.adoptCanvas = false;
     }
     if (fps > 0) {
-        settings.frameRate = {fps, 1};
+        settings.frameRate = {fps, std::max(1, fpsDen)};
         settings.adoptFrameRate = false;
     }
     sharkcut::Document document;
@@ -1435,16 +1437,16 @@ void Editor::closeTab(int index) {
     switchTo(next);
 }
 
-void Editor::newSequence(const QString& name, int width, int height, int fps) {
+void Editor::newSequence(const QString& name, int width, int height, int fps, int fpsDen) {
     ObjectId created = 0;
     sharkcut::ProjectSettings settings = project().settings;
     if (width > 0 && height > 0) {
-        settings.width = width;
-        settings.height = height;
+        settings.width = width & ~1;
+        settings.height = height & ~1;
         settings.adoptCanvas = false;
     }
     if (fps > 0) {
-        settings.frameRate = {fps, 1};
+        settings.frameRate = {fps, std::max(1, fpsDen)};
         settings.adoptFrameRate = false;
     }
     const std::string sequenceName =
@@ -1457,6 +1459,100 @@ void Editor::newSequence(const QString& name, int width, int height, int fps) {
     });
     if (created != 0) {
         openSequence(static_cast<qint64>(created));
+    }
+}
+
+QVariantMap Editor::sequenceSettings() const {
+    const sharkcut::ProjectSettings& s = project().settings;
+    const sharkcut::Sequence* sequence = document().sequence(activeSequenceId());
+    return {{QStringLiteral("name"), sequence ? QString::fromStdString(sequence->name) : QString()},
+            {QStringLiteral("width"), s.width},
+            {QStringLiteral("height"), s.height},
+            {QStringLiteral("fpsNum"), static_cast<int>(s.frameRate.num)},
+            {QStringLiteral("fpsDen"), static_cast<int>(s.frameRate.den)}};
+}
+
+void Editor::editSequence(const QString& name, int width, int height, int fpsNum, int fpsDen) {
+    const ObjectId id = activeSequenceId();
+    if (id == 0 || fpsNum <= 0 || fpsDen <= 0) {
+        return;
+    }
+    const std::string newName = name.trimmed().toStdString();
+    const sharkcut::FrameRate rate{fpsNum, fpsDen};
+    // La posición del cabezal, en los mismos segundos con los fps nuevos.
+    const sharkcut::FrameRate old = project().settings.frameRate;
+    const std::int64_t frame =
+        sharkcut::rescale(m_currentFrame, old.frameDuration(), rate.frameDuration());
+    const bool changed =
+        editDocument(QStringLiteral("Ajustes de la secuencia"), [&](sharkcut::Document& d) {
+            const sharkcut::Sequence* s = d.sequence(id);
+            bool any = s && !newName.empty() && s->name != newName &&
+                       sharkcut::renameSequence(d, id, newName);
+            sharkcut::Project view = d.view(id);
+            if (sharkcut::setSequenceSettings(view, width, height, rate)) {
+                d.store(id, view);
+                any = true;
+            }
+            return any;
+        });
+    if (changed) {
+        seek(frame);
+    }
+}
+
+namespace {
+
+QVariantList readSequencePresets() {
+    const QJsonDocument doc = QJsonDocument::fromJson(
+        QSettings().value(QStringLiteral("secuencias/ajustes")).toByteArray());
+    return doc.array().toVariantList();
+}
+
+void writeSequencePresets(const QVariantList& list) {
+    QSettings().setValue(
+        QStringLiteral("secuencias/ajustes"),
+        QJsonDocument(QJsonArray::fromVariantList(list)).toJson(QJsonDocument::Compact));
+}
+
+} // namespace
+
+QVariantList Editor::sequencePresets() const {
+    return readSequencePresets();
+}
+
+void Editor::saveSequencePreset(const QString& name, int width, int height, int fpsNum,
+                                int fpsDen) {
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || width < 16 || height < 16 || fpsNum <= 0 || fpsDen <= 0) {
+        return;
+    }
+    QVariantList list = readSequencePresets();
+    const QVariantMap entry{{QStringLiteral("name"), trimmed},
+                            {QStringLiteral("width"), width & ~1},
+                            {QStringLiteral("height"), height & ~1},
+                            {QStringLiteral("fpsNum"), fpsNum},
+                            {QStringLiteral("fpsDen"), fpsDen}};
+    bool replaced = false;
+    for (QVariant& v : list) {
+        if (v.toMap().value(QStringLiteral("name")).toString() == trimmed) {
+            v = entry;
+            replaced = true;
+        }
+    }
+    if (!replaced) {
+        list.append(entry);
+    }
+    writeSequencePresets(list);
+    emit sequencePresetsChanged();
+}
+
+void Editor::removeSequencePreset(const QString& name) {
+    QVariantList list = readSequencePresets();
+    const auto removed = list.removeIf(
+        [&name](const QVariant& v) { return v.toMap().value(QStringLiteral("name")) == name; });
+    if (removed > 0) {
+        writeSequencePresets(list);
+        emit sequencePresetsChanged();
     }
 }
 
@@ -1634,7 +1730,7 @@ void Editor::dropUntouchedProject() {
     m_activeTab = -1;
 }
 
-void Editor::newProject(const QString& name, int width, int height, int fps) {
+void Editor::newProject(const QString& name, int width, int height, int fps, int fpsDen) {
     if (m_fileBusy) {
         return;
     }
@@ -1643,7 +1739,7 @@ void Editor::newProject(const QString& name, int width, int height, int fps) {
     const QString trimmed = name.trimmed();
     OpenProject& project = addProject(
         newDocument(trimmed.isEmpty() ? std::string("Secuencia 1") : trimmed.toStdString(), width,
-                    height, fps),
+                    height, fps, fpsDen),
         {}, trimmed);
     m_activeProject = project.uid;
     m_tabs.push_back({project.uid, project.history.state().sequences.front().id, 0});

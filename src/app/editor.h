@@ -139,6 +139,7 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
     Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    Q_PROPERTY(QVariantList sequencePresets READ sequencePresets NOTIFY sequencePresetsChanged)
     // Punto de anclaje (editor_anchor.cpp).
     Q_PROPERTY(bool anchorPicking READ anchorPicking NOTIFY anchorChanged)
     Q_PROPERTY(QVariantMap anchorTargetBox READ anchorTargetBox NOTIFY anchorChanged)
@@ -294,8 +295,9 @@ public:
     // Abre un proyecto nuevo (sin cerrar los demás) con una secuencia. `width`/`height`
     // = 0: el lienzo lo fija el primer clip; `fps` = 0: también los fotogramas por
     // segundo. `name` se propone al guardar y da nombre a la secuencia.
+    // `fpsDen`: para 29,97 (30000/1001) y 59,94.
     Q_INVOKABLE void newProject(const QString& name = {}, int width = 0, int height = 0,
-                                int fps = 0);
+                                int fps = 0, int fpsDen = 1);
     // Abre un proyecto junto a los demás (si ya está abierto, solo lo activa).
     Q_INVOKABLE void openProject(const QUrl& file);
     Q_INVOKABLE void openProjectPath(const QString& path);
@@ -314,7 +316,20 @@ public:
     Q_INVOKABLE void openSequence(qint64 sequenceId); // del proyecto activo
     Q_INVOKABLE void activateTab(int index);
     Q_INVOKABLE void closeTab(int index);
-    Q_INVOKABLE void newSequence(const QString& name, int width, int height, int fps);
+    Q_INVOKABLE void newSequence(const QString& name, int width, int height, int fps,
+                                 int fpsDen = 1);
+    // La secuencia activa: {name, width, height, fpsNum, fpsDen}.
+    Q_INVOKABLE QVariantMap sequenceSettings() const;
+    // Cambia el nombre, el lienzo y los fps de la secuencia activa (con otros fps, todos
+    // los tiempos se pasan a los fotogramas nuevos: setSequenceSettings en edit.h).
+    Q_INVOKABLE void editSequence(const QString& name, int width, int height, int fpsNum,
+                                  int fpsDen);
+    // Ajustes de secuencia guardados (todos los proyectos): {name, width, height, fpsNum,
+    // fpsDen}. Guardar uno con un nombre que ya existe lo reemplaza.
+    QVariantList sequencePresets() const;
+    Q_INVOKABLE void saveSequencePreset(const QString& name, int width, int height, int fpsNum,
+                                        int fpsDen);
+    Q_INVOKABLE void removeSequencePreset(const QString& name);
     Q_INVOKABLE void renameSequence(qint64 sequenceId, const QString& name);
     // Copia de la secuencia (con `vertical`, en un lienzo 9:16) y la abre.
     Q_INVOKABLE void duplicateSequence(qint64 sequenceId, bool vertical);
@@ -702,6 +717,7 @@ signals:
     void fileBusyChanged();
     void detectingKeyChanged();
     void captionPresetsChanged();
+    void sequencePresetsChanged();
     void clipPresetsChanged();
     void anchorChanged();
     void clipboardChanged();

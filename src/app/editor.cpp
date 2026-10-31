@@ -4046,6 +4046,13 @@ bool Editor::isSelected(qint64 clipId) const {
 
 void Editor::onProjectChanged() {
     refreshView(); // lo de abajo mira ya la secuencia editada
+    // Las ondas de los medios con audio se preparan de antemano (al importar o abrir), así
+    // ya están al poner un clip en la línea de tiempo.
+    for (const MediaItem& item : document().media) {
+        if (item.hasAudio && !item.still && !sharkcut::isSolidColorPath(item.path)) {
+            m_waveforms.prefetch(QString::fromStdString(item.path));
+        }
+    }
     // La selección solo conserva los clips que siguen existiendo; su descripción
     // puede cambiar aunque sigan (recortes, movimientos).
     std::erase_if(m_selection, [this](ObjectId id) { return project().clip(id) == nullptr; });

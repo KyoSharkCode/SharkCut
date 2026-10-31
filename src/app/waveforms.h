@@ -12,6 +12,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <deque>
 #include <map>
 #include <memory>
 
@@ -34,6 +35,10 @@ public:
     // audio.
     std::shared_ptr<const sharkcut::Waveform> get(const QString& mediaPath, int audioStream = -1);
 
+    // La pide de antemano (al importar o abrir el proyecto), la de la pista principal: se
+    // calculan de una en una y solo mientras no se calcula ninguna que un clip espera.
+    void prefetch(const QString& mediaPath);
+
     // Carpeta de la caché en disco del proyecto activo ("" = solo en memoria).
     void setDirectory(const QString& directory);
 
@@ -52,14 +57,21 @@ private:
         std::shared_ptr<const sharkcut::Waveform> waveform;
         bool pending = false;
         bool failed = false;
+        bool queued = false;     // en la cola de las preparadas de antemano
+        bool background = false; // calculándose de antemano
     };
     using Key = std::pair<QString, int>; // archivo y pista de audio
+    void start(const Key& key, bool background);
+    void pumpPrefetch();
     void finish(const Key& key, std::shared_ptr<const sharkcut::Waveform> waveform);
     void save(const QString& directory, const Key& key,
               std::shared_ptr<const sharkcut::Waveform> waveform);
 
     QThreadPool m_pool;
     std::map<Key, Entry> m_entries;
+    std::deque<Key> m_prefetch; // las que esperan su turno, en orden
+    bool m_prefetching = false;
+    int m_foreground = 0; // las que se calculan porque un clip las espera
     QString m_directory;
     std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);
 };

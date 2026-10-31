@@ -80,6 +80,10 @@ class Editor : public CompositionSource {
     // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
     // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
     Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
+    // Resolución de la vista previa: 1 = completa, 2 = la mitad, 4 = un cuarto (decodifica y
+    // dibuja más pequeño, sin crear archivos; la exportación sale siempre completa).
+    Q_PROPERTY(
+        int previewDivisor READ previewDivisor WRITE setPreviewDivisor NOTIFY previewDivisorChanged)
     // Duración (s) con la que se importan las imágenes fijas (PNG, JPG…).
     Q_PROPERTY(
         double stillSeconds READ stillSeconds WRITE setStillSeconds NOTIFY stillSecondsChanged)
@@ -207,6 +211,8 @@ public:
     QVariantMap proxyStates() const;
     bool useProxies() const { return m_useProxies; }
     void setUseProxies(bool use);
+    int previewDivisor() const { return m_previewDivisor; }
+    void setPreviewDivisor(int divisor);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
     QString proxyStatus() const;
     double stillSeconds() const;
@@ -275,6 +281,7 @@ public:
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
+    QSize renderSize() const override;
     void setRenderDevice(const QString& device, const QString& api) override;
 
     // {gpu, api, decoder, decoderGpu (bool), h264, h264Software, h265, h265Software,
@@ -718,6 +725,7 @@ signals:
     void selectionChanged();
     void selectedClipChanged();
     void waveformsChanged();
+    void previewDivisorChanged();
     void importingChanged();
     void playingChanged();
     void busyChanged();
@@ -901,6 +909,7 @@ private:
     QVariantList m_shownSequences;
     ProxyManager m_proxies;
     bool m_useProxies = false;
+    int m_previewDivisor = 1;
     // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.
     std::string decodePath(const sharkcut::MediaItem& item) const;
     // Cierra los hilos de video y vuelve a pedir el fotograma (cambió qué se decodifica).

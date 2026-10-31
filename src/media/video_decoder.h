@@ -28,7 +28,10 @@ std::string probeHwDecodeDevice();
 class VideoDecoder {
 public:
     // Abre `path` (UTF-8). Lanza MediaError si no se puede abrir o no tiene video.
-    explicit VideoDecoder(const std::string& path, HwAccel hwAccel = HwAccel::Auto);
+    // `downscale` > 1: los fotogramas se entregan a 1/downscale de su tamaño (la vista
+    // previa a menos resolución; las imágenes fijas y los colores sólidos, enteros).
+    explicit VideoDecoder(const std::string& path, HwAccel hwAccel = HwAccel::Auto,
+                          int downscale = 1);
     ~VideoDecoder();
 
     VideoDecoder(const VideoDecoder&) = delete;

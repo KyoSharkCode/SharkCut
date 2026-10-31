@@ -97,3 +97,20 @@ TEST_CASE("Text clips are split, copied and saved with their text", "[text]") {
     CHECK(loaded.clip(text)->text->style.align == -1);
     CHECK(loaded.clip(text)->transform.y == -300);
 }
+
+TEST_CASE("Transforms scale their canvas pixels for another canvas size", "[project]") {
+    ClipTransform t;
+    t.x = 100;
+    t.y = -40;
+    t.scale = 0.5;
+    t.rotation = 30;
+    t.effects.blur = 20;
+    t.effects.shadowY = 12;
+    const ClipTransform half = scaledTransform(t, 0.5);
+    CHECK(half.x == 50);
+    CHECK(half.y == -20);
+    CHECK(half.scale == 0.5); // relativa al lienzo: no cambia
+    CHECK(half.rotation == 30);
+    CHECK(half.effects.blur == 10);
+    CHECK(half.effects.shadowY == 6);
+}

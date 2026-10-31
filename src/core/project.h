@@ -371,6 +371,10 @@ struct CaptionTrack {
 // La transformación del clip en el fotograma `frame` de la línea de tiempo, con sus
 // propiedades animadas ya calculadas (y dentro de sus límites).
 ClipTransform transformAt(const Clip& clip, std::int64_t frame);
+// La transformación para un lienzo `factor` veces el de la secuencia (la exportación a otro
+// tamaño, el visor a menos resolución): las medidas en píxeles del lienzo (posición y de
+// los efectos) se escalan.
+ClipTransform scaledTransform(ClipTransform transform, double factor);
 
 // V1 es siempre la primera pista.
 inline constexpr std::size_t kVideoTrack = 0;

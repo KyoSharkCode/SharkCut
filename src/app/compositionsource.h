@@ -17,6 +17,8 @@ public:
 
     // Resolución del lienzo (proyecto).
     virtual QSize canvasSize() const = 0;
+    // Resolución a la que se dibuja (la vista previa puede ir a menos que el lienzo).
+    virtual QSize renderSize() const { return canvasSize(); }
 
     // El visor avisa de la GPU con la que dibuja (en el hilo de la interfaz).
     virtual void setRenderDevice(const QString& device, const QString& api) {

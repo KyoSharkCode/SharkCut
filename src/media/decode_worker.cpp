@@ -22,9 +22,10 @@ std::size_t bytesOf(const VideoFrame& frame) {
 } // namespace
 
 DecodeWorker::DecodeWorker(std::string path, HwAccel hwAccel, Callbacks callbacks,
-                           std::size_t capacity)
-    : m_path(std::move(path)), m_hwAccel(hwAccel), m_callbacks(std::move(callbacks)),
-      m_capacity(capacity == 0 ? 1 : capacity), m_thread([this] { run(); }) {}
+                           std::size_t capacity, int downscale)
+    : m_path(std::move(path)), m_hwAccel(hwAccel), m_downscale(downscale),
+      m_callbacks(std::move(callbacks)), m_capacity(capacity == 0 ? 1 : capacity),
+      m_thread([this] { run(); }) {}
 
 DecodeWorker::~DecodeWorker() {
     {
@@ -158,7 +159,7 @@ DecodeWorker::Status DecodeWorker::status() const {
 void DecodeWorker::run() {
     std::unique_ptr<VideoDecoder> decoder;
     try {
-        decoder = std::make_unique<VideoDecoder>(m_path, m_hwAccel);
+        decoder = std::make_unique<VideoDecoder>(m_path, m_hwAccel, m_downscale);
     } catch (const std::exception& e) {
         if (m_callbacks.failed) {
             m_callbacks.failed(e.what());

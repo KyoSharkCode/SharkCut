@@ -191,17 +191,7 @@ public:
     }
 
 private:
-    ClipTransform scaled(ClipTransform t) const {
-        t.x *= m_scale;
-        t.y *= m_scale;
-        // Las medidas de los efectos también van en píxeles del lienzo.
-        ClipEffects& fx = t.effects;
-        for (double* v : {&fx.blur, &fx.corners, &fx.shadowSoftness, &fx.shadowX, &fx.shadowY,
-                          &fx.shadowSpread}) {
-            *v *= m_scale;
-        }
-        return t;
-    }
+    ClipTransform scaled(const ClipTransform& t) const { return scaledTransform(t, m_scale); }
 
     // Un lector por pista, archivo y papel (0: el clip que se ve o el saliente de una
     // transición; 1: el entrante). Así dos pistas con el mismo video, o una transición

@@ -32,7 +32,7 @@ public:
                     Qt::QueuedConnection);
             }
             m_input = source->composition();
-            m_compositor.setCanvasSize(source->canvasSize());
+            m_compositor.setCanvasSize(source->renderSize());
         } else {
             m_input = {};
         }

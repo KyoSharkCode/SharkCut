@@ -652,6 +652,19 @@ Window {
                                             editor.useProxies = !editor.useProxies
                                     }
                                 }
+                                // Resolución de la vista previa: cada clic pasa a la siguiente.
+                                BotonIcono {
+                                    texto: editor.previewDivisor === 1 ? "Completa"
+                                           : "1/" + editor.previewDivisor
+                                    activo: editor.previewDivisor > 1
+                                    ayuda: "Resolución de la vista previa (clic para cambiarla): "
+                                           + (editor.previewDivisor === 1 ? "completa"
+                                              : editor.previewDivisor === 2 ? "la mitad" : "un cuarto")
+                                           + ". A menos resolución va más fluida en equipos modestos; "
+                                           + "no crea archivos y la exportación sale siempre completa"
+                                    onPulsado: editor.previewDivisor = editor.previewDivisor === 1 ? 2
+                                               : editor.previewDivisor === 2 ? 4 : 1
+                                }
                                 Item { Layout.fillWidth: true }
                                 // Velocidad con J/L (a 1× no se muestra)
                                 Chip {

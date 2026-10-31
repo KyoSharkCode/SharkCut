@@ -348,6 +348,10 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     connect(this, &Editor::projectsChanged, this, &Editor::updateLibrary);
     connect(this, &Editor::projectChanged, this, &Editor::proxiesChanged); // medios con proxy
     m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
+    m_previewDivisor = QSettings().value(QStringLiteral("vista/resolucion"), 1).toInt();
+    if (m_previewDivisor != 2 && m_previewDivisor != 4) {
+        m_previewDivisor = 1;
+    }
     m_proxies.setAutoCreate(m_useProxies);
     // El estado de los proxies va aparte (proxyStates): no toca la lista de Medios.
     connect(&m_proxies, &ProxyManager::changed, this, &Editor::proxiesChanged);
@@ -822,6 +826,20 @@ void Editor::setUseProxies(bool use) {
     reloadVideo();
 }
 
+void Editor::setPreviewDivisor(int divisor) {
+    if (divisor != 2 && divisor != 4) {
+        divisor = 1;
+    }
+    if (divisor == m_previewDivisor) {
+        return;
+    }
+    m_previewDivisor = divisor;
+    QSettings().setValue(QStringLiteral("vista/resolucion"), divisor);
+    emit previewDivisorChanged();
+    reloadVideo(); // los hilos se vuelven a abrir con el tamaño nuevo
+    emit compositionChanged();
+}
+
 double Editor::stillSeconds() const {
     return QSettings().value(QStringLiteral("medios/duracionImagen"), 5.0).toDouble();
 }
@@ -1015,9 +1033,25 @@ QSize Editor::canvasSize() const {
     return {project().settings.width, project().settings.height};
 }
 
+QSize Editor::renderSize() const {
+    // Par, como lo pide el compositor (y nunca menos de 2).
+    const auto part = [this](int v) { return std::max(2, (v / m_previewDivisor) & ~1); };
+    return m_previewDivisor > 1
+               ? QSize(part(project().settings.width), part(project().settings.height))
+               : canvasSize();
+}
+
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
-    const QSize canvas(project().settings.width, project().settings.height);
+    // A menos resolución, las medidas en píxeles del lienzo se escalan (como al exportar).
+    const QSize canvas = renderSize();
+    const double factor = project().settings.width > 0
+                              ? static_cast<double>(canvas.width()) / project().settings.width
+                              : 1.0;
+    const auto placed = [this, factor](ObjectId clip) {
+        return factor == 1.0 ? transformOf(clip)
+                             : sharkcut::scaledTransform(transformOf(clip), factor);
+    };
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
         if (layer.clip->isText()) {
             // Texto libre: un fotograma del tamaño del lienzo, sin decodificar nada.
@@ -1025,7 +1059,7 @@ sharkcut::CompositorInput Editor::composition() const {
             if (text.frame) {
                 sharkcut::CompositorLayer& out = input.layers.emplace_back();
                 out.a = text.frame;
-                out.transform = transformOf(layer.clip->id);
+                out.transform = placed(layer.clip->id);
             }
             continue;
         }
@@ -1053,8 +1087,8 @@ sharkcut::CompositorInput Editor::composition() const {
         if (layer.transition && a && b) {
             out.a = a;
             out.b = b;
-            out.transform = transformOf(layer.clip->id);
-            out.transformB = transformOf(layer.clipB->id);
+            out.transform = placed(layer.clip->id);
+            out.transformB = placed(layer.clipB->id);
             out.transition = layer.transition->params;
             out.state =
                 sharkcut::evaluateTransition(layer.transition->params, layer.transitionFrame);
@@ -1064,7 +1098,7 @@ sharkcut::CompositorInput Editor::composition() const {
             const bool showB =
                 !a || (b && layer.transition && m_currentFrame >= layer.clipB->start);
             out.a = showB ? b : a;
-            out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
+            out.transform = placed(showB ? layer.clipB->id : layer.clip->id);
         }
     }
     sharkcut::CaptionImageCache::StyleOverride preview;
@@ -4252,8 +4286,8 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
                                       .count();
                 qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qUtf8Printable(name), ms);
             };
-        slot.worker =
-            std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
+        slot.worker = std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto,
+                                                     std::move(callbacks), 8, m_previewDivisor);
         slot.media = clip.media;
         slot.path = path;
     }

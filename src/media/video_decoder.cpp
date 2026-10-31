@@ -76,6 +76,7 @@ struct VideoDecoder::Impl {
 
     VideoStreamInfo info;
     std::int64_t startPts = 0;
+    int downscale = 1; // los fotogramas salen a 1/downscale del tamaño (vista previa)
 
     ff::PacketPtr packet{av_packet_alloc()};
     ff::FramePtr frame{av_frame_alloc()};
@@ -394,6 +395,11 @@ struct VideoDecoder::Impl {
         VideoFrame out;
         out.width = src->width;
         out.height = src->height;
+        if (downscale > 1) {
+            out.width = std::max(2, (src->width / downscale) & ~1);
+            out.height = std::max(2, (src->height / downscale) & ~1);
+        }
+        const bool scaled = out.width != src->width || out.height != src->height;
         out.matrix = colorMatrixOf(src);
         out.fullRange = isFullRange(src);
         const int uvRowBytes = out.uvWidth() * 2;
@@ -412,14 +418,15 @@ struct VideoDecoder::Impl {
             return convertWithAlpha(src, std::move(out), rgb);
         }
 
-        if (src->format == AV_PIX_FMT_NV12) {
+        if (src->format == AV_PIX_FMT_NV12 && !scaled) {
             copyPlane(out.y, src->data[0], src->linesize[0], out.width, out.height);
             copyPlane(out.uv, src->data[1], src->linesize[1], uvRowBytes, out.uvHeight());
             return out;
         }
 
-        // Cualquier otro formato (yuv420p, 10 bits…) se convierte a NV12.
-        prepareSws(src, AV_PIX_FMT_NV12, rgb);
+        // Cualquier otro formato (yuv420p, 10 bits…) se convierte a NV12 (y al tamaño de
+        // salida).
+        prepareSws(src, AV_PIX_FMT_NV12, rgb, out.width, out.height);
         out.y.resize(static_cast<std::size_t>(out.width) * out.height);
         out.uv.resize(static_cast<std::size_t>(uvRowBytes) * out.uvHeight());
         std::uint8_t* dst[4] = {out.y.data(), out.uv.data(), nullptr, nullptr};
@@ -429,10 +436,10 @@ struct VideoDecoder::Impl {
     }
 
     // Conversión de `src` a `target` (8 bits). De RGB a YUV, con BT.709 de rango limitado.
-    void prepareSws(const AVFrame* src, AVPixelFormat target, bool rgb) {
-        sws.reset(sws_getCachedContext(
-            sws.release(), src->width, src->height, static_cast<AVPixelFormat>(src->format),
-            src->width, src->height, target, SWS_BILINEAR, nullptr, nullptr, nullptr));
+    void prepareSws(const AVFrame* src, AVPixelFormat target, bool rgb, int width, int height) {
+        sws.reset(sws_getCachedContext(sws.release(), src->width, src->height,
+                                       static_cast<AVPixelFormat>(src->format), width, height,
+                                       target, SWS_BILINEAR, nullptr, nullptr, nullptr));
         if (!sws) {
             throw MediaError(
                 "Formato de píxel no compatible: " +
@@ -447,7 +454,7 @@ struct VideoDecoder::Impl {
     // Video con transparencia: YUVA 4:2:0 de 8 bits; el UV se entrelaza (NV12) y el
     // alfa se guarda aparte.
     VideoFrame convertWithAlpha(const AVFrame* src, VideoFrame out, bool rgb) {
-        prepareSws(src, AV_PIX_FMT_YUVA420P, rgb);
+        prepareSws(src, AV_PIX_FMT_YUVA420P, rgb, out.width, out.height);
         const int uvw = out.uvWidth();
         const int uvh = out.uvHeight();
         out.y.resize(static_cast<std::size_t>(out.width) * out.height);
@@ -571,7 +578,9 @@ struct VideoDecoder::Impl {
     }
 };
 
-VideoDecoder::VideoDecoder(const std::string& path, HwAccel hwAccel) : d(std::make_unique<Impl>()) {
+VideoDecoder::VideoDecoder(const std::string& path, HwAccel hwAccel, int downscale)
+    : d(std::make_unique<Impl>()) {
+    d->downscale = std::clamp(downscale, 1, 8);
     d->open(path, hwAccel);
 }
 

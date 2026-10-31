@@ -18,19 +18,19 @@ Formato y estados: ver [README.md](README.md).
 | [FB-012](#fb-012) | 2026-10-22 | Medios | Error | PNG/JPG: no se ven ni se puede alargar | Hecho |
 | [FB-013](#fb-013) | 2026-10-22 | Efectos | Propuesta | Efecto de tinte de color | Hecho |
 | [FB-014](#fb-014) | 2026-10-22 | Propiedades | Propuesta | Selector de color completo | Hecho |
-| [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | En el plan |
+| [FB-015](#fb-015) | 2026-10-22 | Proyectos | Propuesta | Editar secuencia y guardar presets | Hecho |
 | [FB-016](#fb-016) | 2026-10-22 | Otro | Propuesta | Paneles reorganizables y diseños | En el plan |
 | [FB-017](#fb-017) | 2026-10-22 | Subtítulos | Usabilidad | Ocultar aviso de descarga si ya existe | Hecho |
 | [FB-018](#fb-018) | 2026-10-22 | Instalación | Propuesta | Descargas opcionales en el instalador | En el plan |
 | [FB-019](#fb-019) | 2026-10-22 | Línea de tiempo | Usabilidad | Zoom arriba a la derecha | Hecho |
-| [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | En el plan |
+| [FB-020](#fb-020) | 2026-10-22 | Visor | Usabilidad | Botón Proxies que «a veces no sirve» y calidad de vista previa elegible | Hecho |
 | [FB-021](#fb-021) | 2026-10-22 | Rendimiento | Propuesta | Ver y configurar la aceleración por hardware | Hecho |
 | [FB-022](#fb-022) | 2026-10-22 | Exportación | Pregunta | ¿El códec de exportación aguanta la recompresión de YouTube? | Hecho |
 | [FB-023](#fb-023) | 2026-10-23 | Línea de tiempo | Error | Tirón al cortar durante la reproducción | Hecho |
 | [FB-024](#fb-024) | 2026-10-23 | Medios | Propuesta | Doble clic en Medios abre Importar | Hecho |
 | [FB-025](#fb-025) | 2026-10-23 | Línea de tiempo | Error | Clips muy cortos no se seleccionan con la línea alejada | Hecho |
 | [FB-026](#fb-026) | 2026-10-23 | Medios | Error | Un medio recién importado no se deja arrastrar | Hecho |
-| [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | En el plan |
+| [FB-027](#fb-027) | 2026-10-25 | Proyectos | Pregunta | ¿Para qué son las carpetas .sharkp.cache? ¿Se pueden evitar? | Hecho |
 | [FB-028](#fb-028) | 2026-10-25 | Línea de tiempo | Usabilidad | La vista no sigue al cabezal al saltar entre cortes | Hecho |
 | [FB-029](#fb-029) | 2026-10-26 | Otro | Propuesta | Apartado de tutorial en la app | En el plan |
 | [FB-030](#fb-030) | 2026-10-26 | Línea de tiempo | Error | El cabezal no llega al final exacto de los clips | Hecho |
@@ -53,9 +53,9 @@ Formato y estados: ver [README.md](README.md).
 | [FB-047](#fb-047) | 2026-10-27 | Visor | Error | A veces un clip no aparece en el visor hasta mover el cabezal | Hecho |
 | [FB-048](#fb-048) | 2026-10-27 | Propiedades | Usabilidad | Girar 90° un video horizontal y ajustarlo al lienzo vertical | Hecho |
 | [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
-| [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | En el plan |
-| [FB-051](#fb-051) | 2026-10-29 | Línea de tiempo | Usabilidad | La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde | En el plan |
-| [FB-052](#fb-052) | 2026-10-31 | Medios | Propuesta | Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo | En el plan |
+| [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | Hecho |
+| [FB-051](#fb-051) | 2026-10-29 | Línea de tiempo | Usabilidad | La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde | Hecho |
+| [FB-052](#fb-052) | 2026-10-31 | Medios | Propuesta | Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo | Hecho |
 
 ---
 
@@ -239,7 +239,7 @@ Formato y estados: ver [README.md](README.md).
 - **Tipo:** Propuesta
 - **Qué dijo:** Poder editar la secuencia una vez creada: cambiar la relación de aspecto, los fotogramas por segundo y ajustarla fuera de los presets por defecto, con opción para guardar esa configuración como preset propio.
 - **Contexto:** Configuración de secuencias (lienzo y fps).
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M2)
 
 <a id="fb-016"></a>
 ### FB-016 · Paneles reorganizables y diseños guardados
@@ -307,7 +307,7 @@ Formato y estados: ver [README.md](README.md).
   Los proxies son archivos aparte a 540p (`kProxyHeight`), no una resolución de
   reproducción. Lo que pide (completa, 1/2, 1/4…) es otra cosa: bajar la resolución del
   visor en vivo, sin crear archivos. Pueden convivir las dos.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md)): la primera parte (botón «Proxies», A3) está hecha; la calidad de la vista previa elegible es M5.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M5)
 
 <a id="fb-021"></a>
 ### FB-021 · Ver y configurar la aceleración por hardware
@@ -434,7 +434,7 @@ Formato y estados: ver [README.md](README.md).
   proyecto y nunca se escribe junto a los medios originales. Borrarla es seguro (con el
   proyecto cerrado): solo se vuelve a calcular. Hoy no se puede cambiar de sitio.
 - **Capturas:** [FB-027-carpetas-cache.png](capturas/FB-027-carpetas-cache.png)
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M11)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M11)
 
 <a id="fb-028"></a>
 ### FB-028 · La vista no sigue al cabezal al saltar entre cortes
@@ -832,7 +832,7 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** el editor siempre tiene un proyecto abierto (Editor::Editor crea uno nuevo
   con una secuencia); al abrir otro, el vacío se queda en Abiertos y en las pestañas.
 - **Decisión (Kyo):** para la 0.1.8.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M24)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M24)
 
 <a id="fb-051"></a>
 ### FB-051 · La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde
@@ -847,7 +847,7 @@ Formato y estados: ver [README.md](README.md).
 - **Contexto:** VODs largos con zoom cercano.
 - **Notas:** LineaTiempo.qml no tiene desplazamiento automático en ningún arrastre.
 - **Decisión (Kyo):** para la 0.1.8.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M25)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M25)
 
 <a id="fb-052"></a>
 ### FB-052 · Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo
@@ -863,5 +863,5 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** la onda la pide WaveformView (Editor::waveform → WaveformCache::get) al
   dibujar un clip de audio; nadie la pide al importar.
 - **Decisión (Kyo):** para la 0.1.8.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M26)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M26)
 

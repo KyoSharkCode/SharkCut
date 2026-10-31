@@ -18,6 +18,7 @@ Rectangle {
     signal exportarSrt(int pista)
     signal dividirSubtitulos(int pista)
     signal nuevaSecuencia()
+    signal ajustesSecuencia()
     signal cerrarProyecto(var uid)
     // Carpeta abierta en Medios: lo que se importa va ahí.
     readonly property var carpeta: biblioteca.carpeta
@@ -80,6 +81,7 @@ Rectangle {
             fantasma: panel.fantasma
             onImportar: panel.importar()
             onNuevaSecuencia: panel.nuevaSecuencia()
+            onAjustesSecuencia: panel.ajustesSecuencia()
             onCerrarProyecto: (uid) => panel.cerrarProyecto(uid)
         }
 

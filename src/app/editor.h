@@ -80,10 +80,16 @@ class Editor : public CompositionSource {
     // Proxies: usarlos en la vista previa (la exportación usa siempre los originales),
     // si se pueden crear (el proyecto tiene archivo) y el estado de los que se crean.
     Q_PROPERTY(bool useProxies READ useProxies WRITE setUseProxies NOTIFY proxiesChanged)
+    // Resolución de la vista previa: 1 = completa, 2 = la mitad, 4 = un cuarto (decodifica y
+    // dibuja más pequeño, sin crear archivos; la exportación sale siempre completa).
+    Q_PROPERTY(
+        int previewDivisor READ previewDivisor WRITE setPreviewDivisor NOTIFY previewDivisorChanged)
     // Duración (s) con la que se importan las imágenes fijas (PNG, JPG…).
     Q_PROPERTY(
         double stillSeconds READ stillSeconds WRITE setStillSeconds NOTIFY stillSecondsChanged)
     Q_PROPERTY(bool proxiesAvailable READ proxiesAvailable NOTIFY proxiesChanged)
+    Q_PROPERTY(QString cacheFolder READ cacheFolder WRITE setCacheFolder NOTIFY cacheChanged)
+    Q_PROPERTY(qint64 cacheBytes READ cacheBytes NOTIFY cacheChanged)
     Q_PROPERTY(QString proxyStatus READ proxyStatus NOTIFY proxiesChanged)
     // Videos del proyecto que pueden tener proxy y cuántos lo tienen ya listo.
     Q_PROPERTY(int proxiesTotal READ proxiesTotal NOTIFY proxiesChanged)
@@ -135,6 +141,7 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList captionSelection READ captionSelection NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap selectedCaption READ selectedCaption NOTIFY selectedClipChanged)
     Q_PROPERTY(QVariantList captionPresets READ captionPresets NOTIFY captionPresetsChanged)
+    Q_PROPERTY(QVariantList sequencePresets READ sequencePresets NOTIFY sequencePresetsChanged)
     // Punto de anclaje (editor_anchor.cpp).
     Q_PROPERTY(bool anchorPicking READ anchorPicking NOTIFY anchorChanged)
     Q_PROPERTY(QVariantMap anchorTargetBox READ anchorTargetBox NOTIFY anchorChanged)
@@ -207,7 +214,17 @@ public:
     QVariantMap proxyStates() const;
     bool useProxies() const { return m_useProxies; }
     void setUseProxies(bool use);
+    int previewDivisor() const { return m_previewDivisor; }
+    void setPreviewDivisor(int divisor);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
+    // Caché de medios (ondas y proxies), común a todos los proyectos.
+    QString cacheFolder() const;
+    void setCacheFolder(const QString& folder);
+    static QString defaultCacheFolder();
+    qint64 cacheBytes() const { return m_cacheBytes; }
+    Q_INVOKABLE void refreshCacheSize(); // lo que ocupa (se mira en segundo plano)
+    Q_INVOKABLE void clearCache();       // borra ondas y proxies (se vuelven a crear)
+    Q_INVOKABLE void openCacheFolder();
     QString proxyStatus() const;
     double stillSeconds() const;
     void setStillSeconds(double seconds);
@@ -275,6 +292,7 @@ public:
 
     sharkcut::CompositorInput composition() const override;
     QSize canvasSize() const override;
+    QSize renderSize() const override;
     void setRenderDevice(const QString& device, const QString& api) override;
 
     // {gpu, api, decoder, decoderGpu (bool), h264, h264Software, h265, h265Software,
@@ -287,8 +305,9 @@ public:
     // Abre un proyecto nuevo (sin cerrar los demás) con una secuencia. `width`/`height`
     // = 0: el lienzo lo fija el primer clip; `fps` = 0: también los fotogramas por
     // segundo. `name` se propone al guardar y da nombre a la secuencia.
+    // `fpsDen`: para 29,97 (30000/1001) y 59,94.
     Q_INVOKABLE void newProject(const QString& name = {}, int width = 0, int height = 0,
-                                int fps = 0);
+                                int fps = 0, int fpsDen = 1);
     // Abre un proyecto junto a los demás (si ya está abierto, solo lo activa).
     Q_INVOKABLE void openProject(const QUrl& file);
     Q_INVOKABLE void openProjectPath(const QString& path);
@@ -307,7 +326,20 @@ public:
     Q_INVOKABLE void openSequence(qint64 sequenceId); // del proyecto activo
     Q_INVOKABLE void activateTab(int index);
     Q_INVOKABLE void closeTab(int index);
-    Q_INVOKABLE void newSequence(const QString& name, int width, int height, int fps);
+    Q_INVOKABLE void newSequence(const QString& name, int width, int height, int fps,
+                                 int fpsDen = 1);
+    // La secuencia activa: {name, width, height, fpsNum, fpsDen}.
+    Q_INVOKABLE QVariantMap sequenceSettings() const;
+    // Cambia el nombre, el lienzo y los fps de la secuencia activa (con otros fps, todos
+    // los tiempos se pasan a los fotogramas nuevos: setSequenceSettings en edit.h).
+    Q_INVOKABLE void editSequence(const QString& name, int width, int height, int fpsNum,
+                                  int fpsDen);
+    // Ajustes de secuencia guardados (todos los proyectos): {name, width, height, fpsNum,
+    // fpsDen}. Guardar uno con un nombre que ya existe lo reemplaza.
+    QVariantList sequencePresets() const;
+    Q_INVOKABLE void saveSequencePreset(const QString& name, int width, int height, int fpsNum,
+                                        int fpsDen);
+    Q_INVOKABLE void removeSequencePreset(const QString& name);
     Q_INVOKABLE void renameSequence(qint64 sequenceId, const QString& name);
     // Copia de la secuencia (con `vertical`, en un lienzo 9:16) y la abre.
     Q_INVOKABLE void duplicateSequence(qint64 sequenceId, bool vertical);
@@ -695,6 +727,7 @@ signals:
     void fileBusyChanged();
     void detectingKeyChanged();
     void captionPresetsChanged();
+    void sequencePresetsChanged();
     void clipPresetsChanged();
     void anchorChanged();
     void clipboardChanged();
@@ -718,6 +751,8 @@ signals:
     void selectionChanged();
     void selectedClipChanged();
     void waveformsChanged();
+    void previewDivisorChanged();
+    void cacheChanged();
     void importingChanged();
     void playingChanged();
     void busyChanged();
@@ -788,6 +823,9 @@ private:
     sharkcut::ObjectId activeSequenceId() const;
     QString nameOf(const OpenProject& project) const;
     OpenProject& addProject(sharkcut::Document document, QString path, QString newName);
+    // Quita el proyecto «Sin título» si es el único y sigue intacto (antes de abrir o
+    // crear otro).
+    void dropUntouchedProject();
     // Cambia la pestaña activa (-1 = ninguna) y pone al día la vista y la reproducción.
     void switchTo(int tab);
     void refreshView();
@@ -898,6 +936,8 @@ private:
     QVariantList m_shownSequences;
     ProxyManager m_proxies;
     bool m_useProxies = false;
+    int m_previewDivisor = 1;
+    qint64 m_cacheBytes = -1; // -1: aún no se sabe
     // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.
     std::string decodePath(const sharkcut::MediaItem& item) const;
     // Cierra los hilos de video y vuelve a pedir el fotograma (cambió qué se decodifica).

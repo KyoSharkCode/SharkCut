@@ -22,9 +22,11 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
@@ -179,15 +181,16 @@ ObjectId soundMedia(Project& project, const sharkcut::SoundEffect& effect) {
 constexpr double kSoundVolumeDb = -6.0;
 
 // Documento nuevo con una secuencia (V1 y V2 encima, A1 y A2 debajo).
-sharkcut::Document newDocument(const std::string& sequenceName, int width, int height, int fps) {
+sharkcut::Document newDocument(const std::string& sequenceName, int width, int height, int fps,
+                               int fpsDen = 1) {
     sharkcut::ProjectSettings settings;
     if (width > 0 && height > 0) {
-        settings.width = width;
-        settings.height = height;
+        settings.width = width & ~1;
+        settings.height = height & ~1;
         settings.adoptCanvas = false;
     }
     if (fps > 0) {
-        settings.frameRate = {fps, 1};
+        settings.frameRate = {fps, std::max(1, fpsDen)};
         settings.adoptFrameRate = false;
     }
     sharkcut::Document document;
@@ -348,6 +351,10 @@ Editor::Editor(QObject* parent) : CompositionSource(parent) {
     connect(this, &Editor::projectsChanged, this, &Editor::updateLibrary);
     connect(this, &Editor::projectChanged, this, &Editor::proxiesChanged); // medios con proxy
     m_useProxies = QSettings().value(QStringLiteral("vista/proxies"), false).toBool();
+    m_previewDivisor = QSettings().value(QStringLiteral("vista/resolucion"), 1).toInt();
+    if (m_previewDivisor != 2 && m_previewDivisor != 4) {
+        m_previewDivisor = 1;
+    }
     m_proxies.setAutoCreate(m_useProxies);
     // El estado de los proxies va aparte (proxyStates): no toca la lista de Medios.
     connect(&m_proxies, &ProxyManager::changed, this, &Editor::proxiesChanged);
@@ -822,6 +829,20 @@ void Editor::setUseProxies(bool use) {
     reloadVideo();
 }
 
+void Editor::setPreviewDivisor(int divisor) {
+    if (divisor != 2 && divisor != 4) {
+        divisor = 1;
+    }
+    if (divisor == m_previewDivisor) {
+        return;
+    }
+    m_previewDivisor = divisor;
+    QSettings().setValue(QStringLiteral("vista/resolucion"), divisor);
+    emit previewDivisorChanged();
+    reloadVideo(); // los hilos se vuelven a abrir con el tamaño nuevo
+    emit compositionChanged();
+}
+
 double Editor::stillSeconds() const {
     return QSettings().value(QStringLiteral("medios/duracionImagen"), 5.0).toDouble();
 }
@@ -866,12 +887,111 @@ void Editor::cancelProxies() {
 }
 
 void Editor::updateWaveformDirectory() {
-    m_waveforms.setDirectory(
-        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/ondas"));
-    // Los proxies, en la misma caché (sin archivo de proyecto no hay dónde guardarlos).
-    m_proxies.setDirectory(
-        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/proxies"),
-        mediaPaths());
+    // Caché común (por archivo, la comparten todos los proyectos); la antigua junto al
+    // proyecto (<proyecto>.sharkp.cache) solo se lee.
+    const QString legacy =
+        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/");
+    const QDir cache(cacheFolder());
+    m_waveforms.setDirectory(cache.filePath(QStringLiteral("ondas")),
+                             legacy.isEmpty() ? QString() : legacy + QStringLiteral("ondas"));
+    m_proxies.setDirectory(cache.filePath(QStringLiteral("proxies")), mediaPaths(),
+                           legacy.isEmpty() ? QString() : legacy + QStringLiteral("proxies"));
+}
+
+QString Editor::defaultCacheFolder() {
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+        .filePath(QStringLiteral("medios"));
+}
+
+QString Editor::cacheFolder() const {
+    const QString chosen = QSettings().value(QStringLiteral("cache/carpeta")).toString();
+    return chosen.isEmpty() ? defaultCacheFolder() : chosen;
+}
+
+void Editor::setCacheFolder(const QString& folder) {
+    QString path = folder;
+    if (path.startsWith(QLatin1String("file:"))) {
+        path = QUrl(path).toLocalFile();
+    }
+    path = QDir::cleanPath(path);
+    if (path == cacheFolder()) {
+        return;
+    }
+    if (path.isEmpty() || path == defaultCacheFolder()) {
+        QSettings().remove(QStringLiteral("cache/carpeta"));
+    } else {
+        QSettings().setValue(QStringLiteral("cache/carpeta"), path);
+    }
+    // Lo de la carpeta anterior se queda allí (se puede vaciar antes de cambiarla).
+    m_waveforms.clear();
+    updateWaveformDirectory();
+    m_proxies.rescan();
+    reloadVideo();
+    emit cacheChanged();
+    emit waveformsChanged();
+    refreshCacheSize();
+}
+
+void Editor::refreshCacheSize() {
+    const QString folder = cacheFolder();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, folder] {
+        qint64 bytes = 0;
+        QDirIterator it(folder, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            bytes += it.fileInfo().size();
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, bytes] {
+                if (self) {
+                    self->m_cacheBytes = bytes;
+                    emit self->cacheChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::clearCache() {
+    // Los proxies que se están creando se cancelan; los que están abiertos en el visor se
+    // sueltan antes de borrarlos.
+    m_proxies.cancelAll();
+    for (TrackVideo& track : m_video) {
+        for (VideoSlot& slot : track.decoders) {
+            slot.worker.reset();
+            slot.media = 0;
+            slot.path.clear();
+            slot.clip = 0;
+            slot.seekIndex = -1;
+        }
+    }
+    const QString folder = cacheFolder();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, folder] {
+        for (const QString& sub : {QStringLiteral("ondas"), QStringLiteral("proxies")}) {
+            QDir(QDir(folder).filePath(sub)).removeRecursively();
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self] {
+                if (!self) {
+                    return;
+                }
+                self->m_waveforms.clear();
+                self->m_proxies.rescan();
+                self->reloadVideo();
+                emit self->waveformsChanged();
+                self->refreshCacheSize();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::openCacheFolder() {
+    QDir().mkpath(cacheFolder());
+    QDesktopServices::openUrl(QUrl::fromLocalFile(cacheFolder()));
 }
 
 sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
@@ -1015,9 +1135,25 @@ QSize Editor::canvasSize() const {
     return {project().settings.width, project().settings.height};
 }
 
+QSize Editor::renderSize() const {
+    // Par, como lo pide el compositor (y nunca menos de 2).
+    const auto part = [this](int v) { return std::max(2, (v / m_previewDivisor) & ~1); };
+    return m_previewDivisor > 1
+               ? QSize(part(project().settings.width), part(project().settings.height))
+               : canvasSize();
+}
+
 sharkcut::CompositorInput Editor::composition() const {
     sharkcut::CompositorInput input;
-    const QSize canvas(project().settings.width, project().settings.height);
+    // A menos resolución, las medidas en píxeles del lienzo se escalan (como al exportar).
+    const QSize canvas = renderSize();
+    const double factor = project().settings.width > 0
+                              ? static_cast<double>(canvas.width()) / project().settings.width
+                              : 1.0;
+    const auto placed = [this, factor](ObjectId clip) {
+        return factor == 1.0 ? transformOf(clip)
+                             : sharkcut::scaledTransform(transformOf(clip), factor);
+    };
     for (const Project::Layer& layer : project().videoLayersAt(m_currentFrame)) {
         if (layer.clip->isText()) {
             // Texto libre: un fotograma del tamaño del lienzo, sin decodificar nada.
@@ -1025,7 +1161,7 @@ sharkcut::CompositorInput Editor::composition() const {
             if (text.frame) {
                 sharkcut::CompositorLayer& out = input.layers.emplace_back();
                 out.a = text.frame;
-                out.transform = transformOf(layer.clip->id);
+                out.transform = placed(layer.clip->id);
             }
             continue;
         }
@@ -1053,8 +1189,8 @@ sharkcut::CompositorInput Editor::composition() const {
         if (layer.transition && a && b) {
             out.a = a;
             out.b = b;
-            out.transform = transformOf(layer.clip->id);
-            out.transformB = transformOf(layer.clipB->id);
+            out.transform = placed(layer.clip->id);
+            out.transformB = placed(layer.clipB->id);
             out.transition = layer.transition->params;
             out.state =
                 sharkcut::evaluateTransition(layer.transition->params, layer.transitionFrame);
@@ -1064,7 +1200,7 @@ sharkcut::CompositorInput Editor::composition() const {
             const bool showB =
                 !a || (b && layer.transition && m_currentFrame >= layer.clipB->start);
             out.a = showB ? b : a;
-            out.transform = transformOf(showB ? layer.clipB->id : layer.clip->id);
+            out.transform = placed(showB ? layer.clipB->id : layer.clip->id);
         }
     }
     sharkcut::CaptionImageCache::StyleOverride preview;
@@ -1401,16 +1537,16 @@ void Editor::closeTab(int index) {
     switchTo(next);
 }
 
-void Editor::newSequence(const QString& name, int width, int height, int fps) {
+void Editor::newSequence(const QString& name, int width, int height, int fps, int fpsDen) {
     ObjectId created = 0;
     sharkcut::ProjectSettings settings = project().settings;
     if (width > 0 && height > 0) {
-        settings.width = width;
-        settings.height = height;
+        settings.width = width & ~1;
+        settings.height = height & ~1;
         settings.adoptCanvas = false;
     }
     if (fps > 0) {
-        settings.frameRate = {fps, 1};
+        settings.frameRate = {fps, std::max(1, fpsDen)};
         settings.adoptFrameRate = false;
     }
     const std::string sequenceName =
@@ -1423,6 +1559,100 @@ void Editor::newSequence(const QString& name, int width, int height, int fps) {
     });
     if (created != 0) {
         openSequence(static_cast<qint64>(created));
+    }
+}
+
+QVariantMap Editor::sequenceSettings() const {
+    const sharkcut::ProjectSettings& s = project().settings;
+    const sharkcut::Sequence* sequence = document().sequence(activeSequenceId());
+    return {{QStringLiteral("name"), sequence ? QString::fromStdString(sequence->name) : QString()},
+            {QStringLiteral("width"), s.width},
+            {QStringLiteral("height"), s.height},
+            {QStringLiteral("fpsNum"), static_cast<int>(s.frameRate.num)},
+            {QStringLiteral("fpsDen"), static_cast<int>(s.frameRate.den)}};
+}
+
+void Editor::editSequence(const QString& name, int width, int height, int fpsNum, int fpsDen) {
+    const ObjectId id = activeSequenceId();
+    if (id == 0 || fpsNum <= 0 || fpsDen <= 0) {
+        return;
+    }
+    const std::string newName = name.trimmed().toStdString();
+    const sharkcut::FrameRate rate{fpsNum, fpsDen};
+    // La posición del cabezal, en los mismos segundos con los fps nuevos.
+    const sharkcut::FrameRate old = project().settings.frameRate;
+    const std::int64_t frame =
+        sharkcut::rescale(m_currentFrame, old.frameDuration(), rate.frameDuration());
+    const bool changed =
+        editDocument(QStringLiteral("Ajustes de la secuencia"), [&](sharkcut::Document& d) {
+            const sharkcut::Sequence* s = d.sequence(id);
+            bool any = s && !newName.empty() && s->name != newName &&
+                       sharkcut::renameSequence(d, id, newName);
+            sharkcut::Project view = d.view(id);
+            if (sharkcut::setSequenceSettings(view, width, height, rate)) {
+                d.store(id, view);
+                any = true;
+            }
+            return any;
+        });
+    if (changed) {
+        seek(frame);
+    }
+}
+
+namespace {
+
+QVariantList readSequencePresets() {
+    const QJsonDocument doc = QJsonDocument::fromJson(
+        QSettings().value(QStringLiteral("secuencias/ajustes")).toByteArray());
+    return doc.array().toVariantList();
+}
+
+void writeSequencePresets(const QVariantList& list) {
+    QSettings().setValue(
+        QStringLiteral("secuencias/ajustes"),
+        QJsonDocument(QJsonArray::fromVariantList(list)).toJson(QJsonDocument::Compact));
+}
+
+} // namespace
+
+QVariantList Editor::sequencePresets() const {
+    return readSequencePresets();
+}
+
+void Editor::saveSequencePreset(const QString& name, int width, int height, int fpsNum,
+                                int fpsDen) {
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || width < 16 || height < 16 || fpsNum <= 0 || fpsDen <= 0) {
+        return;
+    }
+    QVariantList list = readSequencePresets();
+    const QVariantMap entry{{QStringLiteral("name"), trimmed},
+                            {QStringLiteral("width"), width & ~1},
+                            {QStringLiteral("height"), height & ~1},
+                            {QStringLiteral("fpsNum"), fpsNum},
+                            {QStringLiteral("fpsDen"), fpsDen}};
+    bool replaced = false;
+    for (QVariant& v : list) {
+        if (v.toMap().value(QStringLiteral("name")).toString() == trimmed) {
+            v = entry;
+            replaced = true;
+        }
+    }
+    if (!replaced) {
+        list.append(entry);
+    }
+    writeSequencePresets(list);
+    emit sequencePresetsChanged();
+}
+
+void Editor::removeSequencePreset(const QString& name) {
+    QVariantList list = readSequencePresets();
+    const auto removed = list.removeIf(
+        [&name](const QVariant& v) { return v.toMap().value(QStringLiteral("name")) == name; });
+    if (removed > 0) {
+        writeSequencePresets(list);
+        emit sequencePresetsChanged();
     }
 }
 
@@ -1580,15 +1810,38 @@ void Editor::setFileBusy(bool busy) {
     }
 }
 
-void Editor::newProject(const QString& name, int width, int height, int fps) {
+void Editor::dropUntouchedProject() {
+    // El proyecto «Sin título» del arranque (o el que queda al cerrar el último), si no se
+    // llegó a usar: se sustituye por el que se abre o se crea.
+    if (m_projects.size() != 1) {
+        return;
+    }
+    const OpenProject& only = *m_projects.front();
+    const sharkcut::Document& d = only.history.state();
+    const bool untouched = only.path.isEmpty() && only.newName.isEmpty() &&
+                           only.recoveryKey.isEmpty() && !only.history.modified() &&
+                           !only.history.canUndo() && !only.history.canRedo() && d.media.empty();
+    if (!untouched) {
+        return;
+    }
+    const quint64 uid = only.uid;
+    std::erase_if(m_tabs, [uid](const Tab& t) { return t.project == uid; });
+    m_projects.clear();
+    m_activeTab = -1;
+}
+
+void Editor::newProject(const QString& name, int width, int height, int fps, int fpsDen) {
     if (m_fileBusy) {
         return;
     }
+    pause();
+    dropUntouchedProject();
     const QString trimmed = name.trimmed();
     OpenProject& project = addProject(
         newDocument(trimmed.isEmpty() ? std::string("Secuencia 1") : trimmed.toStdString(), width,
-                    height, fps),
+                    height, fps, fpsDen),
         {}, trimmed);
+    m_activeProject = project.uid;
     m_tabs.push_back({project.uid, project.history.state().sequences.front().id, 0});
     setError({});
     switchTo(static_cast<int>(m_tabs.size()) - 1);
@@ -1681,20 +1934,9 @@ void Editor::finishOpen(const std::shared_ptr<sharkcut::LoadedDocument>& loaded,
         emit opened(false);
         return;
     }
-    // Un proyecto nuevo que no se llegó a usar se sustituye por el que se abre.
-    if (m_projects.size() == 1) {
-        const OpenProject& only = *m_projects.front();
-        const sharkcut::Document& d = only.history.state();
-        const bool untouched = only.path.isEmpty() && !only.history.modified() &&
-                               !only.history.canUndo() && d.media.empty();
-        if (untouched) {
-            const quint64 uid = only.uid;
-            std::erase_if(m_tabs, [uid](const Tab& t) { return t.project == uid; });
-            m_projects.clear();
-            m_activeTab = -1;
-        }
-    }
+    dropUntouchedProject();
     OpenProject& project = addProject(std::move(loaded->document), path, recoveredName);
+    m_activeProject = project.uid; // ya no apunta al que se quitó
     if (!recoveryKey.isEmpty()) {
         // Recuperado: tiene cambios que no están en su archivo (sigue usando la misma
         // copia de recuperación hasta que se guarde).
@@ -1975,18 +2217,9 @@ void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Docum
         project->autosaved.reset();
     }
     if (project->path != path) {
-        const bool firstSave = project->path.isEmpty();
         project->path = path;
         if (uid == m_activeProject) {
             updateWaveformDirectory();
-        }
-        if (firstSave) {
-            // Las ondas calculadas mientras no tenía archivo, a su caché.
-            QStringList media;
-            for (const MediaItem& item : written->media) {
-                media << QString::fromStdString(item.path);
-            }
-            m_waveforms.saveTo(path + QStringLiteral(".cache/ondas"), media);
         }
         emit fileChanged();
     }
@@ -4034,6 +4267,13 @@ bool Editor::isSelected(qint64 clipId) const {
 
 void Editor::onProjectChanged() {
     refreshView(); // lo de abajo mira ya la secuencia editada
+    // Las ondas de los medios con audio se preparan de antemano (al importar o abrir), así
+    // ya están al poner un clip en la línea de tiempo.
+    for (const MediaItem& item : document().media) {
+        if (item.hasAudio && !item.still && !sharkcut::isSolidColorPath(item.path)) {
+            m_waveforms.prefetch(QString::fromStdString(item.path));
+        }
+    }
     // La selección solo conserva los clips que siguen existiendo; su descripción
     // puede cambiar aunque sigan (recortes, movimientos).
     std::erase_if(m_selection, [this](ObjectId id) { return project().clip(id) == nullptr; });
@@ -4233,8 +4473,8 @@ int Editor::slotFor(std::size_t track, const Clip& clip, int avoid) {
                                       .count();
                 qInfo("Visor: pista %zu abre «%s» en %.1f ms", track + 1, qUtf8Printable(name), ms);
             };
-        slot.worker =
-            std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto, std::move(callbacks));
+        slot.worker = std::make_unique<DecodeWorker>(path, sharkcut::HwAccel::Auto,
+                                                     std::move(callbacks), 8, m_previewDivisor);
         slot.media = clip.media;
         slot.path = path;
     }

@@ -21,7 +21,14 @@ ProxyManager::~ProxyManager() {
     m_pool.waitForDone();
 }
 
-void ProxyManager::setDirectory(const QString& directory, const QStringList& mediaPaths) {
+void ProxyManager::rescan() {
+    std::erase_if(m_entries, [](const auto& e) { return e.second.state == State::Ready; });
+    setDirectory(m_directory, m_mediaPaths, m_legacyDirectory);
+}
+
+void ProxyManager::setDirectory(const QString& directory, const QStringList& mediaPaths,
+                                const QString& legacyDirectory) {
+    m_legacyDirectory = legacyDirectory;
     if (directory != m_directory) {
         // Otro proyecto: lo que se estaba creando para el anterior se cancela.
         m_cancel->store(true);
@@ -40,8 +47,9 @@ void ProxyManager::setDirectory(const QString& directory, const QStringList& med
     // ¿Cuáles tienen ya su proxy? (mirar archivos: fuera del hilo de la interfaz)
     const quint64 generation = m_generation;
     const QString dir = m_directory;
+    const QString legacy = m_legacyDirectory;
     QPointer<ProxyManager> self(this);
-    QThreadPool::globalInstance()->start([self, generation, dir, mediaPaths] {
+    QThreadPool::globalInstance()->start([self, generation, dir, legacy, mediaPaths] {
         std::map<QString, QString> found;
         for (const QString& media : mediaPaths) {
             const std::string name = sharkcut::proxyFileName(media.toStdString());
@@ -49,8 +57,12 @@ void ProxyManager::setDirectory(const QString& directory, const QStringList& med
                 continue;
             }
             const QString file = QDir(dir).filePath(QString::fromStdString(name));
+            const QString old =
+                legacy.isEmpty() ? QString() : QDir(legacy).filePath(QString::fromStdString(name));
             if (QFileInfo::exists(file)) {
                 found[media] = file;
+            } else if (!old.isEmpty() && QFileInfo::exists(old)) {
+                found[media] = old; // de la caché antigua del proyecto
             }
         }
         QMetaObject::invokeMethod(

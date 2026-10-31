@@ -10,8 +10,10 @@
 #include <map>
 #include <memory>
 
-// Proxies de los medios del proyecto activo (ver media/proxy.h), en su caché
-// (<proyecto>.sharkp.cache/proxies/). Se crean de uno en uno en segundo plano.
+// Proxies de los medios del proyecto activo (ver media/proxy.h), en la caché común de
+// SharkCut (<caché>/proxies/, por archivo: los comparten los proyectos que lo usan); los
+// de la caché antigua del proyecto (<proyecto>.sharkp.cache/proxies/) también se usan.
+// Se crean de uno en uno en segundo plano.
 class ProxyManager : public QObject {
     Q_OBJECT
 
@@ -21,9 +23,13 @@ public:
     explicit ProxyManager(QObject* parent = nullptr);
     ~ProxyManager() override; // cancela lo pendiente y espera
 
-    // Carpeta de proxies ("" = el proyecto no tiene archivo: no hay proxies) y los medios
-    // del proyecto, para saber cuáles tienen ya el suyo (se mira en segundo plano).
-    void setDirectory(const QString& directory, const QStringList& mediaPaths);
+    // Carpeta de proxies ("" = no hay proxies), la antigua del proyecto (solo se lee; ""
+    // = ninguna) y los medios del proyecto, para saber cuáles tienen ya el suyo (se mira
+    // en segundo plano).
+    void setDirectory(const QString& directory, const QStringList& mediaPaths,
+                      const QString& legacyDirectory = {});
+    // Olvida los proxies listos (al vaciar la caché) y vuelve a mirar cuáles existen.
+    void rescan();
     QString directory() const { return m_directory; }
 
     // Proxy listo de un medio ("" si no hay).
@@ -62,6 +68,7 @@ private:
     void createMissing();
 
     QString m_directory;
+    QString m_legacyDirectory;
     QStringList m_mediaPaths; // los del último setDirectory()
     bool m_autoCreate = false;
     bool m_scanned = false; // ya se miró qué proxies existen en la carpeta

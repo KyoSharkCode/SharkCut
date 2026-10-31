@@ -33,7 +33,9 @@ public:
         std::function<void()> framesAvailable;
     };
 
-    DecodeWorker(std::string path, HwAccel hwAccel, Callbacks callbacks, std::size_t capacity = 8);
+    // `downscale`: como en VideoDecoder (la vista previa a menos resolución).
+    DecodeWorker(std::string path, HwAccel hwAccel, Callbacks callbacks, std::size_t capacity = 8,
+                 int downscale = 1);
     ~DecodeWorker();
 
     DecodeWorker(const DecodeWorker&) = delete;
@@ -79,6 +81,7 @@ private:
 
     const std::string m_path;
     const HwAccel m_hwAccel;
+    const int m_downscale;
     const Callbacks m_callbacks;
     const std::size_t m_capacity;
 

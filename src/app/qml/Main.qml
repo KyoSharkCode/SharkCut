@@ -129,15 +129,24 @@ Window {
 
     DialogoNuevoProyecto {
         id: dialogoNuevo
-        onCrear: (nombre, ancho, alto, fps) => {
-            editor.newProject(nombre, ancho, alto, fps)
+        editor: editor
+        onCrear: (nombre, ancho, alto, fps, fpsDen) => {
+            editor.newProject(nombre, ancho, alto, fps, fpsDen)
             ventana.irA("editor")
         }
     }
     DialogoNuevoProyecto {
         id: dialogoSecuencia
+        editor: editor
         secuencia: true
-        onCrear: (nombre, ancho, alto, fps) => editor.newSequence(nombre, ancho, alto, fps)
+        onCrear: (nombre, ancho, alto, fps, fpsDen) => editor.newSequence(nombre, ancho, alto, fps, fpsDen)
+    }
+    // Ajustes de la secuencia activa: nombre, lienzo y fps.
+    DialogoNuevoProyecto {
+        id: dialogoAjustesSecuencia
+        editor: editor
+        editar: true
+        onCrear: (nombre, ancho, alto, fps, fpsDen) => editor.editSequence(nombre, ancho, alto, fps, fpsDen)
     }
 
     // --- Proyectos: guardar y cambios sin guardar ---
@@ -499,6 +508,7 @@ Window {
                             dialogoExportarSrt.open()
                         }
                         onNuevaSecuencia: dialogoSecuencia.open()
+                        onAjustesSecuencia: dialogoAjustesSecuencia.open()
                         onCerrarProyecto: (uid) => ventana.cerrarProyecto(uid)
                     }
 
@@ -541,9 +551,34 @@ Window {
                                            : "PROXIES"
                                     colorTexto: Theme.acento
                                 }
+                                // Clic: ajustes de la secuencia (lienzo y fps).
                                 Chip {
                                     texto: "LIENZO " + editor.canvasLabel
                                     colorTexto: Theme.texto
+                                    enabled: editor.hasSequence
+                                    MouseArea {
+                                        id: zonaLienzo
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: dialogoAjustesSecuencia.open()
+                                    }
+                                    ToolTip {
+                                        id: ayudaLienzo
+                                        visible: zonaLienzo.containsMouse
+                                        delay: 500
+                                        text: "Cambiar el lienzo y los fps de la secuencia"
+                                        contentItem: Text {
+                                            text: ayudaLienzo.text
+                                            color: Theme.texto
+                                            font.pixelSize: Theme.tamTextoPequeno
+                                        }
+                                        background: Rectangle {
+                                            color: Theme.panelElevado
+                                            border.color: Theme.borde
+                                            radius: 4
+                                        }
+                                    }
                                 }
                                 Text {
                                     text: editor.projectDescription
@@ -651,6 +686,19 @@ Window {
                                         else
                                             editor.useProxies = !editor.useProxies
                                     }
+                                }
+                                // Resolución de la vista previa: cada clic pasa a la siguiente.
+                                BotonIcono {
+                                    texto: editor.previewDivisor === 1 ? "Completa"
+                                           : "1/" + editor.previewDivisor
+                                    activo: editor.previewDivisor > 1
+                                    ayuda: "Resolución de la vista previa (clic para cambiarla): "
+                                           + (editor.previewDivisor === 1 ? "completa"
+                                              : editor.previewDivisor === 2 ? "la mitad" : "un cuarto")
+                                           + ". A menos resolución va más fluida en equipos modestos; "
+                                           + "no crea archivos y la exportación sale siempre completa"
+                                    onPulsado: editor.previewDivisor = editor.previewDivisor === 1 ? 2
+                                               : editor.previewDivisor === 2 ? 4 : 1
                                 }
                                 Item { Layout.fillWidth: true }
                                 // Velocidad con J/L (a 1× no se muestra)

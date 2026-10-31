@@ -1165,3 +1165,51 @@ TEST_CASE("Edits at the exact end of the sequence", "[timeline]") {
     CHECK(video(p)[1].start == 300);
     CHECK(p.length() == 600);
 }
+
+TEST_CASE("Changing a sequence frame rate keeps every time in seconds", "[edit]") {
+    Project p;
+    p.settings.adoptCanvas = false;
+    p.settings.adoptFrameRate = false;
+    const ObjectId m = addMedia(p, media("vod.mp4", 60, true, true));
+    const ObjectId a = placeClip(p, m, 0, 30, 120);   // 0–120, medio desde 30
+    const ObjectId b = placeClip(p, m, 120, 600, 90); // pegado a A
+    REQUIRE(a != 0);
+    REQUIRE(b != 0);
+    REQUIRE(setKeyframe(p, a, AnimProperty::Opacity, 60, 0.5));
+    const std::int64_t keyBefore = p.clip(a)->animation.of(AnimProperty::Opacity).front().frame;
+    TransitionParams params;
+    params.durationFrames = 40;
+    REQUIRE(addTransition(p, kVideoTrack, 120, params) != 0);
+    addMarker(p, 90, "aquí");
+    const std::size_t s = addCaptionTrack(p);
+    const ObjectId c = addCaption(p, s, 60, 60, "hola");
+    REQUIRE(c != 0);
+
+    REQUIRE(setSequenceSettings(p, 1080, 1920, {30, 1}));
+    CHECK(p.settings.width == 1080);
+    CHECK(p.settings.height == 1920);
+    CHECK(p.settings.frameRate.num == 30);
+    const Clip* ca = p.clip(a);
+    const Clip* cb = p.clip(b);
+    CHECK(ca->start == 0);
+    CHECK(ca->length == 60);
+    CHECK(ca->in == 15);
+    CHECK(cb->start == 60); // sigue pegado
+    CHECK(cb->in == 300);
+    CHECK(cb->length == 45);
+    CHECK(ca->animation.of(AnimProperty::Opacity).front().frame == keyBefore / 2);
+    const Transition& t = p.tracks[kVideoTrack].transitions.front();
+    CHECK(t.before + t.after == 20);
+    CHECK(t.params.durationFrames == 20);
+    CHECK(p.markers.front().frame == 45);
+    CHECK(p.caption(c)->start == 30);
+    CHECK(p.caption(c)->length == 30);
+
+    // Mismo ritmo: solo el lienzo (par).
+    REQUIRE(setSequenceSettings(p, 721, 1281, {30, 1}));
+    CHECK(p.settings.width == 720);
+    CHECK(p.settings.height == 1280);
+    CHECK(p.clip(a)->length == 60);
+    CHECK_FALSE(setSequenceSettings(p, 720, 1280, {30, 1})); // nada cambia
+    CHECK_FALSE(setSequenceSettings(p, 0, 1280, {30, 1}));
+}

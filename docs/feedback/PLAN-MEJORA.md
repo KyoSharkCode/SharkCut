@@ -387,6 +387,18 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   de clips).
 - **Cuidado:** cambiar fps mueve los tiempos de los clips: definir cómo se reajustan.
 - **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `setSequenceSettings` (edit.h) cambia el lienzo (par) y los fps; con otros fps
+  pasa todos los tiempos a los fotogramas nuevos con los mismos segundos (clips por sus dos
+  bordes, así los pegados siguen pegados; su tramo en el medio; keyframes, quitando los que
+  caen juntos; transiciones antes y después del corte; transiciones-clip; subtítulos y sus
+  palabras; marcadores). Las posiciones en píxeles no cambian. Editor::editSequence (un paso
+  de deshacer, con el nombre) y ajustes guardados en QSettings "secuencias/ajustes"
+  (sequencePresets, saveSequencePreset, removeSequencePreset). Interfaz: el diálogo de nueva
+  secuencia en modo «Ajustes de la secuencia», con lienzo a medida, 24/25/29,97/30/50/59,94/60
+  fps y los ajustes guardados (también al crear); se abre desde el chip LIENZO del visor y
+  desde «Lienzo y fps…» en el menú de la secuencia en Medios. La línea de tiempo mantiene el
+  zoom en segundos al cambiar de fps y su regla se actualiza. Test del núcleo; comprobado con
+  Xvfb (60 → 30 fps, vertical, reproducción).
 
 ### M3 · Tinte de color y selector de color completo · FB-013, FB-014 · M
 - **Hacer:** efecto de color (como blanco y negro, pero teñido con un color elegido);
@@ -429,6 +441,15 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Hacer:** selector Completa · 1/2 · 1/4 en el visor (decodifica y dibuja más pequeño,
   sin crear archivos), independiente de los proxies.
 - **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** VideoDecoder y DecodeWorker reciben `downscale` (1, 2 o 4) y entregan los
+  fotogramas más pequeños (sws tras la copia de la GPU; imágenes fijas y colores sólidos,
+  enteros). El visor dibuja a esa resolución (CompositionSource::renderSize) con las medidas
+  en píxeles del lienzo escaladas como al exportar (`scaledTransform` en project.h, que
+  ahora usa también la exportación); subtítulos y textos se dibujan a ese tamaño. Botón
+  Completa · 1/2 · 1/4 junto a Proxies (QSettings "vista/resolucion"). No adelgaza la
+  decodificación en sí (H.264 no se puede decodificar a menos tamaño): ahorra la copia, la
+  subida a la GPU, la caché de fotogramas y el dibujo de efectos. Tests del decodificador y
+  de la escala; comprobado con Xvfb (la colocación coincide a 1/2 y 1/4).
 
 ### M6 · Presets de exportación para YouTube y TikTok · FB-022, FB-033 · S
 - **Hacer:** presets en Exportar con una línea que explique cada uno:
@@ -483,6 +504,15 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Cuidado:** la caché de un proyecto tiene que seguir encontrándose si el proyecto se
   mueve o se renombra, y no mezclarse si dos proyectos se llaman igual.
 - **Para:** 0.1.8 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** la caché va por archivo, no por proyecto: las ondas y los proxies ya se nombraban
+  por ruta, tamaño y fecha del medio, así que la carpeta común (<caché del usuario>/medios/,
+  con ondas/ y proxies/; cambiable en QSettings "cache/carpeta") resuelve sola mover o
+  renombrar un proyecto y dos proyectos con el mismo nombre, y comparte la caché entre los
+  proyectos que usan el mismo video. Las carpetas `<proyecto>.sharkp.cache` se siguen leyendo
+  (la onda encontrada ahí se copia a la común). Los proyectos sin guardar ya pueden tener
+  proxies. Diálogo «Caché de medios» en Proyectos (qml/DialogoCache.qml): cuánto ocupa,
+  abrirla, cambiar la carpeta y vaciarla (Editor::clearCache, que suelta antes los proxies
+  abiertos). Comprobado con Xvfb.
 
 ### M12 · Poner una transición en el cabezal con un clic · FB-031 · S
 - **Hacer:** en la pestaña Transiciones, un clic en el botón de la flecha de cada
@@ -656,6 +686,67 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   estaba; si no (una cámara pequeña en una esquina), solo gira. Botones ↺ ↻ en Propiedades
   (junto a Ajustar y Rellenar) y en el menú del clip. Test del núcleo; comprobado con Xvfb:
   un 1920×1080 en una secuencia 1080×1920 queda a pantalla completa con un clic.
+
+### M24 · Sin proyecto «Sin título» al abrir la app · FB-050 · S
+- **Problema:** al abrir SharkCut se crea un proyecto nuevo sin título (el editor siempre
+  tiene uno abierto); al abrir el que se quería, el vacío se queda en Abiertos y en las
+  pestañas, y hay que cerrarlo a mano cada vez.
+- **Hacer:** el proyecto del arranque se sustituye solo al abrir o crear otro, si sigue
+  intacto (sin archivo, sin cambios y sin medios). Si se ha usado, se queda como ahora.
+- **Cuidado:** la recuperación de copias de seguridad al arrancar y abrir un proyecto con
+  doble clic en el archivo (o arrastrándolo) también deben sustituirlo.
+- **Hecho cuando:** abrir la app y elegir un reciente deja un solo proyecto abierto.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** al abrir un proyecto ya se sustituía el del arranque si seguía intacto; faltaba
+  al crear uno nuevo (lo que le pasaba a Kyo). `Editor::dropUntouchedProject` lo hace en los
+  dos casos (y al recuperar copias de seguridad, que pasan por el mismo camino). Intacto:
+  sin archivo, sin nombre, sin cambios ni historial y sin medios. Comprobado con Xvfb.
+
+### M25 · Desplazamiento automático al arrastrar hasta el borde · FB-051 · S
+- **Problema:** al arrastrar un clip hasta el borde izquierdo o derecho de la línea de
+  tiempo, esta no se desplaza: con zoom cercano no se puede llevar un clip lejos sin
+  alejar el zoom o soltarlo y volver a cogerlo.
+- **Hacer:** mientras se arrastra (mover o recortar un clip, un subtítulo, una transición,
+  el cabezal, el cuadro de selección y lo que llega desde Medios, Transiciones, Efectos,
+  Texto o Sonidos), si el ratón está cerca de un borde de la vista, la línea de tiempo se
+  desplaza sola hacia ese lado, más deprisa cuanto más cerca (o más allá) del borde, con un
+  temporizador que sigue aunque el ratón no se mueva. El arrastre sigue al contenido: el
+  clip se queda bajo el ratón y el imán y las guías siguen funcionando.
+- **Cuidado:** no pasar del inicio (0) y, hacia la derecha, dejar avanzar un poco más allá
+  del final para poder alargar la secuencia. Que no se dispare al pasar el ratón por el
+  borde sin arrastrar.
+- **Hecho cuando:** con zoom cercano en mitad de un VOD, se puede arrastrar un clip hasta
+  el comienzo sin soltarlo.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `arrastrarCon` en LineaTiempo.qml envuelve el manejador de movimiento de todos
+  los arrastres (clips y sus bordes, subtítulos y sus bordes, transiciones, keyframes,
+  cabezal, marcadores, cuadro de selección y lo que llega de los paneles): cerca del borde un
+  temporizador desplaza la vista (más deprisa cuanto más cerca o más fuera) y repite el
+  movimiento con el ratón quieto, desplazado lo que se ha movido el contenido. Lo que se
+  arrastra queda fijado en el modelo virtualizado (`TimelineClipsModel::pinned`, sin
+  rehacerlo de una vez mientras haya algo fijado) para que su elemento no se destruya al
+  alejarse la vista. Comprobado con Xvfb (un clip de 1:30 al inicio y un medio de la
+  biblioteca hasta más allá del borde derecho).
+
+### M26 · Onda del audio calculada al importar · FB-052 · S
+- **Problema:** la onda de un medio solo se calcula cuando un clip suyo se dibuja en la
+  línea de tiempo; con un VOD largo, al ponerlo hay que esperar unos segundos a que salga.
+- **Hacer:** al importar un medio con audio (y al abrir un proyecto, para los medios que
+  aún no la tengan en la caché), pedir su onda en segundo plano, como hace hoy el clip al
+  dibujarse (WaveformCache::get; la caché en disco ya la guarda para la próxima vez). Al
+  ponerlo en la línea de tiempo, ya está lista o a medio calcular.
+- **Cuidado:** que no compita con la reproducción ni con la importación: de una en una, en
+  la cola de baja prioridad, y las que pide un clip que se ve van primero. Con varias
+  pistas de audio (M4), solo la principal; las demás, al separarlas.
+- **Hecho cuando:** importar un VOD, esperar y ponerlo en la línea de tiempo muestra la
+  onda al momento.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-31; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `WaveformCache::prefetch` pone en cola la onda de la pista principal de cada
+  medio con audio; Editor la pide al cambiar el proyecto (importar, abrir, cambiar de
+  pestaña). Se calculan de una en una, con menos prioridad en el hilo y solo mientras no se
+  calcula ninguna que un clip espera; si un clip la pide, pasa delante. Comprobado con Xvfb:
+  al abrir un proyecto con un medio sin usar se crea su onda, y al ponerlo en la línea de
+  tiempo sale al momento.
 
 ---
 

@@ -18,6 +18,7 @@ ColumnLayout {
     property alias cuadricula: recuerdo.cuadricula
     signal importar()
     signal nuevaSecuencia()
+    signal ajustesSecuencia() // de la secuencia activa
     signal cerrarProyecto(var uid)
 
     spacing: 10
@@ -553,6 +554,13 @@ ColumnLayout {
                 const e = menuSecuencia.elemento
                 dialogoNombre.pedir("Renombrar secuencia", e.name, "Renombrar",
                                     (nombre) => biblioteca.editor.renameSequence(e.id, nombre))
+            }
+        }
+        Action {
+            text: "Lienzo y fps…"
+            onTriggered: {
+                biblioteca.editor.openSequence(menuSecuencia.elemento.id)
+                biblioteca.ajustesSecuencia()
             }
         }
         Action {

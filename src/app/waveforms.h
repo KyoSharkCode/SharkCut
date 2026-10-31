@@ -12,6 +12,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <deque>
 #include <map>
 #include <memory>
 
@@ -19,9 +20,10 @@ class Editor;
 
 // Formas de onda de los medios del proyecto, calculadas en segundo plano.
 //
-// Se guardan en memoria y, si el proyecto ya tiene archivo, en su caché
-// (<proyecto>.sharkp.cache/ondas/), nunca junto a los medios originales. Al volver a
-// abrir el proyecto se leen de ahí sin decodificar otra vez el audio.
+// Se guardan en memoria y en la caché común de SharkCut (<caché>/ondas/, por archivo: la
+// comparten todos los proyectos que lo usan), nunca junto a los medios originales. Al
+// volver a abrir el proyecto se leen de ahí sin decodificar otra vez el audio. También se
+// leen las de la caché antigua del proyecto (<proyecto>.sharkp.cache/ondas/).
 class WaveformCache : public QObject {
     Q_OBJECT
 
@@ -34,12 +36,15 @@ public:
     // audio.
     std::shared_ptr<const sharkcut::Waveform> get(const QString& mediaPath, int audioStream = -1);
 
-    // Carpeta de la caché en disco del proyecto activo ("" = solo en memoria).
-    void setDirectory(const QString& directory);
+    // La pide de antemano (al importar o abrir el proyecto), la de la pista principal: se
+    // calculan de una en una y solo mientras no se calcula ninguna que un clip espera.
+    void prefetch(const QString& mediaPath);
 
-    // Guarda en `directory` las ondas ya calculadas de esos medios (al guardar por
-    // primera vez un proyecto, lo calculado mientras no tenía archivo).
-    void saveTo(const QString& directory, const QStringList& mediaPaths);
+    // Carpeta de la caché en disco ("" = solo en memoria) y la antigua del proyecto
+    // activo, de la que solo se lee ("" = ninguna).
+    void setDirectory(const QString& directory, const QString& legacyDirectory = {});
+    // Olvida lo que tiene en memoria (al vaciar la caché).
+    void clear();
 
     // true mientras se lee de la caché o se calcula.
     bool pending(const QString& mediaPath, int audioStream = -1) const;
@@ -52,15 +57,21 @@ private:
         std::shared_ptr<const sharkcut::Waveform> waveform;
         bool pending = false;
         bool failed = false;
+        bool queued = false;     // en la cola de las preparadas de antemano
+        bool background = false; // calculándose de antemano
     };
     using Key = std::pair<QString, int>; // archivo y pista de audio
+    void start(const Key& key, bool background);
+    void pumpPrefetch();
     void finish(const Key& key, std::shared_ptr<const sharkcut::Waveform> waveform);
-    void save(const QString& directory, const Key& key,
-              std::shared_ptr<const sharkcut::Waveform> waveform);
 
     QThreadPool m_pool;
     std::map<Key, Entry> m_entries;
+    std::deque<Key> m_prefetch; // las que esperan su turno, en orden
+    bool m_prefetching = false;
+    int m_foreground = 0; // las que se calculan porque un clip las espera
     QString m_directory;
+    QString m_legacyDirectory;
     std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);
 };
 

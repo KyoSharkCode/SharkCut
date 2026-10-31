@@ -151,9 +151,19 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   LineaTiempo (TimelineClipsModel con captions: true), sección en PanelPropiedades y
   qml/DialogoSubtitulos.qml. Test [speech]: necesita SHARKCUT_WHISPER_MODEL y
   SHARKCUT_WHISPER_SAMPLE (si no, se salta).
-  src/media también: proxy.h (proxies 540p para la vista previa, en la caché del
-  proyecto; DecodeWorker guarda una caché de fotogramas para ir hacia atrás). Con
+  src/media también: proxy.h (proxies 540p para la vista previa, en la caché de medios;
+  DecodeWorker guarda una caché de fotogramas para ir hacia atrás). Con
   «Proxies» activado, ProxyManager::setAutoCreate crea solos los que falten.
+  Caché de medios común (ondas/ y proxies/, por archivo: ruta, tamaño y fecha del medio):
+  Editor::cacheFolder (QSettings "cache/carpeta"; por defecto la caché del usuario,
+  medios/), DialogoCache.qml en Proyectos; las carpetas antiguas <proyecto>.sharkp.cache se
+  siguen leyendo.
+  Resolución de la vista previa (Completa · 1/2 · 1/4, Editor::previewDivisor): VideoDecoder
+  y DecodeWorker con `downscale`, el visor dibuja a CompositionSource::renderSize y las
+  medidas en píxeles del lienzo se escalan con scaledTransform (project.h), como al exportar.
+  Lienzo y fps de una secuencia ya creada: setSequenceSettings (edit.h, pasa todos los tiempos
+  a los fps nuevos con los mismos segundos) y Editor::editSequence; ajustes de secuencia
+  guardados en QSettings "secuencias/ajustes"; diálogo: DialogoNuevoProyecto.qml con `editar`.
   src/media también: Mp4Writer (H.264 o H.265 por hardware con respaldo x264/x265 + AAC;
   probeVideoEncoder dice cuál usaría), TimelineAudioSource (mezcla de las pistas de audio)
   y waveform.h (onda del audio, repartida en tramos que se decodifican en paralelo, y su
@@ -168,9 +178,12 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   ("image://fotogramas/<ruta>@<µs>", thumbnails.h; 2 hilos de baja prioridad): solo el
   primer fotograma de cada clip, a su inicio (con muchos cortes y VODs de una hora, una
   tira de miniaturas atascaba el zoom).
-  Ondas: WaveformCache y WaveformView (waveforms.h), caché en <proyecto>.sharkp.cache/.
+  Ondas: WaveformCache y WaveformView (waveforms.h), en la caché de medios; prefetch las
+  prepara de antemano (al importar o abrir), de una en una y detrás de las que pide un clip.
   Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
-  (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML.
+  (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML; `pinned` mantiene
+  cargado lo que se arrastra. Los arrastres de LineaTiempo pasan por arrastrarCon, que
+  desplaza la vista cerca de los bordes y repite el movimiento.
   tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
   edición de una línea de tiempo grande (sin Qt).
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir). Listas
@@ -232,7 +245,7 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 
 ## Reglas
 - Edición no destructiva: nunca modificar los archivos de medios originales.
-  Proxies, miniaturas, ondas y remux van a la carpeta de caché del proyecto.
+  Proxies, miniaturas, ondas y remux van a la caché de medios (nunca junto a los medios).
 - No copiar código ni recursos de otros productos de pago. En código, comentarios y
   documentos no se nombran otros programas de edición: se describe el comportamiento.
 - Todo sonido añadido debe registrarse en presets/sfx/LICENCIAS.md.

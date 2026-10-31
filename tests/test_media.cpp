@@ -857,3 +857,23 @@ TEST_CASE("DecodeWorker placed again for another part of the same file starts th
         }
     }
 }
+
+TEST_CASE("VideoDecoder gives smaller frames for a lower preview resolution", "[media]") {
+    TempClip clip({.frames = 30});
+    VideoDecoder half(clip.path.string(), HwAccel::None, 2);
+    VideoDecoder quarter(clip.path.string(), HwAccel::None, 4);
+    half.seekToFrame(17);
+    const auto a = half.nextFrame();
+    REQUIRE(a.has_value());
+    CHECK(a->index == 17);
+    CHECK(a->width == 160);
+    CHECK(a->height == 90);
+    CHECK(a->y.size() == 160u * 90u);
+    CHECK(a->uv.size() == 80u * 2u * 45u);
+    CHECK(contentIndex(*a) == 17); // el contenido es el mismo, más pequeño
+    const auto b = quarter.nextFrame();
+    REQUIRE(b.has_value());
+    CHECK(b->width == 80);
+    CHECK(b->height == 44); // par
+    CHECK(contentIndex(*b) == 0);
+}

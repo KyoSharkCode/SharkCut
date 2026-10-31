@@ -10,18 +10,11 @@ Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.
 nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
 actualizar también esa página.
 
-Última actualización: 2026-10-28.
+Última actualización: 2026-10-31.
 
 ---
 
 ## Próximas versiones
-
-### 0.1.8 · Secuencias y rendimiento
-| Punto | Qué trae | Tamaño |
-|-------|----------|--------|
-| M2 | Cambiar el lienzo y los fps de una secuencia ya creada y guardar presets propios. | Medio |
-| M5 | Resolución de reproducción del visor (completa, 1/2, 1/4) para que vaya más fluido. | Medio |
-| M11 | Caché en una carpeta común, con opción para limpiarla. | Medio |
 
 ### 0.1.9 · Línea de tiempo
 | Punto | Qué trae | Tamaño |
@@ -61,6 +54,14 @@ Cambios grandes o comodidades que pueden esperar.
 ---
 
 ## Versiones publicadas
+
+### 0.1.8 · 2026-10-31
+- Cambiar el lienzo y los fps de una secuencia ya creada, con ajustes guardados (M2).
+- Resolución de la vista previa: completa, 1/2 o 1/4 (M5).
+- Caché de medios en una carpeta común, con opción para vaciarla (M11).
+- Sin «Sin título» de más al crear un proyecto (M24).
+- La línea de tiempo se desplaza sola al arrastrar hasta su borde (M25).
+- Ondas listas al importar (M26).
 
 ### 0.1.7 · 2026-10-28
 - Editor de texto: textos libres en la línea de tiempo, con su estilo, keyframes y

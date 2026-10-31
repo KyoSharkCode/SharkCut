@@ -173,6 +173,13 @@ Item {
                 BotonIcono {
                     Layout.fillWidth: true
                     icono: "carpeta"
+                    texto: "Caché de medios"
+                    ayuda: "Dónde se guardan las ondas y los proxies, cuánto ocupan y vaciarla"
+                    onPulsado: cache.open()
+                }
+                BotonIcono {
+                    Layout.fillWidth: true
+                    icono: "carpeta"
                     texto: "Abrir la carpeta de registros"
                     ayuda: "Lo que pasó en cada sesión (y si se cerró por un fallo), para enviarlo"
                     onPulsado: pagina.editor.openLogFolder()
@@ -405,6 +412,7 @@ Item {
 
     DialogoAcercaDe { id: acercaDe }
     DialogoSistema { id: sistema; editor: pagina.editor }
+    DialogoCache { id: cache; editor: pagina.editor }
 
     component Etiqueta: Text {
         property string texto

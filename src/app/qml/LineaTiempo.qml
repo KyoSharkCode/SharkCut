@@ -39,6 +39,14 @@ Rectangle {
     property var corteSoltar: null // {track, cut} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
+    // Con otros fps (otra secuencia, o los de esta cambiados), el mismo zoom en segundos.
+    property real fpsVisto: editor ? editor.fps : 0
+    readonly property real fpsActual: editor ? editor.fps : 0
+    onFpsActualChanged: {
+        if (fpsVisto > 0 && fpsActual > 0 && fpsActual !== fpsVisto)
+            escala = escala * fpsVisto / fpsActual
+        fpsVisto = fpsActual
+    }
     readonly property real escalaMaxima: 24
     readonly property real escalaMinima: Math.min(escalaMaxima,
         Math.max(0.0005, (vista.width - 40) / Math.max(editor.frameCount, editor.fps * 10)))
@@ -163,6 +171,62 @@ Rectangle {
     function llevarCabezal(frame) {
         editor.pause()
         editor.seek(frame)
+    }
+
+    // Desplazamiento automático al arrastrar (mover o recortar clips, el cabezal, el cuadro
+    // de selección, lo que llega de los paneles…) cerca del borde izquierdo o derecho: la
+    // vista se desplaza sola y el arrastre se repite con el ratón en el mismo sitio de la
+    // pantalla, así lo arrastrado sigue al contenido aunque el ratón no se mueva.
+    // `xVista`: x del ratón en la vista; `sigue`: si el arrastre sigue en curso; `mover`: el
+    // manejador del movimiento, que recibe el evento (o una copia con la x desplazada).
+    property var bordeMover: null
+    property var bordeSigue: null
+    property var bordeEvento: null
+    property real bordeVelocidad: 0 // px de contenido por tic (negativo: a la izquierda)
+    property real bordeDesplazado: 0 // lo que se ha desplazado desde el último evento real
+    readonly property real bordeMargen: 48
+    function arrastrarCon(xVista, evento, sigue, mover) {
+        mover(evento)
+        if (!sigue()) {
+            temporizadorBorde.stop()
+            return
+        }
+        let v = 0
+        if (xVista < bordeMargen)
+            v = -(4 + (bordeMargen - xVista) * 0.5)
+        else if (xVista > vista.width - bordeMargen)
+            v = 4 + (xVista - vista.width + bordeMargen) * 0.5
+        bordeVelocidad = Math.max(-60, Math.min(60, v))
+        bordeMover = mover
+        bordeSigue = sigue
+        bordeEvento = { x: evento.x, y: evento.y, modifiers: evento.modifiers,
+                        buttons: evento.buttons, keys: evento.keys, source: evento.source }
+        bordeDesplazado = 0
+        if (bordeVelocidad !== 0)
+            temporizadorBorde.start()
+        else
+            temporizadorBorde.stop()
+    }
+    Timer {
+        id: temporizadorBorde
+        interval: 16
+        repeat: true
+        onTriggered: {
+            if (!raiz.bordeSigue || !raiz.bordeSigue()) {
+                stop()
+                return
+            }
+            const antes = vista.contentX
+            const maximo = Math.max(0, vista.contentWidth - vista.width)
+            vista.contentX = Math.max(0, Math.min(maximo, vista.contentX + raiz.bordeVelocidad))
+            const d = vista.contentX - antes
+            if (d === 0)
+                return
+            raiz.bordeDesplazado += d
+            const e = raiz.bordeEvento
+            raiz.bordeMover({ x: e.x + raiz.bordeDesplazado, y: e.y, modifiers: e.modifiers,
+                              buttons: e.buttons, keys: e.keys, source: e.source })
+        }
     }
 
     function frameEn(xContenido) {
@@ -580,10 +644,10 @@ Rectangle {
                                         }
                                         raiz.empezarMarco(mapToItem(contenido, m.x, m.y))
                                     }
-                                    onPositionChanged: (m) => {
+                                    onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                         if (pressedButtons & Qt.LeftButton)
                                             raiz.moverMarco(mapToItem(contenido, m.x, m.y))
-                                    }
+                                    })
                                     onReleased: (m) => {
                                         if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
                                             return
@@ -617,10 +681,10 @@ Rectangle {
                                         }
                                         raiz.empezarMarco(mapToItem(contenido, m.x, m.y))
                                     }
-                                    onPositionChanged: (m) => {
+                                    onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                         if (pressedButtons & Qt.LeftButton)
                                             raiz.moverMarco(mapToItem(contenido, m.x, m.y))
-                                    }
+                                    })
                                     onReleased: (m) => {
                                         if (m.button !== Qt.LeftButton || raiz.soltarMarco(m.modifiers))
                                             return
@@ -638,6 +702,7 @@ Rectangle {
                             model: TimelineClipsModel {
                                 editor: raiz.editor
                                 captions: true
+                                pinned: raiz.arrastreSub ? raiz.arrastreSub.grupo : []
                                 firstFrame: vista.contentX / raiz.escala
                                 lastFrame: (vista.contentX + vista.width) / raiz.escala
                                 pixelsPerFrame: raiz.escala
@@ -774,7 +839,7 @@ Rectangle {
                                         xInicial = mapToItem(contenido, m.x, 0).x
                                         raiz.arrastreSub = null
                                     }
-                                    onPositionChanged: (m) => {
+                                    onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                         if (!pressed || raiz.herramienta !== "seleccion"
                                                 || !(pressedButtons & Qt.LeftButton))
                                             return
@@ -796,7 +861,7 @@ Rectangle {
                                         delta = raiz.editor.limitCaptionMove(d.id, delta)
                                         raiz.arrastreSub = { tipo: "mover", id: d.id, grupo: grupo,
                                                              delta: delta, valor: 0, vecino: 0 }
-                                    }
+                                    })
                                     onReleased: {
                                         const a = raiz.arrastreSub
                                         raiz.arrastreSub = null
@@ -832,7 +897,7 @@ Rectangle {
                                             raiz.editor.selectCaption(subtitulo.dato.id, false)
                                             xInicial = mapToItem(contenido, m.x, 0).x
                                         }
-                                        onPositionChanged: (m) => {
+                                        onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                             if (!pressed)
                                                 return
                                             const d = subtitulo.dato
@@ -846,7 +911,7 @@ Rectangle {
                                                 f = Math.max(d.start + 1, hueco.high >= 0 ? Math.min(f, hueco.high) : f)
                                             raiz.arrastreSub = { tipo: lado, id: d.id, grupo: [d.id], delta: 0, valor: f,
                                                                  vecino: lado === "inicio" ? hueco.before : hueco.after }
-                                        }
+                                        })
                                         onReleased: {
                                             const a = raiz.arrastreSub
                                             raiz.arrastreSub = null
@@ -895,6 +960,8 @@ Rectangle {
                             // Solo los clips de la parte visible (más media pantalla a cada lado).
                             model: TimelineClipsModel {
                                 editor: raiz.editor
+                                // Lo que se arrastra sigue cargado aunque la vista se aleje.
+                                pinned: raiz.arrastre ? raiz.arrastre.grupo : []
                                 firstFrame: vista.contentX / raiz.escala
                                 lastFrame: (vista.contentX + vista.width) / raiz.escala
                                 pixelsPerFrame: raiz.escala
@@ -1126,7 +1193,7 @@ Rectangle {
                                                 xInicial = mapToItem(contenido, m.x, 0).x
                                                 raiz.llevarCabezal(rombo.fotograma)
                                             }
-                                            onPositionChanged: (m) => {
+                                            onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                                 if (!pressed)
                                                     return
                                                 const c = elemento.modelData
@@ -1134,7 +1201,7 @@ Rectangle {
                                                     + (mapToItem(contenido, m.x, 0).x - xInicial) / raiz.escala)
                                                 rombo.desplazado = Math.max(c.start, Math.min(c.start + c.length - 1, f))
                                                                    - rombo.fotograma
-                                            }
+                                            })
                                             onReleased: {
                                                 const d = rombo.desplazado
                                                 rombo.desplazado = 0
@@ -1267,7 +1334,7 @@ Rectangle {
                                         yInicial = p.y
                                         raiz.arrastre = null
                                     }
-                                    onPositionChanged: (m) => {
+                                    onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                         if (!pressed || raiz.herramienta !== "seleccion"
                                                 || !(pressedButtons & Qt.LeftButton))
                                             return
@@ -1299,7 +1366,7 @@ Rectangle {
                                             pistas = raiz.editor.limitTrackShift(c.id, destino.number - origen.number)
                                         raiz.arrastre = { tipo: "mover", grupo: grupo, delta: delta, valor: 0,
                                                           pistas: pistas, video: elemento.esVideo }
-                                    }
+                                    })
                                     onReleased: {
                                         const a = raiz.arrastre
                                         raiz.arrastre = null
@@ -1336,7 +1403,7 @@ Rectangle {
                                             raiz.editor.select(elemento.modelData.id, false)
                                             xInicial = mapToItem(contenido, m.x, 0).x
                                         }
-                                        onPositionChanged: (m) => {
+                                        onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                             if (!pressed)
                                                 return
                                             const dx = mapToItem(contenido, m.x, 0).x - xInicial
@@ -1348,7 +1415,7 @@ Rectangle {
                                                                   : raiz.editor.limitTrimEnd(c.id, f)
                                             raiz.arrastre = { tipo: lado, grupo: grupo, delta: 0, valor: f,
                                                               pistas: 0, video: elemento.esVideo }
-                                        }
+                                        })
                                         onReleased: {
                                             const a = raiz.arrastre
                                             raiz.arrastre = null
@@ -1457,7 +1524,7 @@ Rectangle {
                                             opacity: bordeTransicion.containsMouse || bordeTransicion.pressed ? 0.6 : 0
                                         }
                                         onPressed: raiz.editor.selectTransition(transicion.modelData.id)
-                                        onPositionChanged: (m) => {
+                                        onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                             if (!pressed)
                                                 return
                                             const t = transicion.modelData
@@ -1473,7 +1540,7 @@ Rectangle {
                                             raiz.arrastre = { tipo: "transicion", id: t.id, grupo: [],
                                                               antes: antes, despues: despues,
                                                               delta: 0, valor: 0, pistas: 0 }
-                                        }
+                                        })
                                         onReleased: {
                                             const a = raiz.arrastre
                                             raiz.arrastre = null
@@ -1574,7 +1641,9 @@ Rectangle {
                                 raiz.pistaSoltar = p ? p.index : -1
                                 raiz.zonaNueva = p ? "" : raiz.zonaNuevaEn(d.y + y)
                             }
-                            onPositionChanged: (d) => actualizar(d)
+                            onPositionChanged: (d) => raiz.arrastrarCon(mapToItem(vista, d.x, 0).x, d,
+                                                                       () => zonaSoltar.containsDrag,
+                                                                       (d) => actualizar(d))
                             onEntered: (d) => actualizar(d)
                             onExited: {
                                 raiz.marcaSoltar = -1
@@ -1671,7 +1740,9 @@ Rectangle {
                                     Text {
                                         x: 3
                                         y: 2
-                                        text: raiz.editor.timecodeFor(parent.frame)
+                                        // Depende también de los fps (al cambiarlos, el mismo
+                                        // fotograma es otro instante).
+                                        text: raiz.editor.fps > 0 ? raiz.editor.timecodeFor(parent.frame) : ""
                                         color: Theme.textoSecundario
                                         font.pixelSize: 10
                                         font.family: "Consolas, monospace"
@@ -1694,10 +1765,10 @@ Rectangle {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onPressed: (m) => raiz.llevarCabezal(raiz.cabezalEn(m.x))
-                                onPositionChanged: (m) => {
+                                onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                     if (pressed)
                                         raiz.editor.seek(raiz.cabezalEn(m.x))
-                                }
+                                })
                             }
 
                             // Marcadores (M): clic para ir, arrastrar para moverlo, doble clic
@@ -1755,14 +1826,14 @@ Rectangle {
                                             }
                                             inicioX = mapToItem(regla, m.x, m.y).x
                                         }
-                                        onPositionChanged: (m) => {
+                                        onPositionChanged: (m) => raiz.arrastrarCon(mapToItem(vista, m.x, 0).x, m, () => pressed, (m) => {
                                             if (!(pressedButtons & Qt.LeftButton))
                                                 return
                                             const xr = mapToItem(regla, m.x, m.y).x
                                             if (marcador.arrastre < 0 && Math.abs(xr - inicioX) < 4)
                                                 return
                                             marcador.arrastre = raiz.ajustar(raiz.frameEn(xr), [])
-                                        }
+                                        })
                                         onReleased: (m) => {
                                             if (m.button !== Qt.LeftButton)
                                                 return

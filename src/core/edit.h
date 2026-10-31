@@ -180,6 +180,13 @@ bool setClipAnimation(Project& project, ObjectId clip, const ClipAnimation& anim
 // Volumen de un clip de audio, en dB (entre kMinVolumeDb y kMaxVolumeDb).
 bool setClipVolume(Project& project, ObjectId clip, double volumeDb);
 
+// Cambia el lienzo y los fps de la secuencia. Con otros fps, todos los tiempos (clips, su
+// tramo en el medio, keyframes, transiciones, subtítulos y marcadores) se pasan a los
+// nuevos fotogramas manteniendo los mismos segundos; los bordes que coincidían siguen
+// coincidiendo. Las posiciones en píxeles no cambian. Deja de adoptar el lienzo y los
+// fps del primer clip. false si no cambia nada o los valores no valen.
+bool setSequenceSettings(Project& project, int width, int height, FrameRate rate);
+
 // Pista de audio del archivo que suena en un clip de audio (−1 = la principal).
 bool setClipAudioStream(Project& project, ObjectId clip, int stream);
 // Archivo con varias pistas de audio (MKV de OBS): el clip de audio se queda con la que

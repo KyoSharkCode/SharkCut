@@ -459,4 +459,15 @@ ClipTransform transformAt(const Clip& clip, std::int64_t frame) {
     return clampTransform(t);
 }
 
+ClipTransform scaledTransform(ClipTransform t, double factor) {
+    t.x *= factor;
+    t.y *= factor;
+    ClipEffects& fx = t.effects;
+    for (double* v :
+         {&fx.blur, &fx.corners, &fx.shadowSoftness, &fx.shadowX, &fx.shadowY, &fx.shadowSpread}) {
+        *v *= factor;
+    }
+    return t;
+}
+
 } // namespace sharkcut

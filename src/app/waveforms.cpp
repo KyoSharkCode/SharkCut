@@ -44,84 +44,126 @@ std::shared_ptr<const sharkcut::Waveform> WaveformCache::get(const QString& medi
                                                              int audioStream) {
     const Key key{mediaPath, audioStream};
     Entry& entry = m_entries[key];
+    if (entry.queued) {
+        // Estaba en la cola de las preparadas de antemano: un clip la necesita ya.
+        entry.queued = false;
+        entry.pending = false;
+        std::erase(m_prefetch, key);
+    }
     if (entry.waveform || entry.pending || entry.failed) {
         return entry.waveform;
     }
+    start(key, false);
+    return nullptr;
+}
+
+void WaveformCache::prefetch(const QString& mediaPath) {
+    const Key key{mediaPath, -1};
+    if (m_entries.count(key)) {
+        return; // ya está, se calcula o está en la cola
+    }
+    Entry& entry = m_entries[key];
+    entry.pending = true; // para la interfaz, como si se calculara
+    entry.queued = true;
+    m_prefetch.push_back(key);
+    pumpPrefetch();
+}
+
+void WaveformCache::pumpPrefetch() {
+    // De una en una, y solo cuando no se calcula ninguna que un clip esté esperando.
+    if (m_prefetching || m_foreground > 0 || m_prefetch.empty()) {
+        return;
+    }
+    const Key key = m_prefetch.front();
+    m_prefetch.pop_front();
+    Entry& entry = m_entries[key];
+    entry.queued = false;
+    entry.pending = false;
+    start(key, true);
+}
+
+void WaveformCache::start(const Key& key, bool background) {
+    Entry& entry = m_entries[key];
     entry.pending = true;
+    entry.background = background;
+    if (background) {
+        m_prefetching = true;
+    } else {
+        ++m_foreground;
+    }
+    const QString mediaPath = key.first;
+    const int audioStream = key.second;
     const QString directory = m_directory;
+    const QString legacy = m_legacyDirectory;
     const auto cancel = m_cancel;
     QPointer<WaveformCache> self(this);
-    m_pool.start([self, key, mediaPath, audioStream, directory, cancel] {
-        std::shared_ptr<const sharkcut::Waveform> result;
-        const std::filesystem::path file = cacheFile(directory, mediaPath, audioStream);
-        try {
-            if (auto cached = file.empty() ? std::nullopt : sharkcut::loadWaveform(file)) {
-                result = std::make_shared<const sharkcut::Waveform>(std::move(*cached));
-            } else {
-                result = std::make_shared<const sharkcut::Waveform>(sharkcut::computeWaveform(
-                    mediaPath.toStdString(), cancel.get(), 0, audioStream));
-                if (!file.empty()) {
-                    sharkcut::saveWaveform(*result, file);
+    m_pool.start(
+        [self, key, mediaPath, audioStream, directory, legacy, cancel] {
+            std::shared_ptr<const sharkcut::Waveform> result;
+            const std::filesystem::path file = cacheFile(directory, mediaPath, audioStream);
+            const std::filesystem::path old = cacheFile(legacy, mediaPath, audioStream);
+            try {
+                if (auto cached = file.empty() ? std::nullopt : sharkcut::loadWaveform(file)) {
+                    result = std::make_shared<const sharkcut::Waveform>(std::move(*cached));
+                } else if (auto found = old.empty() ? std::nullopt : sharkcut::loadWaveform(old)) {
+                    // De la caché antigua del proyecto: se copia a la común.
+                    result = std::make_shared<const sharkcut::Waveform>(std::move(*found));
+                    if (!file.empty()) {
+                        sharkcut::saveWaveform(*result, file);
+                    }
+                } else {
+                    result = std::make_shared<const sharkcut::Waveform>(sharkcut::computeWaveform(
+                        mediaPath.toStdString(), cancel.get(), 0, audioStream));
+                    if (!file.empty()) {
+                        sharkcut::saveWaveform(*result, file);
+                    }
                 }
+            } catch (const std::exception&) {
+                // sin audio, archivo que falta o cancelado: sin onda
             }
-        } catch (const std::exception&) {
-            // sin audio, archivo que falta o cancelado: sin onda
-        }
-        if (cancel->load()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            QCoreApplication::instance(),
-            [self, key, result] {
-                if (self) {
-                    self->finish(key, result);
-                }
-            },
-            Qt::QueuedConnection);
-    });
-    return nullptr;
+            if (cancel->load()) {
+                return;
+            }
+            QMetaObject::invokeMethod(
+                QCoreApplication::instance(),
+                [self, key, result] {
+                    if (self) {
+                        self->finish(key, result);
+                    }
+                },
+                Qt::QueuedConnection);
+        },
+        background ? 0 : 1); // las que espera un clip, antes
 }
 
 void WaveformCache::finish(const Key& key, std::shared_ptr<const sharkcut::Waveform> waveform) {
     Entry& entry = m_entries[key];
+    if (entry.background) {
+        m_prefetching = false;
+    } else {
+        m_foreground = std::max(0, m_foreground - 1);
+    }
     entry.pending = false;
+    entry.background = false;
     entry.failed = !waveform;
     entry.waveform = std::move(waveform);
     emit ready(key.first);
+    pumpPrefetch();
 }
 
-void WaveformCache::setDirectory(const QString& directory) {
-    if (directory == m_directory) {
-        return;
-    }
+void WaveformCache::setDirectory(const QString& directory, const QString& legacyDirectory) {
     m_directory = directory;
+    m_legacyDirectory = legacyDirectory;
 }
 
-void WaveformCache::saveTo(const QString& directory, const QStringList& mediaPaths) {
-    if (directory.isEmpty()) {
-        return;
-    }
-    for (const auto& [key, entry] : m_entries) {
-        if (entry.waveform && mediaPaths.contains(key.first)) {
-            save(directory, key, entry.waveform);
-        }
-    }
+void WaveformCache::clear() {
+    // Las que están en marcha terminan y se guardan; las demás se vuelven a pedir.
+    std::erase_if(m_entries, [](const auto& e) { return !e.second.pending; });
 }
 
 bool WaveformCache::pending(const QString& mediaPath, int audioStream) const {
     const auto it = m_entries.find(Key{mediaPath, audioStream});
     return it != m_entries.end() && it->second.pending;
-}
-
-void WaveformCache::save(const QString& directory, const Key& key,
-                         std::shared_ptr<const sharkcut::Waveform> waveform) {
-    m_pool.start([key, directory, waveform] {
-        const std::filesystem::path file = cacheFile(directory, key.first, key.second);
-        std::error_code ignored;
-        if (!file.empty() && !std::filesystem::exists(file, ignored)) {
-            sharkcut::saveWaveform(*waveform, file);
-        }
-    });
 }
 
 // --- WaveformView --------------------------------------------------------------------

@@ -88,6 +88,8 @@ class Editor : public CompositionSource {
     Q_PROPERTY(
         double stillSeconds READ stillSeconds WRITE setStillSeconds NOTIFY stillSecondsChanged)
     Q_PROPERTY(bool proxiesAvailable READ proxiesAvailable NOTIFY proxiesChanged)
+    Q_PROPERTY(QString cacheFolder READ cacheFolder WRITE setCacheFolder NOTIFY cacheChanged)
+    Q_PROPERTY(qint64 cacheBytes READ cacheBytes NOTIFY cacheChanged)
     Q_PROPERTY(QString proxyStatus READ proxyStatus NOTIFY proxiesChanged)
     // Videos del proyecto que pueden tener proxy y cuántos lo tienen ya listo.
     Q_PROPERTY(int proxiesTotal READ proxiesTotal NOTIFY proxiesChanged)
@@ -215,6 +217,14 @@ public:
     int previewDivisor() const { return m_previewDivisor; }
     void setPreviewDivisor(int divisor);
     bool proxiesAvailable() const { return !m_proxies.directory().isEmpty(); }
+    // Caché de medios (ondas y proxies), común a todos los proyectos.
+    QString cacheFolder() const;
+    void setCacheFolder(const QString& folder);
+    static QString defaultCacheFolder();
+    qint64 cacheBytes() const { return m_cacheBytes; }
+    Q_INVOKABLE void refreshCacheSize(); // lo que ocupa (se mira en segundo plano)
+    Q_INVOKABLE void clearCache();       // borra ondas y proxies (se vuelven a crear)
+    Q_INVOKABLE void openCacheFolder();
     QString proxyStatus() const;
     double stillSeconds() const;
     void setStillSeconds(double seconds);
@@ -742,6 +752,7 @@ signals:
     void selectedClipChanged();
     void waveformsChanged();
     void previewDivisorChanged();
+    void cacheChanged();
     void importingChanged();
     void playingChanged();
     void busyChanged();
@@ -926,6 +937,7 @@ private:
     ProxyManager m_proxies;
     bool m_useProxies = false;
     int m_previewDivisor = 1;
+    qint64 m_cacheBytes = -1; // -1: aún no se sabe
     // Ruta que se decodifica para la vista previa: el proxy, si se usan y está listo.
     std::string decodePath(const sharkcut::MediaItem& item) const;
     // Cierra los hilos de video y vuelve a pedir el fotograma (cambió qué se decodifica).

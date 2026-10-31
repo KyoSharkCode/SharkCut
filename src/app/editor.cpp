@@ -22,6 +22,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -886,12 +887,111 @@ void Editor::cancelProxies() {
 }
 
 void Editor::updateWaveformDirectory() {
-    m_waveforms.setDirectory(
-        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/ondas"));
-    // Los proxies, en la misma caché (sin archivo de proyecto no hay dónde guardarlos).
-    m_proxies.setDirectory(
-        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/proxies"),
-        mediaPaths());
+    // Caché común (por archivo, la comparten todos los proyectos); la antigua junto al
+    // proyecto (<proyecto>.sharkp.cache) solo se lee.
+    const QString legacy =
+        current().path.isEmpty() ? QString() : current().path + QStringLiteral(".cache/");
+    const QDir cache(cacheFolder());
+    m_waveforms.setDirectory(cache.filePath(QStringLiteral("ondas")),
+                             legacy.isEmpty() ? QString() : legacy + QStringLiteral("ondas"));
+    m_proxies.setDirectory(cache.filePath(QStringLiteral("proxies")), mediaPaths(),
+                           legacy.isEmpty() ? QString() : legacy + QStringLiteral("proxies"));
+}
+
+QString Editor::defaultCacheFolder() {
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+        .filePath(QStringLiteral("medios"));
+}
+
+QString Editor::cacheFolder() const {
+    const QString chosen = QSettings().value(QStringLiteral("cache/carpeta")).toString();
+    return chosen.isEmpty() ? defaultCacheFolder() : chosen;
+}
+
+void Editor::setCacheFolder(const QString& folder) {
+    QString path = folder;
+    if (path.startsWith(QLatin1String("file:"))) {
+        path = QUrl(path).toLocalFile();
+    }
+    path = QDir::cleanPath(path);
+    if (path == cacheFolder()) {
+        return;
+    }
+    if (path.isEmpty() || path == defaultCacheFolder()) {
+        QSettings().remove(QStringLiteral("cache/carpeta"));
+    } else {
+        QSettings().setValue(QStringLiteral("cache/carpeta"), path);
+    }
+    // Lo de la carpeta anterior se queda allí (se puede vaciar antes de cambiarla).
+    m_waveforms.clear();
+    updateWaveformDirectory();
+    m_proxies.rescan();
+    reloadVideo();
+    emit cacheChanged();
+    emit waveformsChanged();
+    refreshCacheSize();
+}
+
+void Editor::refreshCacheSize() {
+    const QString folder = cacheFolder();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, folder] {
+        qint64 bytes = 0;
+        QDirIterator it(folder, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            bytes += it.fileInfo().size();
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self, bytes] {
+                if (self) {
+                    self->m_cacheBytes = bytes;
+                    emit self->cacheChanged();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::clearCache() {
+    // Los proxies que se están creando se cancelan; los que están abiertos en el visor se
+    // sueltan antes de borrarlos.
+    m_proxies.cancelAll();
+    for (TrackVideo& track : m_video) {
+        for (VideoSlot& slot : track.decoders) {
+            slot.worker.reset();
+            slot.media = 0;
+            slot.path.clear();
+            slot.clip = 0;
+            slot.seekIndex = -1;
+        }
+    }
+    const QString folder = cacheFolder();
+    QPointer<Editor> self(this);
+    QThreadPool::globalInstance()->start([self, folder] {
+        for (const QString& sub : {QStringLiteral("ondas"), QStringLiteral("proxies")}) {
+            QDir(QDir(folder).filePath(sub)).removeRecursively();
+        }
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [self] {
+                if (!self) {
+                    return;
+                }
+                self->m_waveforms.clear();
+                self->m_proxies.rescan();
+                self->reloadVideo();
+                emit self->waveformsChanged();
+                self->refreshCacheSize();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void Editor::openCacheFolder() {
+    QDir().mkpath(cacheFolder());
+    QDesktopServices::openUrl(QUrl::fromLocalFile(cacheFolder()));
 }
 
 sharkcut::ClipTransform Editor::transformOf(ObjectId clip) const {
@@ -2117,18 +2217,9 @@ void Editor::finishSave(quint64 uid, const std::shared_ptr<const sharkcut::Docum
         project->autosaved.reset();
     }
     if (project->path != path) {
-        const bool firstSave = project->path.isEmpty();
         project->path = path;
         if (uid == m_activeProject) {
             updateWaveformDirectory();
-        }
-        if (firstSave) {
-            // Las ondas calculadas mientras no tenía archivo, a su caché.
-            QStringList media;
-            for (const MediaItem& item : written->media) {
-                media << QString::fromStdString(item.path);
-            }
-            m_waveforms.saveTo(path + QStringLiteral(".cache/ondas"), media);
         }
         emit fileChanged();
     }

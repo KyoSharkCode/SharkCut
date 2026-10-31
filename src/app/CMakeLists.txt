@@ -29,6 +29,7 @@ qt_add_qml_module(SharkCut
         qml/ArrastreTransicion.qml
         qml/PanelMedios.qml
         qml/DialogoNuevoProyecto.qml
+        qml/DialogoCache.qml
         qml/DialogoNombre.qml
         qml/DialogoSubtitulos.qml
         qml/DialogoAjusteClip.qml

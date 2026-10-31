@@ -10,7 +10,7 @@ Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.
 nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
 actualizar también esa página.
 
-Última actualización: 2026-10-29.
+Última actualización: 2026-10-31.
 
 ---
 
@@ -24,6 +24,7 @@ actualizar también esa página.
 | M11 | Caché en una carpeta común, con opción para limpiarla. | Medio |
 | M24 | Al abrir la app ya no se queda un proyecto «Sin título» que hay que cerrar a mano. | Pequeño |
 | M25 | La línea de tiempo se desplaza sola al arrastrar un clip hasta su borde. | Pequeño |
+| M26 | La onda del audio se calcula al importar, así ya está lista al poner el clip en la línea de tiempo. | Pequeño |
 
 ### 0.1.9 · Línea de tiempo
 | Punto | Qué trae | Tamaño |

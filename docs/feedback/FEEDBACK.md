@@ -55,6 +55,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-049](#fb-049) | 2026-10-28 | Visor | Error | En un corte se ve un momento el clip anterior en lugar del siguiente | Hecho |
 | [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | En el plan |
 | [FB-051](#fb-051) | 2026-10-29 | Línea de tiempo | Usabilidad | La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde | En el plan |
+| [FB-052](#fb-052) | 2026-10-31 | Medios | Propuesta | Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo | En el plan |
 
 ---
 
@@ -847,4 +848,20 @@ Formato y estados: ver [README.md](README.md).
 - **Notas:** LineaTiempo.qml no tiene desplazamiento automático en ningún arrastre.
 - **Decisión (Kyo):** para la 0.1.8.
 - **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M25)
+
+<a id="fb-052"></a>
+### FB-052 · Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo
+- **Fecha:** 2026-10-31
+- **Quién:** Kyo
+- **Versión:** 0.1.7
+- **Área:** Medios
+- **Tipo:** Propuesta
+- **Qué dijo:** ahora la onda del audio solo se calcula al poner el video en la línea de
+  tiempo; que se calcule al añadirlo al proyecto (a Medios), así ya está lista cuando se
+  vaya a usar.
+- **Contexto:** VODs largos, cuya onda tarda unos segundos en calcularse.
+- **Notas:** la onda la pide WaveformView (Editor::waveform → WaveformCache::get) al
+  dibujar un clip de audio; nadie la pide al importar.
+- **Decisión (Kyo):** para la 0.1.8.
+- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M26)
 

@@ -685,6 +685,20 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   el comienzo sin soltarlo.
 - **Para:** 0.1.8 (decidido con Kyo, 2026-10-29; ver [ROADMAP.md](../ROADMAP.md)).
 
+### M26 · Onda del audio calculada al importar · FB-052 · S
+- **Problema:** la onda de un medio solo se calcula cuando un clip suyo se dibuja en la
+  línea de tiempo; con un VOD largo, al ponerlo hay que esperar unos segundos a que salga.
+- **Hacer:** al importar un medio con audio (y al abrir un proyecto, para los medios que
+  aún no la tengan en la caché), pedir su onda en segundo plano, como hace hoy el clip al
+  dibujarse (WaveformCache::get; la caché en disco ya la guarda para la próxima vez). Al
+  ponerlo en la línea de tiempo, ya está lista o a medio calcular.
+- **Cuidado:** que no compita con la reproducción ni con la importación: de una en una, en
+  la cola de baja prioridad, y las que pide un clip que se ve van primero. Con varias
+  pistas de audio (M4), solo la principal; las demás, al separarlas.
+- **Hecho cuando:** importar un VOD, esperar y ponerlo en la línea de tiempo muestra la
+  onda al momento.
+- **Para:** 0.1.8 (decidido con Kyo, 2026-10-31; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad baja (más adelante)

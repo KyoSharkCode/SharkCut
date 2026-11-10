@@ -260,3 +260,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
 - cmake --build --preset windows-debug
 - ctest --preset windows-debug
 - Solo núcleo y tests, sin Qt: cmake -S . -B build/core -G Ninja -DSHARKCUT_BUILD_APP=OFF
+
+## Oficina de Kyo (reporte de estado)
+Tu id es `cc-sharkcut` y tu nombre visible es "SharkCut".
+Al empezar a trabajar escribe en agents/cc-sharkcut del artefacto
+https://claude.ai/artifact/UY7un8LQaMseGENPSLjCba (slug deff0f21-aec8-4031-bd04-9dd2c7a8f4c1)
+{"state":"work","label":"frase corta (máx. 80)","ts":"<UTC ISO>","name":"SharkCut"}; al
+terminar, "state":"idle" y "label":"". Usa la skill reportar-oficina o db_get/db_write (un
+db_write a la vez).
+Por cada subagente que lances, escribe agents/cc-sharkcut--<ayudante> con su "name" y
+"state":"work"; al acabar, "idle". Máximo 3.
+Si el reporte falla, no insistas más de dos veces. Nunca pongas claves ni datos personales
+en "label".

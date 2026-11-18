@@ -21,12 +21,36 @@ enum class TransitionType {
     ZoomRotateOut,
 };
 
+// Variante de una transición. Corte: de A a B (lo de siempre). Entrada: solo la segunda
+// mitad (desde negro, o desde lo que haya debajo, aparece el clip). Salida: solo la primera
+// (el clip se va). Por ahora solo Fade tiene entrada y salida (hasVariants).
+enum class TransitionVariant {
+    Cut,
+    In,
+    Out,
+};
+
+struct TransitionVariantInfo {
+    TransitionVariant variant;
+    std::string_view id;   // identificador estable (archivos de proyecto)
+    std::string_view name; // nombre para la interfaz
+};
+
+inline constexpr std::array<TransitionVariantInfo, 3> kTransitionVariants{{
+    {TransitionVariant::In, "in", "Entrada"},
+    {TransitionVariant::Out, "out", "Salida"},
+    {TransitionVariant::Cut, "cut", "Corte"},
+}};
+
+const TransitionVariantInfo& transitionVariantInfo(TransitionVariant variant);
+
 struct TransitionParams {
     TransitionType type = TransitionType::ZoomIn;
     std::int64_t durationFrames = 30; // a 60 fps, medio segundo
     double intensity = 0.6;           // 0–1: cuánto zoom, giro, desplazamiento o temblor
     double blur = 0.6;                // 0–1: desenfoque de movimiento
     Easing easing = Easing::EaseInOutExpo;
+    TransitionVariant variant = TransitionVariant::Cut;
 
     friend bool operator==(const TransitionParams&, const TransitionParams&) = default;
 };
@@ -71,6 +95,9 @@ inline constexpr std::array<TransitionInfo, 7> kTransitions{{
 
 const TransitionInfo& transitionInfo(TransitionType type);
 
+// Si el tipo tiene variantes de entrada y de salida (si no, solo la de corte).
+bool hasVariants(TransitionType type);
+
 // Estado de la transición en un fotograma concreto.
 struct TransitionState {
     double progress = 0.0; // 0–1 lineal (centro del fotograma)
@@ -81,6 +108,8 @@ struct TransitionState {
 // Estado en el fotograma `frame` de la transición (0 = primero, durationFrames − 1 =
 // último). Se evalúa en el centro de cada fotograma, así que nunca vale exactamente
 // 0 ni 1: el primer fotograma ya se mueve un poco y el último aún no ha terminado.
+// Con la variante de entrada, toda la duración recorre la segunda mitad (0,5–1) con su
+// curva entera; con la de salida, la primera (0–0,5).
 TransitionState evaluateTransition(const TransitionParams& params, std::int64_t frame);
 
 } // namespace sharkcut

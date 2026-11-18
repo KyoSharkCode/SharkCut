@@ -110,6 +110,16 @@ class Editor : public CompositionSource {
     Q_PROPERTY(QVariantList soundLibrary READ soundLibrary CONSTANT)
     // Sonido que lleva por defecto cada transición ("" = ninguno), en el orden de transitionNames
     Q_PROPERTY(QStringList transitionSounds READ transitionSounds CONSTANT)
+    // Pestaña Transiciones, por grupos: [{group, name, typeIndex, variant, sound}]. Fade
+    // sale tres veces (Entrada, Salida y Corte: variant 1, 2 y 0); las demás, una (corte).
+    Q_PROPERTY(QVariantList transitionCatalog READ transitionCatalog CONSTANT)
+    // Variantes para Propiedades: ["Corte", "Entrada", "Salida"] (índices de `variant`).
+    Q_PROPERTY(QStringList transitionVariantNames READ transitionVariantNames CONSTANT)
+    // Cómo se colocan las transiciones al soltarlas o con su botón: "clip" (como un clip en
+    // la línea de tiempo, afecta a todo lo de debajo) o "clips" (pegadas a los clips: al
+    // inicio, al final o en el corte entre dos). Se recuerda (QSettings).
+    Q_PROPERTY(QString transitionPlacement READ transitionPlacement WRITE setTransitionPlacement
+                   NOTIFY transitionPlacementChanged)
     Q_PROPERTY(qint64 frameCount READ frameCount NOTIFY projectChanged)
     Q_PROPERTY(double fps READ fps NOTIFY projectChanged)
     Q_PROPERTY(QString projectDescription READ projectDescription NOTIFY projectChanged)
@@ -240,6 +250,10 @@ public:
     QStringList keyframeEasingNames() const;
     QStringList soundNames() const;
     QStringList transitionSounds() const;
+    QVariantList transitionCatalog() const;
+    QStringList transitionVariantNames() const;
+    QString transitionPlacement() const;
+    void setTransitionPlacement(const QString& placement);
     QVariantMap selectedTransition() const;
     qint64 frameCount() const { return project().length(); }
     double fps() const;
@@ -412,6 +426,10 @@ public:
     Q_INVOKABLE void setTrackHidden(int track, bool hidden);
     Q_INVOKABLE void setTrackMuted(int track, bool muted);
     Q_INVOKABLE void setTrackLocked(int track, bool locked);
+    // Alto de una pista en la línea de tiempo (se guarda con la secuencia; se deshace).
+    Q_INVOKABLE void setTrackHeight(int track, int height);
+    // Todas las pistas más altas (delta > 0) o más bajas.
+    Q_INVOKABLE void resizeAllTracks(int delta);
 
     // --- Edición ---
     // Coloca el medio entero en `frame` (sobrescribiendo); `frame` < 0: al final.
@@ -637,6 +655,13 @@ public:
     // `withPlayhead` = false al mover el propio cabezal.
     Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance,
                                  bool withPlayhead = true) const;
+    // Guía de unión (sharkcut::joinFrames): fotogramas donde el grupo `clips`, movido
+    // `delta`, queda borde con borde con otro clip (o el centro de una transición-clip
+    // sobre un borde). trimGuides: lo mismo al recortar el inicio (`atStart`) o el final de
+    // `clipId` hasta `frame` (`clips`: él y sus enlazados, que no cuentan).
+    Q_INVOKABLE QVariantList moveGuides(const QVariantList& clips, qint64 delta) const;
+    Q_INVOKABLE QVariantList trimGuides(qint64 clipId, bool atStart, qint64 frame,
+                                        const QVariantList& clips) const;
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
     // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
     Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;
@@ -654,10 +679,23 @@ public:
     // en la pista de video `track` en `frame`. Se centra en el corte más cercano (a menos
     // de medio segundo), va a una pista libre (nunca tapa clips) y lleva su sonido. Se
     // aplica a todo lo que hay debajo; se mueve, corta y recorta como un clip.
-    Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex);
+    // `variant` (0 corte, 1 entrada, 2 salida): la entrada empieza en el borde más cercano
+    // y la salida acaba en él.
+    Q_INVOKABLE void addEffectClip(int track, qint64 frame, int typeIndex, int variant = 0);
     // Con un clic (botón de cada transición): su punto medio exactamente en el cabezal, con
-    // su sonido, aunque ahí no haya un corte.
-    Q_INVOKABLE void addEffectClipAtPlayhead(int typeIndex);
+    // su sonido, aunque ahí no haya un corte (la entrada empieza ahí y la salida acaba).
+    Q_INVOKABLE void addEffectClipAtPlayhead(int typeIndex, int variant = 0);
+    // Pegada a los clips: dónde caería la transición `typeIndex` con esa variante soltada
+    // en `frame` de la pista `track` (borde de clip a menos de `maxDistance` fotogramas):
+    // {track, cut, clip, variant} (la variante que tendrá: en un borde sin vecino, una de
+    // corte de Fade pasa a entrada o salida), o un mapa vacío si no cabe ahí.
+    Q_INVOKABLE QVariantMap attachTarget(int track, qint64 frame, int typeIndex, int variant,
+                                         double maxDistance) const;
+    // La pone donde dice `target` (de attachTarget), con su sonido. Queda seleccionada.
+    Q_INVOKABLE void attachTransitionAt(const QVariantMap& target, int typeIndex);
+    // Con su botón, pegada a los clips: en el borde más cercano al cabezal (a menos de
+    // medio segundo) de la pista de video más alta que tenga uno.
+    Q_INVOKABLE void attachTransitionAtPlayhead(int typeIndex, int variant);
     QVariantList soundLibrary() const;
     // Efecto de sonido de la biblioteca soltado en la pista `track` en `frame` (empieza
     // ahí; si no es una pista de audio, en la primera libre). Queda seleccionado.
@@ -681,6 +719,8 @@ public:
     Q_INVOKABLE void setTransitionLength(qint64 id, qint64 before, qint64 after);
     // `soundIndex`: índice de soundNames (0 = ninguno).
     Q_INVOKABLE void setTransitionSound(qint64 id, int soundIndex);
+    // Variante (0 corte, 1 entrada, 2 salida) de una transición de los clips.
+    Q_INVOKABLE void setTransitionVariant(qint64 id, int variant);
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -718,6 +758,7 @@ public:
 
 signals:
     void projectChanged();
+    void transitionPlacementChanged();
     void libraryChanged(); // medios de la biblioteca (o el estado de sus proxies)
     void proxiesChanged();
     void stillSecondsChanged();
@@ -847,8 +888,10 @@ private:
     int slotWith(std::size_t track, sharkcut::ObjectId clip) const;
     // Transición-clip del catálogo: sus valores a los fps de la secuencia, y ponerla en
     // `start` (pista libre desde `track`) con su sonido enlazado.
+    // `variant`: 0 corte, 1 entrada, 2 salida (solo en los tipos que las tienen).
     static sharkcut::TransitionParams effectParams(const sharkcut::Project& p,
-                                                   const sharkcut::TransitionInfo& info);
+                                                   const sharkcut::TransitionInfo& info,
+                                                   int variant = 0);
     sharkcut::ObjectId placeEffectWithSound(sharkcut::Project& p, std::size_t track,
                                             std::int64_t start,
                                             const sharkcut::TransitionParams& params);

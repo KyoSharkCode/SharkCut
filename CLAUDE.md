@@ -18,14 +18,15 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   quedan en la GPU siempre que sea posible.
 - Audio: miniaudio 0.11.25 (WASAPI) + FFmpeg/swresample; el audio es el reloj maestro.
 - Compilación: CMake (presets) + Ninja. Tests: Catch2 v3 + ctest.
-- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 12, que abre la 1, la 2
+- Archivo de proyecto: `.sharkp` (JSON con campo `version`; hoy la 13, que abre la 1, la 2
   y la 3 como un proyecto de una secuencia; los marcadores son un campo opcional de la 4,
   la pantalla verde del clip, `transform.chromaKey`, llegó con la 5, las pistas de
   subtítulos, `captionTracks` de cada secuencia, con la 6, los keyframes de cada clip,
   `animation`, con la 7, los efectos de imagen, `transform.effects`, con la 8 y las
   transiciones como clips, `effect` del clip, con la 9, las imágenes fijas, `still` del
   medio, con la 10, los colores sólidos y el tinte con la 11, y los textos libres, `text` del
-  clip, y la pista de audio del archivo de cada clip, `audioStream`, con la 12).
+  clip, y la pista de audio del archivo de cada clip, `audioStream`, con la 12, y el alto de
+  cada pista, `height`, y la variante de las transiciones, `variant`, con la 13).
   Autoguardado: copias de recuperación en la carpeta de datos de la app (recuperacion/).
 - Tiempos internos en enteros (fotogramas/ticks) con aritmética racional,
   nunca segundos en coma flotante.
@@ -73,7 +74,8 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   transformAt(clip, frame) da la transformación animada (la usan el visor, Propiedades y
   la exportación); setClipTransformAt (edit.h) convierte un cambio en un keyframe si la
   propiedad está animada. Editor: editor_keyframes.cpp; interfaz: ⏱ ◀ ◆ ▶ junto a cada
-  valor en PanelPropiedades y ◆ sobre los clips en LineaTiempo.
+  valor en PanelPropiedades y ◆ sobre los clips en LineaTiempo, con una línea amarilla
+  entre dos seguidos que no cambian nada (unchangedSpans en project.h, `unchanged` del clip).
   Efectos de imagen: ClipEffects dentro de ClipTransform (blanco y negro, tinte, desenfoque,
   esquinas redondeadas, sombra/resplandor; medidas en px del lienzo, que la exportación
   escala). Todo en layer.frag: desenfoque con 32 muestras (disco de Vogel), esquinas con
@@ -89,8 +91,17 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   un medio): al cortarla o recortarla cada trozo sigue donde iba. placeEffect/setClipEffect
   (edit.h); Editor::addEffectClip (se centra en el corte más cercano, va a una pista libre y
   lleva su sonido con placeSoundHit) y setEffectClip. Archivo .sharkp versión 9
-  (clip.effect). Las transiciones antiguas en los cortes (Track::transitions) se siguen
-  abriendo y dibujando.
+  (clip.effect). Las transiciones en los cortes (Track::transitions) se siguen abriendo y
+  dibujando, y vuelven a crearse desde la pestaña Transiciones en modo «En los clips»
+  (Editor::transitionPlacement, QSettings "transiciones/colocacion").
+  Variantes (transition.h, TransitionParams::variant; hasVariants: por ahora solo Fade):
+  corte, entrada (recorre la segunda mitad del efecto) y salida (la primera), en
+  evaluateTransition, así valen igual como clip que en los clips. Una transición de los
+  cortes puede ir pegada a un solo clip (Transition sin `from`: entrada de `to`; sin `to`:
+  salida de `from`; en la capa A = B = ese clip): attachTransition, setTransitionVariant
+  (edit.h); fixTransitions la lleva con su clip y deja una por borde. Editor:
+  transitionCatalog (Fade agrupado), attachTarget/attachTransitionAt (dónde caería al
+  soltarla), setTransitionVariant.
   Su sonido va enlazado con ella (Clip::link, linkEffectSound): los enlaces unen el video
   y el audio de un medio (mismo tramo) o una transición-clip y un clip de audio (cada uno
   con su tramo: se mueven, copian y quitan juntos, pero se recortan por separado).
@@ -183,7 +194,11 @@ El plan completo está en docs/PLAN.md: léelo antes de proponer cambios grandes
   Proxies: ProxyManager (proxies.h). Línea de tiempo virtualizada: TimelineClipsModel
   (timelinemodel.h): con miles de clips, nada de recorrer todos desde QML; `pinned` mantiene
   cargado lo que se arrastra. Los arrastres de LineaTiempo pasan por arrastrarCon, que
-  desplaza la vista cerca de los bordes y repite el movimiento.
+  desplaza la vista cerca de los bordes y repite el movimiento. Guía de unión al mover o
+  recortar: joinFrames (edit.h; también el centro de las transiciones-clip) vía
+  Editor::moveGuides/trimGuides. Alto de cada pista: Track::height (setTrackHeight,
+  resizeAllTracks); en LineaTiempo cada fila lleva su `alto` (borde de la cabecera,
+  Ctrl + rueda sobre ella, Alt++ / Alt+−).
   tools/bench: sharkcut_bench, mide decodificación, saltos, marcha atrás, proxies y
   edición de una línea de tiempo grande (sin Qt).
   Valores numéricos editables: qml/CampoNumero.qml (arrastrar o escribir). Listas

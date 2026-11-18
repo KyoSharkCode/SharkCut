@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 
 namespace sharkcut {
 
@@ -230,8 +231,12 @@ const Transition* Project::transition(ObjectId id) const {
 }
 
 std::int64_t Project::cutOf(const Transition& t) const {
-    const Clip* b = clip(t.to);
-    return b ? b->start : -1;
+    if (t.to != 0) {
+        const Clip* b = clip(t.to);
+        return b ? b->start : -1;
+    }
+    const Clip* a = clip(t.from);
+    return a ? a->end() : -1;
 }
 
 const Transition* Project::transitionAt(std::size_t track, std::int64_t frame) const {
@@ -276,8 +281,10 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
             continue;
         }
         if (const Transition* tr = transitionAt(t, frame)) {
-            const Clip* a = clip(tr->from);
-            const Clip* b = clip(tr->to);
+            // Pegada a un solo clip (entrada o salida): A y B son el mismo clip, y la
+            // variante hace que solo se vea su mitad.
+            const Clip* a = clip(tr->from != 0 ? tr->from : tr->to);
+            const Clip* b = clip(tr->to != 0 ? tr->to : tr->from);
             const MediaItem* itemA = a ? findMedia(a->media) : nullptr;
             const MediaItem* itemB = b ? findMedia(b->media) : nullptr;
             if (itemA && itemB) {
@@ -290,7 +297,7 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
                 layer.clipB = b;
                 layer.mediaB = itemB;
                 layer.mediaFrameB = mediaFrameIndex(*b, frame);
-                layer.transitionFrame = frame - (b->start - tr->before);
+                layer.transitionFrame = frame - (cutOf(*tr) - tr->before);
                 layers.push_back(layer);
                 continue;
             }
@@ -442,6 +449,49 @@ double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame) {
     const double t =
         (mediaFrame - static_cast<double>(a.frame)) / static_cast<double>(b.frame - a.frame);
     return a.value + (b.value - a.value) * applyEasing(a.easing, t);
+}
+
+std::vector<std::pair<std::int64_t, std::int64_t>> unchangedSpans(const ClipAnimation& animation) {
+    std::vector<std::int64_t> frames;
+    for (const auto& keys : animation.keys) {
+        for (const Keyframe& k : keys) {
+            frames.push_back(k.frame);
+        }
+    }
+    std::sort(frames.begin(), frames.end());
+    frames.erase(std::unique(frames.begin(), frames.end()), frames.end());
+    std::vector<std::pair<std::int64_t, std::int64_t>> spans;
+    for (std::size_t i = 1; i < frames.size(); ++i) {
+        const std::int64_t a = frames[i - 1];
+        const std::int64_t b = frames[i];
+        // Entre a y b no hay ningún otro keyframe: cada propiedad va del último suyo en o
+        // antes de `a` al primero en o después de `b`. Si los dos valen lo mismo, no cambia
+        // (la curva entre dos valores iguales tampoco).
+        bool same = true;
+        for (const auto& keys : animation.keys) {
+            if (keys.size() < 2) {
+                continue;
+            }
+            const auto next = std::lower_bound(
+                keys.begin(), keys.end(), b,
+                [](const Keyframe& k, std::int64_t f) { return k.frame < f; });
+            if (next == keys.end() || next == keys.begin()) {
+                continue; // `b` está después del último o antes del primero: se queda fijo
+            }
+            const auto prev = std::prev(std::upper_bound(
+                keys.begin(), keys.end(), a,
+                [](std::int64_t f, const Keyframe& k) { return f < k.frame; }));
+            const double scale = std::max({1.0, std::abs(prev->value), std::abs(next->value)});
+            if (std::abs(next->value - prev->value) > 1e-9 * scale) {
+                same = false;
+                break;
+            }
+        }
+        if (same) {
+            spans.emplace_back(a, b);
+        }
+    }
+    return spans;
 }
 
 ClipTransform transformAt(const Clip& clip, std::int64_t frame) {

@@ -200,8 +200,26 @@ std::string toString(std::string_view text) {
     return std::string(text.begin(), text.end());
 }
 
+// Variante (versión 13): solo se escribe si no es la de corte, y solo vale en los tipos
+// que la tienen.
+TransitionVariant variantFromJson(const json& value, TransitionType type) {
+    const std::string id = value.value("variant", std::string());
+    for (const TransitionVariantInfo& v : kTransitionVariants) {
+        if (v.id == id && hasVariants(type)) {
+            return v.variant;
+        }
+    }
+    return TransitionVariant::Cut;
+}
+
+void variantToJson(json& entry, TransitionVariant variant) {
+    if (variant != TransitionVariant::Cut) {
+        entry["variant"] = toString(transitionVariantInfo(variant).id);
+    }
+}
+
 json transitionToJson(const Transition& t) {
-    return {
+    json entry = {
         {"id", t.id},
         {"from", t.from},
         {"to", t.to},
@@ -213,6 +231,8 @@ json transitionToJson(const Transition& t) {
         {"easing", toString(kEasings[static_cast<std::size_t>(t.params.easing)].id)},
         {"sound", t.sound},
     };
+    variantToJson(entry, t.params.variant);
+    return entry;
 }
 
 Transition transitionFromJson(const json& value) {
@@ -238,19 +258,22 @@ Transition transitionFromJson(const json& value) {
         }
     }
     t.params.durationFrames = t.before + t.after;
+    t.params.variant = variantFromJson(value, t.params.type);
     t.sound = value.value("sound", ObjectId{0});
     return t;
 }
 
-// Transición-clip: {type, duration, intensity, blur, easing}.
+// Transición-clip: {type, duration, intensity, blur, easing, variant}.
 json effectToJson(const TransitionParams& p) {
-    return {
+    json entry = {
         {"type", toString(transitionInfo(p.type).id)},
         {"duration", p.durationFrames},
         {"intensity", p.intensity},
         {"blur", p.blur},
         {"easing", toString(kEasings[static_cast<std::size_t>(p.easing)].id)},
     };
+    variantToJson(entry, p.variant);
+    return entry;
 }
 
 TransitionParams effectFromJson(const json& value) {
@@ -270,6 +293,7 @@ TransitionParams effectFromJson(const json& value) {
             p.easing = e.easing;
         }
     }
+    p.variant = variantFromJson(value, p.type);
     return p;
 }
 
@@ -612,6 +636,9 @@ json tracksToJson(const std::vector<Track>& tracks) {
         if (track.locked) {
             entry["locked"] = true;
         }
+        if (track.height != kDefaultTrackHeight) {
+            entry["height"] = track.height;
+        }
         if (!track.transitions.empty()) {
             json transitions = json::array();
             for (const Transition& t : track.transitions) {
@@ -639,6 +666,8 @@ std::vector<Track> tracksFromJson(const json& value) {
         track.hidden = track.kind == TrackKind::Video && entry.value("hidden", false);
         track.muted = track.kind == TrackKind::Audio && entry.value("muted", false);
         track.locked = entry.value("locked", false);
+        track.height = std::clamp(entry.value("height", kDefaultTrackHeight), kMinTrackHeight,
+                                  kMaxTrackHeight);
         for (const json& c : entry.at("clips")) {
             Clip clip;
             clip.id = c.at("id").get<ObjectId>();

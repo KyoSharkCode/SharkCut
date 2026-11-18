@@ -234,3 +234,47 @@ TEST_CASE("An effect clip can be centred exactly on the playhead", "[effects]") 
     // Al principio de la secuencia no empieza antes del 0.
     CHECK(effectStartCenteredAt(5, 30) == 0);
 }
+
+TEST_CASE("Join guides show edges that touch and centered effect clips", "[effects][guides]") {
+    TwoCuts s;
+    const Project& p = s.p;
+    const ObjectId first = p.tracks[kVideoTrack].clips[0].id;
+    const ObjectId second = p.tracks[kVideoTrack].clips[1].id;
+
+    // Un borde que cae justo en el corte (fin del primero = inicio del segundo).
+    CHECK(joinFrames(p, {300}, {}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {300}, {}, {second}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {300}, {}, {first, second}).empty());
+    // Con un hueco o pisando el otro clip, no hay guía.
+    CHECK(joinFrames(p, {310, 290}, {}, {}).empty());
+    // Inicio de la secuencia y final del último clip.
+    CHECK(joinFrames(p, {0, 600, 700}, {}, {}) == std::vector<std::int64_t>{0, 600});
+
+    // Centro de una transición: 285–315 está centrada en el corte; 286–316, no.
+    CHECK(joinFrames(p, {}, {2 * 285 + 30}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 286 + 30}, {}).empty());
+    // Con una duración impar basta con quedar a medio fotograma del corte.
+    CHECK(joinFrames(p, {}, {2 * 285 + 31}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 284 + 31}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 283 + 31}, {}).empty());
+}
+
+TEST_CASE("Transition variants are saved with the project", "[effects][variants][project]") {
+    TwoCuts s;
+    Project& p = s.p;
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 20;
+    const ObjectId first = p.tracks[kVideoTrack].clips[0].id;
+    REQUIRE(attachTransition(p, first, TransitionVariant::In, fade) != 0);
+    fade.variant = TransitionVariant::Out;
+    const ObjectId effect = placeEffect(p, kVideoTrack, 100, fade);
+    REQUIRE(effect != 0);
+
+    const std::string json = projectToJson(p, {});
+    CHECK(json.find("\"variant\": \"in\"") != std::string::npos);
+    CHECK(json.find("\"variant\": \"out\"") != std::string::npos);
+    const Project loaded = projectFromJson(json, {});
+    CHECK(loaded.tracks == p.tracks);
+    REQUIRE(loaded.clip(effect) != nullptr);
+    CHECK(loaded.clip(effect)->effect->variant == TransitionVariant::Out);
+}

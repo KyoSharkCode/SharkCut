@@ -369,17 +369,33 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 
 ## Prioridad media (0.2.0)
 
-### M1 · Transiciones de entrada y salida, marca de centro e imán · FB-007, FB-008 · L
+### M1 · Transiciones de entrada y salida · FB-007 · L
 - **Pedido:** mantener las transiciones como clips en su pista y, además, poder ponerlas
   al principio o al final de un clip para que se adapten (fundido a negro de entrada:
-  empieza en negro y aparece el clip; de salida: se ve el clip y pasa a negro). Que la
-  transición muestre el centro exacto del corte, que ese centro tenga imán con los cortes
-  y que sus dos mitades se puedan separar (una mitad como cierre, la otra como apertura).
-- **Hacer:** diseñar juntos los dos pedidos: las mitades separables y las transiciones de
-  entrada/salida son la misma idea. Marca de centro e imán al mover una transición.
-- **Por decidir:** con Kyo, la forma final (transición partida en dos mitades frente a
-  tres variantes: entrada, salida y corte).
+  empieza en negro y aparece el clip; de salida: se ve el clip y pasa a negro).
+- **Decidido con Kyo (2026-11-18):**
+  - Sin mitades separables: cortar la transición por la mitad ya sirve.
+  - Dos formas de colocarlas: como clip en la línea de tiempo (como hoy, afecta a todo lo
+    de debajo) o pegadas a los clips (como al principio, `Track::transitions`).
+  - Variantes agrupadas en la pestaña Efectos. Por ahora solo Fade tiene las tres:
+    **Entrada** (de negro aparece el clip), **Salida** (el clip pasa a negro) y **Corte**
+    (de A a negro y de negro a B, el Fade to Black de hoy). Las demás siguen solo con corte.
+  - Pegada a los clips, la variante sale de dónde se suelta: en el inicio de un clip,
+    Entrada; en el final, Salida; en un corte entre dos clips, Corte. Se cambia después en
+    Propiedades. Entrada y Salida no necesitan material sobrante del medio.
+  - Fade sigue sin sonido en sus tres variantes.
+- **Cuidado:** el archivo del proyecto sube de versión (13); los anteriores se abren igual.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `TransitionParams::variant` (transition.h; `hasVariants`: por ahora solo Fade):
+  la entrada recorre la segunda mitad del efecto y la salida la primera, con su curva
+  entera, así vale igual como clip (capa de ajuste) que pegada a los clips. Las transiciones
+  de los cortes (`Track::transitions`) pueden ir pegadas a un solo clip (sin `from`, la
+  entrada; sin `to`, la salida): `attachTransition` y `setTransitionVariant` (edit.h), y
+  `fixTransitions` las lleva con su clip al partirlo o cambiarlo de pista. Pestaña
+  Transiciones: «Como clip» / «En los clips» (QSettings "transiciones/colocacion"), Fade
+  agrupado con sus tres variantes; la línea de tiempo marca el borde donde caerá
+  (`Editor::attachTarget`). Propiedades: selector de variante. Comprobado exportando: el
+  brillo sube de negro en la entrada (pegada y como clip) y baja en la salida.
 
 ### M2 · Editar una secuencia ya creada y guardar presets · FB-015 · M
 - **Hacer:** cambiar lienzo (relación de aspecto, tamaño libre) y fps de una secuencia
@@ -564,6 +580,12 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
   con más altura se ven mejor las ondas y las miniaturas.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `Track::height` (30–200 px, 50 por defecto; archivo versión 13),
+  `setTrackHeight` y `resizeAllTracks` (edit.h). En LineaTiempo.qml cada fila tiene su alto
+  (`altosEnCurso` mientras se arrastra el borde de la cabecera o se usa Ctrl + rueda; se
+  guarda al soltar o al parar la rueda, como un paso de deshacer). Alt++ / Alt+− y el menú
+  de la pista cambian todas; doble clic en el borde, alto normal. Las pistas de subtítulos
+  siguen con su alto fijo. Comprobado con Xvfb.
 
 ### M16 · Máscaras con formas simples · FB-034 · M–L
 - **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
@@ -748,6 +770,40 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   al abrir un proyecto con un medio sin usar se crea su onda, y al ponerlo en la línea de
   tiempo sale al momento.
 
+### M27 · Guía de unión al arrastrar · FB-008 · S
+- **Problema:** al acomodar clips a mano no se sabe si quedaron borde con borde, con un
+  hueco o pisando el siguiente; y para centrar una transición en un corte hay que mirarlo a
+  ojo o cortarla por la mitad.
+- **Decidido con Kyo (2026-11-18):** el imán y las mitades separables no hacen falta (al
+  soltar una transición ya se centra sola). En su lugar, una guía visual:
+  - Solo mientras se arrastra un clip, se recorta uno de sus bordes o se mueve una
+    transición. Sin arrastrar no se ve ninguna.
+  - Cuando el borde que se mueve cae en el mismo fotograma exacto que otro borde (de
+    cualquier pista), una línea vertical cruza toda la línea de tiempo. Si no sale, hay un
+    hueco o se pisan. Funciona con el imán encendido o apagado.
+  - El centro de una transición-clip cuenta como un borde más: si cae sobre un corte, sale
+    la línea. Con una duración impar basta con quedar a menos de medio fotograma.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `joinFrames` (edit.h) busca, con búsqueda binaria en cada pista, los bordes de
+  otros clips que coinciden con los de lo que se mueve (y el centro doblado de las
+  transiciones-clip, sin decimales); `Editor::moveGuides` y `trimGuides`; LineaTiempo.qml
+  dibuja `guiasUnion` (color `Theme.guiaUnion`) mientras se mueve o recorta. Comprobado con
+  Xvfb: sale al unir dos clips y al centrar un Fade en un corte, y no con un hueco.
+
+### M28 · Línea amarilla entre keyframes iguales · FB-053 · S
+- **Problema:** los keyframes se ven como ◆ debajo de cada clip, pero no se ve en qué tramos
+  el clip se queda igual.
+- **Decidido con Kyo (2026-11-18):** en la línea de tiempo general, una línea amarilla une
+  dos keyframes seguidos de la fila del clip cuando ninguna propiedad animada cambia entre
+  ellos (si cambia cualquiera, no sale). La mini línea de tiempo con zoom va en M15, con su
+  línea por propiedad.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `unchangedSpans` (project.h): entre dos keyframes seguidos de la fila, mira cada
+  propiedad animada entre su keyframe anterior y el siguiente (una antes de su primero o
+  después de su último se queda fija). `Editor::clipEntry` da `unchanged` y LineaTiempo.qml
+  dibuja la línea (`Theme.keyframeIgual`). Un tramo con la curva «mantener» entre dos
+  valores distintos no cuenta (sus valores no son iguales).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -810,5 +866,5 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A17 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044, 046, 047 |
-| Media | M1–M23 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048 |
+| Media | M1–M28 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048, 050, 051, 052, 053 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |

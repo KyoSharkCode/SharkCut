@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace sharkcut {
@@ -207,6 +208,11 @@ struct ClipAnimation {
 // del último, el último; entre dos, con la curva del primero.
 double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame);
 
+// Tramos entre dos keyframes seguidos (de cualquier propiedad) en los que no cambia nada:
+// ninguna propiedad animada varía entre ellos. {inicio, fin} en fotogramas del medio, en
+// orden. La línea de tiempo los une con una línea.
+std::vector<std::pair<std::int64_t, std::int64_t>> unchangedSpans(const ClipAnimation& animation);
+
 // Volumen de un clip de audio en dB. kMinVolumeDb o menos equivale a silencio.
 inline constexpr double kMinVolumeDb = -60.0;
 inline constexpr double kMaxVolumeDb = 15.0;
@@ -290,10 +296,15 @@ struct Clip {
 // más allá de su final y B empieza antes de su inicio, con el material que sobra del
 // medio (si no hay, se repite su último o su primer fotograma). Ningún clip se mueve,
 // así que el audio y las demás pistas siguen sincronizados.
+//
+// También puede ir pegada a un solo clip (versión 13): sin `from`, es la entrada de `to`
+// (en su inicio, todo después: before = 0); sin `to`, la salida de `from` (en su final,
+// todo antes: after = 0). Su variante (params.variant) es entonces In o Out, y la de una
+// transición entre dos clips, Cut. Cada borde de un clip tiene como mucho una.
 struct Transition {
     ObjectId id = 0;
-    ObjectId from = 0;       // clip saliente (A)
-    ObjectId to = 0;         // clip entrante (B)
+    ObjectId from = 0;       // clip saliente (A); 0 = entrada de `to`
+    ObjectId to = 0;         // clip entrante (B); 0 = salida de `from`
     std::int64_t before = 0; // fotogramas antes del corte
     std::int64_t after = 0;  // fotogramas después del corte
     TransitionParams params; // params.durationFrames = before + after
@@ -304,6 +315,11 @@ struct Transition {
     friend bool operator==(const Transition&, const Transition&) = default;
 };
 
+// Alto de una pista en la línea de tiempo: se guarda con la secuencia.
+inline constexpr int kDefaultTrackHeight = 50;
+inline constexpr int kMinTrackHeight = 30;
+inline constexpr int kMaxTrackHeight = 200;
+
 struct Track {
     TrackKind kind = TrackKind::Video;
     std::vector<Clip> clips;               // ordenados por `start` y sin solaparse
@@ -311,6 +327,7 @@ struct Track {
     bool hidden = false;                   // video: no se ve (ni en la vista previa ni al exportar)
     bool muted = false;                    // audio: no suena
     bool locked = false;                   // sus clips no se pueden editar
+    int height = kDefaultTrackHeight;      // alto en la línea de tiempo (px de la interfaz)
 
     friend bool operator==(const Track&, const Track&) = default;
 };
@@ -454,7 +471,8 @@ struct Project {
     // --- Transiciones ---
     std::optional<TransitionRef> findTransition(ObjectId id) const;
     const Transition* transition(ObjectId id) const;
-    // Fotograma del corte (donde empieza el clip entrante); -1 si no existe.
+    // Fotograma del corte (donde empieza el clip entrante; en una salida, donde acaba su
+    // clip); -1 si no existe.
     std::int64_t cutOf(const Transition& transition) const;
     // Transición de la pista que cubre `frame`, o nullptr.
     const Transition* transitionAt(std::size_t track, std::int64_t frame) const;

@@ -153,7 +153,7 @@
   <a class="volver" href="./"><img src="icono.png" alt=""> SharkCut</a>
   <h1>Hoja de ruta</h1>
   <p class="lema">Lo que viene en SharkCut, versión a versión. Casi todo sale de lo que nos cuentan quienes lo prueban 💙</p>
-  <p class="aviso">Última actualización: 31 de octubre de 2026 · El orden puede cambiar con el feedback.</p>
+  <p class="aviso">Última actualización: 18 de noviembre de 2026 · El orden puede cambiar con el feedback.</p>
 
   <div class="leyenda" aria-hidden="true">
     <span><i class="punto" style="background:var(--bioluz)"></i> La siguiente</span>
@@ -162,17 +162,6 @@
   </div>
 
   <ol class="ruta" id="ruta">
-    <li class="parada" data-version="0.1.9">
-      <div class="marcador"></div>
-      <div class="tarjeta">
-        <div class="cabecera"><span class="numero">0.1.9</span><span class="chip">Próximamente</span></div>
-        <p class="tema">Línea de tiempo</p>
-        <ul class="puntos">
-          <li><b>Transiciones de entrada y de salida,</b> con marca de centro e imán al moverlas.</li>
-          <li><b>Altura de las pistas</b> ajustable a tu gusto.</li>
-        </ul>
-      </div>
-    </li>
     <li class="parada salto" data-version="0.2.0">
       <div class="marcador"></div>
       <div class="tarjeta">
@@ -212,6 +201,15 @@
   <h2>Ya publicadas ✨</h2>
   <div class="historial">
     <details open>
+      <summary>0.1.9 <span class="fecha">18 de noviembre de 2026</span></summary>
+      <ul>
+        <li>Fundidos de entrada y de salida: el clip aparece desde negro o se va a negro, en su pista o pegado a tus clips.</li>
+        <li>Pistas más altas o más bajas a tu gusto: arrastra el borde de su cabecera o usa Ctrl + rueda.</li>
+        <li>Guía de unión: al acomodar un clip, una línea te avisa de que quedó pegado al siguiente o de que la transición está centrada en el corte.</li>
+        <li>Keyframes más claros: una línea amarilla une dos keyframes iguales.</li>
+      </ul>
+    </details>
+    <details>
       <summary>0.1.8 <span class="fecha">31 de octubre de 2026</span></summary>
       <ul>
         <li>Cambia el lienzo y los fps de una secuencia ya creada y guarda tus propios ajustes.</li>
@@ -345,7 +343,7 @@
   }
 
   // Sin conexión con GitHub se queda con la última versión conocida al escribir la página.
-  marcar("0.1.8");
+  marcar("0.1.9");
   fetch("https://api.github.com/repos/KyoSharkCode/SharkCut/releases/latest")
     .then((r) => r.ok ? r.json() : Promise.reject(r.status))
     .then((release) => marcar(release.tag_name.replace(/^v/, "")))

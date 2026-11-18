@@ -86,112 +86,141 @@ Rectangle {
         }
 
         // --- Transiciones ---
-        ColumnLayout {
+        // Dos formas de colocarlas (se recuerda): como un clip en la línea de tiempo, que
+        // afecta a todo lo de debajo, o pegadas a los clips (al inicio, al final o en el
+        // corte entre dos). Las que tienen variantes (Fade) salen agrupadas.
+        Flickable {
+            id: vistaTransiciones
             visible: panel.pestana === 1
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.margins: 12
-            spacing: 10
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Pulsa la flecha para ponerla centrada en el cabezal, o arrastra la "
-                      + "transición a la línea de tiempo: se centra en el corte más cercano. Va "
-                      + "como un clip y afecta a todo lo que hay debajo. "
-                      + "Se mueve, se corta y se recorta como cualquier clip, también al principio "
-                      + "o al final de un clip. Lleva su efecto de sonido en una pista de audio."
-                color: Theme.textoSecundario
-                font.pixelSize: Theme.tamTextoPequeno
+            clip: true
+            contentWidth: width
+            contentHeight: columnaTransiciones.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: BarraDesplazamiento {}
+
+            readonly property bool enClips: panel.editor.transitionPlacement === "clips"
+            // Las que tienen variantes, por grupos ([{nombre, entradas: [...]}]), y las demás
+            // sueltas, en su orden.
+            readonly property var grupos: {
+                const lista = []
+                for (const e of panel.editor.transitionCatalog) {
+                    const ultimo = lista.length > 0 ? lista[lista.length - 1] : null
+                    if (ultimo && ultimo.nombre === e.group)
+                        ultimo.entradas.push(e)
+                    else
+                        lista.push({ nombre: e.group, entradas: [e] })
+                }
+                return lista.filter((g) => g.entradas.length > 1)
             }
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                columnSpacing: 8
-                rowSpacing: 8
-                Repeater {
-                    model: panel.editor.transitionNames
-                    delegate: Rectangle {
-                        id: tarjeta
-                        required property string modelData
-                        required property int index
-                        readonly property string sonido: panel.editor.transitionSounds[index] || ""
-                        Layout.fillWidth: true
-                        implicitHeight: 54
-                        radius: Theme.radio
-                        color: arrastreTransicion.containsMouse ? Theme.borde : Theme.panelElevado
-                        border.color: arrastreTransicion.containsMouse ? Theme.clipTransicion
-                                                                        : Theme.borde
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 8
-                            spacing: 10
-                            // Botón: ponerla con su punto medio en el cabezal.
-                            Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                radius: 5
-                                color: zonaPoner.containsMouse ? Qt.lighter(Theme.clipTransicion, 1.25)
-                                                               : Theme.clipTransicion
-                                border.color: zonaPoner.containsMouse ? Theme.texto : "transparent"
-                                opacity: panel.editor.hasSequence ? 1 : 0.5
-                                Icono {
-                                    anchors.centerIn: parent
-                                    nombre: "transicion"
-                                    tam: 18
-                                    color: Theme.texto
-                                }
-                                MouseArea {
-                                    id: zonaPoner
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    enabled: panel.editor.hasSequence
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: panel.editor.addEffectClipAtPlayhead(tarjeta.index)
-                                }
-                                ToolTip.visible: zonaPoner.containsMouse
-                                ToolTip.delay: 500
-                                ToolTip.text: "En el cabezal (su centro, con su sonido)"
+            readonly property var sueltas: panel.editor.transitionCatalog.filter(
+                (e) => panel.editor.transitionCatalog.filter((o) => o.group === e.group).length === 1)
+
+            ColumnLayout {
+                id: columnaTransiciones
+                width: vistaTransiciones.width - 12 // la barra de desplazamiento
+                spacing: 10
+
+                // Cómo se colocan.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: [{ valor: "clip", nombre: "Como clip" },
+                                { valor: "clips", nombre: "En los clips" }]
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool activo:
+                                panel.editor.transitionPlacement === modelData.valor
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            radius: Theme.radio
+                            color: activo ? Theme.panelElevado : Theme.fondo
+                            border.color: activo ? Theme.acento : Theme.borde
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.modelData.nombre
+                                color: parent.activo ? Theme.texto : Theme.textoSecundario
+                                font.pixelSize: Theme.tamTexto
+                                font.bold: parent.activo
                             }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 1
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: tarjeta.modelData
-                                    color: Theme.texto
-                                    font.pixelSize: Theme.tamTexto
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: tarjeta.sonido.length > 0 ? "♪ " + tarjeta.sonido
-                                                                    : "Sin sonido"
-                                    color: Theme.textoSecundario
-                                    font.pixelSize: Theme.tamTextoPequeno
-                                    elide: Text.ElideRight
-                                }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: panel.editor.transitionPlacement = parent.modelData.valor
                             }
-                        }
-                        ArrastreTransicion {
-                            id: arrastreTransicion
-                            anchors.fill: parent
-                            anchors.leftMargin: 46 // el botón de ponerla en el cabezal
-                            indice: tarjeta.index
-                            nombre: tarjeta.modelData
-                            fantasma: panel.fantasma
                         }
                     }
                 }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: vistaTransiciones.enClips
+                          ? "Arrastra la transición al inicio, al final o al corte entre dos "
+                            + "clips de video: va pegada a ellos y los sigue al moverlos. La "
+                            + "flecha la pega en el borde más cercano al cabezal. Una de corte "
+                            + "en un borde sin vecino se vuelve de entrada o de salida."
+                          : "Pulsa la flecha para ponerla centrada en el cabezal, o arrastra la "
+                            + "transición a la línea de tiempo: se centra en el corte más cercano "
+                            + "(la entrada empieza en él y la salida acaba en él). Va como un clip "
+                            + "y afecta a todo lo que hay debajo; se mueve, se corta y se recorta "
+                            + "como cualquier clip."
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
+
+                Repeater {
+                    model: vistaTransiciones.grupos
+                    delegate: ColumnLayout {
+                        id: grupo
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            text: grupo.modelData.nombre.toUpperCase()
+                            color: Theme.textoSecundario
+                            font.pixelSize: Theme.tamTextoPequeno
+                            font.letterSpacing: 1
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 3
+                            columnSpacing: 6
+                            rowSpacing: 6
+                            Repeater {
+                                model: grupo.modelData.entradas
+                                delegate: TarjetaTransicion {
+                                    required property var modelData
+                                    entrada: modelData
+                                    compacta: true
+                                }
+                            }
+                        }
+                    }
+                }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: 8
+                    rowSpacing: 8
+                    Repeater {
+                        model: vistaTransiciones.sueltas
+                        delegate: TarjetaTransicion {
+                            required property var modelData
+                            entrada: modelData
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Para probar los ajustes con calma sigue estando la pestaña Transición."
+                    color: Theme.textoDesactivado
+                    font.pixelSize: Theme.tamTextoPequeno
+                }
             }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Para probar los ajustes con calma sigue estando la pestaña Transición."
-                color: Theme.textoDesactivado
-                font.pixelSize: Theme.tamTextoPequeno
-            }
-            Item { Layout.fillHeight: true }
         }
 
         // --- Sonidos: biblioteca de efectos de sonido, por grupos ---
@@ -815,6 +844,94 @@ Rectangle {
                     panel.fantasma.Drag.active = false
                 }
             }
+        }
+    }
+
+    // Una transición del catálogo (con su variante): la flecha la pone en el cabezal (como
+    // clip o pegada a los clips, según la pestaña) y se arrastra a la línea de tiempo.
+    component TarjetaTransicion: Rectangle {
+        id: tarjeta
+        property var entrada
+        property bool compacta: false // en un grupo de variantes (más estrecha)
+        readonly property string detalle: entrada.variant === 1 ? "Desde negro"
+                                          : entrada.variant === 2 ? "A negro"
+                                          : compacta ? "Entre dos clips"
+                                          : entrada.sound.length > 0 ? "♪ " + entrada.sound
+                                          : "Sin sonido"
+        Layout.fillWidth: true
+        implicitHeight: compacta ? 46 : 50
+        radius: Theme.radio
+        color: arrastre.containsMouse ? Theme.borde : Theme.panelElevado
+        border.color: arrastre.containsMouse ? Theme.clipTransicion : Theme.borde
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: tarjeta.compacta ? 6 : 10
+            anchors.rightMargin: 6
+            spacing: tarjeta.compacta ? 6 : 10
+            // Botón: ponerla en el cabezal.
+            Rectangle {
+                id: boton
+                implicitWidth: tarjeta.compacta ? 26 : 32
+                implicitHeight: implicitWidth
+                radius: 5
+                color: zonaPoner.containsMouse ? Qt.lighter(Theme.clipTransicion, 1.25)
+                                               : Theme.clipTransicion
+                border.color: zonaPoner.containsMouse ? Theme.texto : "transparent"
+                opacity: panel.editor.hasSequence ? 1 : 0.5
+                Icono {
+                    anchors.centerIn: parent
+                    nombre: "transicion"
+                    tam: tarjeta.compacta ? 15 : 18
+                    color: Theme.texto
+                }
+                MouseArea {
+                    id: zonaPoner
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    enabled: panel.editor.hasSequence
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: panel.editor.transitionPlacement === "clips"
+                               ? panel.editor.attachTransitionAtPlayhead(tarjeta.entrada.typeIndex,
+                                                                         tarjeta.entrada.variant)
+                               : panel.editor.addEffectClipAtPlayhead(tarjeta.entrada.typeIndex,
+                                                                      tarjeta.entrada.variant)
+                }
+                ToolTip.visible: zonaPoner.containsMouse
+                ToolTip.delay: 500
+                ToolTip.text: panel.editor.transitionPlacement === "clips"
+                              ? "En el borde de clip más cercano al cabezal"
+                              : tarjeta.entrada.variant === 1 ? "Empieza en el cabezal"
+                              : tarjeta.entrada.variant === 2 ? "Acaba en el cabezal"
+                              : "En el cabezal (su centro, con su sonido)"
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+                Text {
+                    Layout.fillWidth: true
+                    text: tarjeta.entrada.name
+                    color: Theme.texto
+                    font.pixelSize: Theme.tamTexto
+                    elide: Text.ElideRight
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: tarjeta.detalle
+                    color: Theme.textoSecundario
+                    font.pixelSize: Theme.tamTextoPequeno
+                    elide: Text.ElideRight
+                }
+            }
+        }
+        ArrastreTransicion {
+            id: arrastre
+            anchors.fill: parent
+            anchors.leftMargin: boton.width + (tarjeta.compacta ? 8 : 14) // el botón
+            indice: tarjeta.entrada.typeIndex
+            variante: tarjeta.entrada.variant
+            nombre: tarjeta.entrada.group !== tarjeta.entrada.name
+                    ? tarjeta.entrada.group + " · " + tarjeta.entrada.name : tarjeta.entrada.name
+            fantasma: panel.fantasma
         }
     }
 }

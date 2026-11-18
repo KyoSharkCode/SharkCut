@@ -365,6 +365,9 @@ Window {
     Shortcut { sequences: ["+", "="]; enabled: ventana.enEditor; onActivated: lineaTiempo.acercar() }
     Shortcut { sequence: "-"; enabled: ventana.enEditor; onActivated: lineaTiempo.alejar() }
     Shortcut { sequence: "\\"; enabled: ventana.enEditor; onActivated: lineaTiempo.encajar() }
+    // Alto de todas las pistas (Ctrl + rueda sobre una cabecera cambia solo esa).
+    Shortcut { sequences: ["Alt++", "Alt+="]; enabled: ventana.enEditor; onActivated: lineaTiempo.altoDeTodas(1) }
+    Shortcut { sequence: "Alt+-"; enabled: ventana.enEditor; onActivated: lineaTiempo.altoDeTodas(-1) }
     Shortcut { sequence: "Ctrl+I"; enabled: ventana.enEditor; onActivated: dialogoImportar.open() }
 
     ColumnLayout {
@@ -1253,6 +1256,7 @@ Window {
         id: fantasma
         property var mediaId: undefined
         property int transicion: -1 // índice del catálogo si se arrastra una transición
+        property int variante: 0    // y su variante (0 corte, 1 entrada, 2 salida)
         property string efecto      // nombre del efecto si se arrastra uno ("croma")
         property string sonido      // id del efecto de sonido si se arrastra uno
         property string ajusteTexto // estilo guardado de un texto que se arrastra ("": el de siempre)

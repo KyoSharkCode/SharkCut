@@ -10,8 +10,8 @@ Formato y estados: ver [README.md](README.md).
 | [FB-004](#fb-004) | 2026-10-22 | Efectos | Error | Transición y su sonido no se mueven juntos | Hecho |
 | [FB-005](#fb-005) | 2026-10-22 | Línea de tiempo | Propuesta | Alt + rueda para desplazar en vertical | Hecho |
 | [FB-006](#fb-006) | 2026-10-22 | Medios | Propuesta | Vista previa de sonidos con un clic | Hecho |
-| [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | En el plan |
-| [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | En el plan |
+| [FB-007](#fb-007) | 2026-10-22 | Efectos | Propuesta | Transiciones dentro del clip (entrada/salida) | Hecho |
+| [FB-008](#fb-008) | 2026-10-22 | Efectos | Propuesta | Marca de centro, imán y mitades separables | Hecho |
 | [FB-009](#fb-009) | 2026-10-22 | Propiedades | Propuesta | Pistas de audio múltiples (MKV) por separado | Hecho |
 | [FB-010](#fb-010) | 2026-10-22 | Propiedades | Usabilidad | Punto de anclaje confuso | Hecho |
 | [FB-011](#fb-011) | 2026-10-22 | Medios | Propuesta | Carpetas vinculadas entre proyectos | En el plan |
@@ -40,7 +40,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-034](#fb-034) | 2026-10-26 | Efectos | Propuesta | Máscaras con formas simples | En el plan |
 | [FB-035](#fb-035) | 2026-10-26 | Propiedades | Propuesta | Propiedades más ancho con línea de tiempo de keyframes | En el plan |
 | [FB-036](#fb-036) | 2026-10-26 | Propiedades | Propuesta | Una pestaña en Propiedades por cada efecto del clip | En el plan |
-| [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | En el plan |
+| [FB-037](#fb-037) | 2026-10-26 | Línea de tiempo | Propuesta | Pistas más altas o más bajas a gusto | Hecho |
 | [FB-038](#fb-038) | 2026-10-26 | Línea de tiempo | Propuesta | Acelerar o ralentizar un clip | En el plan |
 | [FB-039](#fb-039) | 2026-10-26 | Otro | Propuesta | Atajos de teclado personalizables | En el plan |
 | [FB-040](#fb-040) | 2026-10-27 | Medios | Propuesta | Los recursos de SharkCut en su propia carpeta de Medios | Hecho |
@@ -56,6 +56,7 @@ Formato y estados: ver [README.md](README.md).
 | [FB-050](#fb-050) | 2026-10-29 | Proyectos | Usabilidad | Al abrir la app se crea solo un proyecto «Sin título» | Hecho |
 | [FB-051](#fb-051) | 2026-10-29 | Línea de tiempo | Usabilidad | La línea de tiempo no se desplaza sola al arrastrar un clip hasta el borde | Hecho |
 | [FB-052](#fb-052) | 2026-10-31 | Medios | Propuesta | Calcular la onda de audio al importar, no al poner el clip en la línea de tiempo | Hecho |
+| [FB-053](#fb-053) | 2026-11-18 | Línea de tiempo | Propuesta | Guía visual que conecte los keyframes | Hecho |
 
 ---
 
@@ -147,7 +148,11 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Mantener el sistema actual de transiciones en su propia pista y, a la vez, permitir ponerlas dentro del clip, como era al principio. Si la transición va al principio o al final del clip, que se adapte: un fundido a negro al principio empieza en negro y aparece el clip; al final, se ve el clip y pasa a negro. (O separarlo en 3 transiciones: entrada, salida y corte.)
 - **Contexto:** Transiciones como clips (versión actual) frente a las antiguas en los cortes.
 - **Notas:** Las transiciones antiguas en los cortes (`Track::transitions`) aún se abren y dibujan, así que parte del motor existe.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Decisión (Kyo, 2026-11-18):** sin mitades separables (cortarla por la mitad ya sirve).
+  Dos formas de colocarlas: como clip en la línea de tiempo (como hoy) o pegadas a los
+  clips (como al principio). Cada transición tiene sus variantes agrupadas en Efectos; por
+  ahora solo Fade tiene las tres (entrada, salida y corte) y sigue sin sonido. Para la 0.1.9.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M1)
 
 <a id="fb-008"></a>
 ### FB-008 · Transiciones con marca de centro, imán y mitades separables
@@ -159,7 +164,13 @@ Formato y estados: ver [README.md](README.md).
 - **Qué dijo:** Que las transiciones tengan una marca en el centro exacto del corte, con imán para sincronizarse con el corte de la línea de tiempo. Además, que sea separable: el lado izquierdo se puede separar del derecho, para usar una mitad como cierre y la otra como apertura en los extremos de la línea de tiempo.
 - **Contexto:** Colocar transiciones como clips sobre los cortes.
 - **Notas:** Relacionado con FB-007 (las mitades separables equivalen a transiciones de entrada y de salida). Hoy addEffectClip ya centra la transición en el corte más cercano al soltarla, pero no hay marca visible ni imán al moverla después.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md))
+- **Decisión (Kyo, 2026-11-18):** el imán no hace falta (al soltarla ya se centra sola) ni
+  las mitades separables. Lo que hace falta es una guía visual: mientras se arrastra un
+  clip, su borde o una transición, una línea que cruza toda la línea de tiempo cuando el
+  borde queda exactamente junto a otro (si no sale, hay un hueco o se pisan). El centro de
+  una transición-clip cuenta como un borde más, así se sabe que está centrada en el corte.
+  Sin arrastrar no se ve ninguna guía. Para la 0.1.9.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M27)
 
 <a id="fb-009"></a>
 ### FB-009 · Ver y usar por separado las pistas de audio de un archivo (MKV)
@@ -587,7 +598,7 @@ Formato y estados: ver [README.md](README.md).
   horizontal.
 - **Decisión (Kyo):** Ctrl + rueda sobre las cabeceras cambia la altura; en el resto sigue
   siendo el zoom.
-- **Estado:** En el plan ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M17)
 
 <a id="fb-038"></a>
 ### FB-038 · Acelerar o ralentizar un clip
@@ -865,3 +876,21 @@ Formato y estados: ver [README.md](README.md).
 - **Decisión (Kyo):** para la 0.1.8.
 - **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M26)
 
+<a id="fb-053"></a>
+### FB-053 · Guía visual que conecte los keyframes
+- **Fecha:** 2026-11-18
+- **Quién:** pedido a Kyo (lo transmite Kyo)
+- **Versión:** 0.1.8
+- **Área:** Línea de tiempo
+- **Tipo:** Propuesta
+- **Qué dijo:** «una guía visual para conectar frames». Kyo propone que, si entre dos
+  keyframes no cambia nada, una línea amarilla los una (así se ve que en ese tramo el clip
+  se queda quieto).
+- **Contexto:** los keyframes de un clip se ven como ◆ debajo de él en la línea de tiempo
+  y se pueden arrastrar; no se ve qué tramos son iguales.
+- **Notas:** la otra idea, una mini línea de tiempo con zoom dentro de Propiedades, ya es
+  M15 (FB-035, 0.2.1), donde la línea irá por propiedad.
+- **Decisión (Kyo, 2026-11-18):** la línea amarilla en la línea de tiempo general, sobre los
+  ◆ de cada clip, cuando ninguna propiedad cambia entre dos keyframes seguidos. Para la
+  0.1.9.
+- **Estado:** Hecho ([PLAN-MEJORA.md](PLAN-MEJORA.md), M28)

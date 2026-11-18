@@ -1213,3 +1213,120 @@ TEST_CASE("Changing a sequence frame rate keeps every time in seconds", "[edit]"
     CHECK_FALSE(setSequenceSettings(p, 720, 1280, {30, 1})); // nada cambia
     CHECK_FALSE(setSequenceSettings(p, 0, 1280, {30, 1}));
 }
+
+TEST_CASE("Fade in and out attach to one clip and follow it", "[timeline][transitions][variants]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b); // A: 0–300, B: 300–500
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 30;
+
+    // Solo los tipos con variantes, y nunca como corte.
+    TransitionParams zoom = withLength(30);
+    CHECK(attachTransition(p, a, TransitionVariant::In, zoom) == 0);
+    CHECK(attachTransition(p, a, TransitionVariant::Cut, fade) == 0);
+
+    // Entrada al inicio de A: todo después del inicio, A y B de la capa son el mismo clip.
+    const ObjectId in = attachTransition(p, a, TransitionVariant::In, fade);
+    REQUIRE(in != 0);
+    const Transition* tin = p.transition(in);
+    CHECK(tin->from == 0);
+    CHECK(tin->to == a);
+    CHECK(tin->before == 0);
+    CHECK(tin->after == 30);
+    CHECK(tin->params.variant == TransitionVariant::In);
+    CHECK(p.cutOf(*tin) == 0);
+    auto layers = p.videoLayersAt(10);
+    REQUIRE(layers.size() == 1);
+    CHECK(layers[0].transition == tin);
+    CHECK(layers[0].clip->id == a);
+    CHECK(layers[0].clipB->id == a);
+    CHECK(layers[0].transitionFrame == 10);
+
+    // Salida al final de B.
+    const ObjectId out = attachTransition(p, b, TransitionVariant::Out, fade);
+    REQUIRE(out != 0);
+    const Transition* tout = p.transition(out);
+    CHECK(tout->from == b);
+    CHECK(tout->to == 0);
+    CHECK(tout->before == 30);
+    CHECK(tout->after == 0);
+    CHECK(p.cutOf(*tout) == 500);
+    CHECK(p.transitionAt(kVideoTrack, 469) == nullptr);
+    CHECK(p.transitionAt(kVideoTrack, 470) == tout);
+    CHECK(p.videoLayersAt(480)[0].transitionFrame == 10);
+    checkInvariants(p);
+
+    // Dividir B: la salida pasa a su parte derecha.
+    REQUIRE(splitAt(p, 400));
+    REQUIRE(p.transition(out) != nullptr);
+    CHECK(p.clip(p.transition(out)->from)->start == 400);
+    // Separar los clips no la quita (va pegada a un solo clip).
+    REQUIRE(moveClips(p, {a}, 50));
+    REQUIRE(p.transition(in) != nullptr);
+    CHECK(p.cutOf(*p.transition(in)) == 50);
+    checkInvariants(p);
+}
+
+TEST_CASE("Transition variants can be changed between in, out and cut",
+          "[timeline][transitions][variants]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b);
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 30;
+
+    // Entrada de B → corte entre A y B (centrado) → salida de A → entrada de B.
+    const ObjectId t = attachTransition(p, b, TransitionVariant::In, fade);
+    REQUIRE(t != 0);
+    REQUIRE(setTransitionVariant(p, t, TransitionVariant::Cut));
+    REQUIRE(p.tracks[kVideoTrack].transitions.size() == 1);
+    const Transition& cut = p.tracks[kVideoTrack].transitions[0];
+    CHECK(cut.from == a);
+    CHECK(cut.to == b);
+    CHECK(cut.before == 15);
+    CHECK(cut.after == 15);
+    CHECK(cut.params.variant == TransitionVariant::Cut);
+    const ObjectId cutId = cut.id;
+    REQUIRE(setTransitionVariant(p, cutId, TransitionVariant::Out));
+    CHECK(p.transition(cutId)->from == a);
+    CHECK(p.transition(cutId)->to == 0);
+    CHECK(p.transition(cutId)->before == 30);
+    CHECK(p.cutOf(*p.transition(cutId)) == 300);
+    REQUIRE(setTransitionVariant(p, cutId, TransitionVariant::In));
+    CHECK(p.transition(cutId)->to == a); // la entrada del mismo clip, en su inicio
+    CHECK(p.cutOf(*p.transition(cutId)) == 0);
+    CHECK_FALSE(setTransitionVariant(p, cutId, TransitionVariant::In));
+    // Al inicio de A no hay otro clip: no puede ser de corte.
+    CHECK_FALSE(setTransitionVariant(p, cutId, TransitionVariant::Cut));
+    REQUIRE(p.transition(cutId) != nullptr);
+
+    // Una transición de corte en un borde que ya tiene una entrada la sustituye.
+    const ObjectId intoB = attachTransition(p, b, TransitionVariant::In, fade);
+    REQUIRE(intoB != 0);
+    const ObjectId mixed = addTransition(p, kVideoTrack, 300, fade);
+    CHECK(mixed == intoB);
+    CHECK(p.transition(mixed)->from == a);
+    CHECK(p.transition(mixed)->params.variant == TransitionVariant::Cut);
+    // Una de un tipo sin variantes no puede quedarse pegada a un solo clip.
+    TransitionParams zoom = withLength(30);
+    CHECK_FALSE(setTransitionParams(p, cutId, zoom));
+    checkInvariants(p);
+}
+
+TEST_CASE("Attached fades go with their clip to another track", "[timeline][transitions][variants]") {
+    ObjectId a = 0;
+    ObjectId b = 0;
+    Project p = projectWithCut(a, b);
+    addTrack(p, TrackKind::Video);
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 30;
+    const ObjectId t = attachTransition(p, b, TransitionVariant::Out, fade);
+    REQUIRE(t != 0);
+    REQUIRE(moveClips(p, {b}, 0, 1)); // una pista más arriba
+    const auto ref = p.findTransition(t);
+    REQUIRE(ref.has_value());
+    CHECK(ref->track == p.findClip(b)->track);
+    CHECK(p.transition(t)->from == b);
+    checkInvariants(p);
+}

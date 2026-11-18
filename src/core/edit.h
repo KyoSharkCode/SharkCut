@@ -45,6 +45,10 @@ bool removeTrack(Project& project, std::size_t track);
 bool setTrackHidden(Project& project, std::size_t track, bool hidden); // solo video
 bool setTrackMuted(Project& project, std::size_t track, bool muted);   // solo audio
 bool setTrackLocked(Project& project, std::size_t track, bool locked);
+// Alto de la pista en la línea de tiempo, limitado a [kMinTrackHeight, kMaxTrackHeight].
+bool setTrackHeight(Project& project, std::size_t track, int height);
+// Suma `delta` px al alto de todas las pistas de video y audio (cada una con su límite).
+bool resizeAllTracks(Project& project, int delta);
 
 // --- Clips ---
 
@@ -145,6 +149,17 @@ int limitTrackShift(const Project& project, const std::vector<ObjectId>& clips, 
                     int trackShift);
 bool moveClips(Project& project, const std::vector<ObjectId>& clips, std::int64_t delta,
                int trackShift = 0, TrackKind shiftKind = TrackKind::Video);
+
+// Guía de unión (mientras se arrastra): los fotogramas donde lo que se mueve queda borde
+// con borde con otro clip de cualquier pista, para dibujar ahí una línea. `edges` son los
+// bordes de lo que se mueve, ya en su sitio nuevo; `doubledCenters`, el doble del centro
+// de cada transición-clip que se mueve (2·inicio + duración, sin decimales), que cuenta si
+// queda a menos de medio fotograma de un borde (con una duración impar no puede caer
+// exacto). `exclude`: los clips que se mueven. Ordenados y sin repetir.
+std::vector<std::int64_t> joinFrames(const Project& project,
+                                     const std::vector<std::int64_t>& edges,
+                                     const std::vector<std::int64_t>& doubledCenters,
+                                     const std::vector<ObjectId>& exclude);
 
 // Posición, escala, opacidad y recorte de un clip de video (valores fuera de rango
 // se ajustan con clampTransform).
@@ -276,6 +291,18 @@ TransitionLimits transitionLimits(const Project& project, ObjectId transition);
 // pista está bloqueada).
 ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
                        const TransitionParams& params);
+
+// Pega una transición al inicio (variante In, entrada) o al final (Out, salida) del clip,
+// hacia dentro de él (params.durationFrames, limitado a lo que cabe). Solo tipos con
+// variantes (hasVariants) y clips que leen un medio de una pista de video sin bloquear. Si
+// ese borde ya tenía una, la sustituye y conserva su sonido. Devuelve su id, o 0.
+ObjectId attachTransition(Project& project, ObjectId clip, TransitionVariant variant,
+                          const TransitionParams& params);
+
+// Cambia la variante de una transición de los clips: a entrada o salida, se queda pegada
+// al clip que la lleva (de una de corte, B o A); a corte, va al corte de su borde (si hay
+// un clip pegado al otro lado). Conserva la duración en lo que quepa.
+bool setTransitionVariant(Project& project, ObjectId transition, TransitionVariant variant);
 
 // Quita la transición y, con `withSound`, también su efecto de sonido.
 bool removeTransition(Project& project, ObjectId transition, bool withSound = true);

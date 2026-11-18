@@ -156,6 +156,14 @@ Rectangle {
                     indice: propiedadesEfecto.ef.typeIndex !== undefined ? propiedadesEfecto.ef.typeIndex : 0
                     onElegido: (i) => propiedadesEfecto.cambiar({ typeIndex: i })
                 }
+                // Entrada (desde negro), salida (a negro) o corte: solo en los tipos que la tienen.
+                Selector {
+                    visible: propiedadesEfecto.ef.hasVariants === true
+                    etiqueta: "Variante"
+                    model: panel.editor.transitionVariantNames
+                    indice: propiedadesEfecto.ef.variant || 0
+                    onElegido: (i) => propiedadesEfecto.cambiar({ variant: i })
+                }
                 CampoNumero {
                     etiqueta: "Duración"
                     unidad: "fot."
@@ -260,6 +268,14 @@ Rectangle {
                     indice: propiedades.tr.typeIndex !== undefined ? propiedades.tr.typeIndex : 0
                     onElegido: (i) => panel.editor.setTransitionType(propiedades.tr.id, i)
                 }
+                // Entrada: pegada al inicio de su clip; salida: al final; corte: entre dos.
+                Selector {
+                    visible: propiedades.tr.hasVariants === true
+                    etiqueta: "Variante"
+                    model: panel.editor.transitionVariantNames
+                    indice: propiedades.tr.variant || 0
+                    onElegido: (i) => panel.editor.setTransitionVariant(propiedades.tr.id, i)
+                }
                 CampoNumero {
                     etiqueta: "Duración"
                     unidad: "fot."
@@ -281,9 +297,13 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     text: propiedadesTransicion.segundos(propiedades.tr.length || 0) + " · "
-                          + (propiedades.tr.before || 0) + " antes del corte y "
-                          + (propiedades.tr.after || 0) + " después (arrastra sus bordes en "
-                          + "la línea de tiempo)"
+                          + (propiedades.tr.variant === 1
+                             ? "pegada al inicio del clip, hacia dentro"
+                             : propiedades.tr.variant === 2
+                               ? "pegada al final del clip, hacia dentro"
+                               : (propiedades.tr.before || 0) + " antes del corte y "
+                                 + (propiedades.tr.after || 0) + " después")
+                          + " (arrastra sus bordes en la línea de tiempo)"
                     wrapMode: Text.WordWrap
                     color: Theme.textoSecundario
                     font.pixelSize: Theme.tamTextoPequeno

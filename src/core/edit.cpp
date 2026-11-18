@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <set>
 #include <optional>
 #include <unordered_map>
 
@@ -111,14 +112,34 @@ TransitionLimits limitsIn(const Project& project, const Transition& t) {
     TransitionLimits limits;
     const Clip* a = project.clip(t.from);
     const Clip* b = project.clip(t.to);
-    if (!a || !b) {
-        return limits;
+    // Pegada a un solo clip: solo hacia dentro de él (entrada: después del inicio; salida:
+    // antes del final), sin pisar la que tenga en el otro borde.
+    if (a) {
+        const Transition* intoA = project.transitionInto(a->id);
+        limits.maxBefore = std::max<std::int64_t>(0, a->length - (intoA ? intoA->after : 0));
     }
-    const Transition* intoA = project.transitionInto(a->id);
-    const Transition* outOfB = project.transitionOutOf(b->id);
-    limits.maxBefore = std::max<std::int64_t>(0, a->length - (intoA ? intoA->after : 0));
-    limits.maxAfter = std::max<std::int64_t>(0, b->length - (outOfB ? outOfB->before : 0));
+    if (b) {
+        const Transition* outOfB = project.transitionOutOf(b->id);
+        limits.maxAfter = std::max<std::int64_t>(0, b->length - (outOfB ? outOfB->before : 0));
+    }
+    if ((t.from != 0 && !a) || (t.to != 0 && !b)) {
+        return {};
+    }
     return limits;
+}
+
+// Variante que corresponde a cómo está pegada: entre dos clips, corte; si no, entrada o
+// salida.
+TransitionVariant variantOf(const Transition& t) {
+    if (t.from != 0 && t.to != 0) {
+        return TransitionVariant::Cut;
+    }
+    return t.from == 0 ? TransitionVariant::In : TransitionVariant::Out;
+}
+
+// ¿Se puede pegar una entrada o una salida a este clip? Solo a los que leen un medio.
+bool attachable(const Clip* clip) {
+    return clip != nullptr && clip->hasMedia();
 }
 
 // Reparte `length` fotogramas alrededor del corte (centrado) sin pasar de los límites.
@@ -131,17 +152,21 @@ std::pair<std::int64_t, std::int64_t> centered(std::int64_t length, TransitionLi
 
 constexpr std::int64_t kMinTransition = 2;
 
-// Tras una edición: las transiciones siguen al clip saliente si se partió, y se quitan
-// las que ya no están en un corte (o no caben); se limita su duración a lo que cabe.
+// Tras una edición: las transiciones siguen al clip saliente si se partió (y las pegadas
+// a un solo clip, a su clip si cambió de pista), y se quitan las que ya no están en un
+// corte o en su clip (o no caben); se limita su duración a lo que cabe. Cada borde de un
+// clip se queda con una como mucho (la primera).
 void fixTransitions(Project& project, const Splits& splits) {
-    for (Track& track : project.tracks) {
+    std::vector<std::pair<std::size_t, Transition>> moved; // a otra pista con su clip
+    for (std::size_t index = 0; index < project.tracks.size(); ++index) {
+        Track& track = project.tracks[index];
         if (track.kind != TrackKind::Video) {
             track.transitions.clear();
             continue;
         }
         for (Transition& t : track.transitions) {
             // Si el clip saliente se partió, el corte queda al final de su parte derecha.
-            for (int guard = 0; guard < 64; ++guard) {
+            for (int guard = 0; guard < 64 && t.from != 0; ++guard) {
                 const auto it = splits.find(t.from);
                 if (it == splits.end()) {
                     break;
@@ -149,23 +174,72 @@ void fixTransitions(Project& project, const Splits& splits) {
                 t.from = it->second.right;
             }
         }
-        std::erase_if(track.transitions, [&track](const Transition& t) {
-            const Clip* a = clipInTrack(track, t.from);
-            const Clip* b = clipInTrack(track, t.to);
-            return !a || !b || a->end() != b->start;
+        std::erase_if(track.transitions, [&](const Transition& t) {
+            if (t.from != 0 && t.to != 0) {
+                const Clip* a = clipInTrack(track, t.from);
+                const Clip* b = clipInTrack(track, t.to);
+                return !a || !b || a->end() != b->start;
+            }
+            const ObjectId id = t.from != 0 ? t.from : t.to;
+            if (id == 0) {
+                return true;
+            }
+            if (clipInTrack(track, id)) {
+                return !attachable(clipInTrack(track, id));
+            }
+            // Su clip está en otra pista de video: va con él.
+            if (const auto ref = project.findClip(id);
+                ref && project.tracks[ref->track].kind == TrackKind::Video &&
+                attachable(&project.tracks[ref->track].clips[ref->index])) {
+                moved.emplace_back(ref->track, t);
+            }
+            return true;
         });
-        std::sort(track.transitions.begin(), track.transitions.end(),
-                  [&track](const Transition& x, const Transition& y) {
-                      return clipInTrack(track, x.to)->start < clipInTrack(track, y.to)->start;
-                  });
+    }
+    for (auto& [index, t] : moved) {
+        project.tracks[index].transitions.push_back(std::move(t));
+    }
+    for (Track& track : project.tracks) {
+        if (track.kind != TrackKind::Video) {
+            continue;
+        }
+        const auto cut = [&track](const Transition& t) {
+            const Clip* b = clipInTrack(track, t.to);
+            const Clip* a = clipInTrack(track, t.from);
+            return b ? b->start : a->end();
+        };
+        std::stable_sort(track.transitions.begin(), track.transitions.end(),
+                         [&cut](const Transition& x, const Transition& y) {
+                             return cut(x) < cut(y);
+                         });
+        std::set<ObjectId> into;
+        std::set<ObjectId> outOf;
+        std::erase_if(track.transitions, [&](const Transition& t) {
+            if ((t.to != 0 && into.count(t.to) != 0) ||
+                (t.from != 0 && outOf.count(t.from) != 0)) {
+                return true;
+            }
+            if (t.to != 0) {
+                into.insert(t.to);
+            }
+            if (t.from != 0) {
+                outOf.insert(t.from);
+            }
+            return false;
+        });
     }
     for (Track& track : project.tracks) {
         for (std::size_t i = 0; i < track.transitions.size();) {
             Transition& t = track.transitions[i];
+            t.params.variant = variantOf(t);
             const TransitionLimits limits = limitsIn(project, t);
             t.before = std::min(t.before, limits.maxBefore);
             t.after = std::min(t.after, limits.maxAfter);
             t.params.durationFrames = t.length();
+            if (t.params.variant != TransitionVariant::Cut && !hasVariants(t.params.type)) {
+                track.transitions.erase(track.transitions.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
             if (t.sound != 0 && !project.clip(t.sound)) {
                 t.sound = 0;
             }
@@ -331,6 +405,25 @@ bool setTrackLocked(Project& project, std::size_t track, bool locked) {
     }
     project.tracks[track].locked = locked;
     return true;
+}
+
+bool setTrackHeight(Project& project, std::size_t track, int height) {
+    height = std::clamp(height, kMinTrackHeight, kMaxTrackHeight);
+    if (track >= project.tracks.size() || project.tracks[track].height == height) {
+        return false;
+    }
+    project.tracks[track].height = height;
+    return true;
+}
+
+bool resizeAllTracks(Project& project, int delta) {
+    bool changed = false;
+    for (Track& track : project.tracks) {
+        const int height = std::clamp(track.height + delta, kMinTrackHeight, kMaxTrackHeight);
+        changed = changed || height != track.height;
+        track.height = height;
+    }
+    return changed;
 }
 
 // --- Clips ------------------------------------------------------------------------
@@ -728,6 +821,54 @@ bool trimEnd(Project& project, ObjectId clip, std::int64_t end) {
     return true;
 }
 
+std::vector<std::int64_t> joinFrames(const Project& project,
+                                     const std::vector<std::int64_t>& edges,
+                                     const std::vector<std::int64_t>& doubledCenters,
+                                     const std::vector<ObjectId>& exclude) {
+    const auto excluded = [&](ObjectId id) {
+        return std::find(exclude.begin(), exclude.end(), id) != exclude.end();
+    };
+    // ¿Empieza o acaba en `frame` algún clip (que no se mueve) de alguna pista? Cada pista
+    // está ordenada y sin solapes: sus inicios y sus finales están ordenados.
+    const auto isEdge = [&](std::int64_t frame) {
+        for (const Track& track : project.tracks) {
+            const auto& clips = track.clips;
+            auto s = std::lower_bound(clips.begin(), clips.end(), frame,
+                                      [](const Clip& c, std::int64_t f) { return c.start < f; });
+            if (s != clips.end() && s->start == frame && !excluded(s->id)) {
+                return true;
+            }
+            auto e = std::lower_bound(clips.begin(), clips.end(), frame,
+                                      [](const Clip& c, std::int64_t f) { return c.end() < f; });
+            if (e != clips.end() && e->end() == frame && !excluded(e->id)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<std::int64_t> result;
+    for (std::int64_t edge : edges) {
+        if (isEdge(edge)) {
+            result.push_back(edge);
+        }
+    }
+    for (std::int64_t center : doubledCenters) {
+        if (center < 0) {
+            continue;
+        }
+        // Par: el centro cae en un borde de fotograma; impar: entre dos, a medio fotograma.
+        const std::int64_t below = center / 2;
+        for (std::int64_t frame : {below, center % 2 == 0 ? below : below + 1}) {
+            if (isEdge(frame)) {
+                result.push_back(frame);
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+}
+
 std::int64_t limitMove(const Project& project, const std::vector<ObjectId>& clips,
                        std::int64_t delta) {
     const std::vector<ObjectId> group = withLinked(project, clips);
@@ -1092,12 +1233,13 @@ bool setSequenceSettings(Project& project, int width, int height, FrameRate rate
         // Las transiciones, con el corte aún en su sitio (el inicio de B): antes y
         // después, con los mismos segundos.
         for (Transition& t : track.transitions) {
-            const auto to = std::find_if(track.clips.begin(), track.clips.end(),
-                                         [&t](const Clip& c) { return c.id == t.to; });
-            if (to == track.clips.end()) {
+            const ObjectId edgeClip = t.to != 0 ? t.to : t.from;
+            const auto clip = std::find_if(track.clips.begin(), track.clips.end(),
+                                           [edgeClip](const Clip& c) { return c.id == edgeClip; });
+            if (clip == track.clips.end()) {
                 continue;
             }
-            const std::int64_t cut = to->start;
+            const std::int64_t cut = t.to != 0 ? clip->start : clip->end();
             t.before = std::max<std::int64_t>(0, at(cut) - at(cut - t.before));
             t.after = std::max<std::int64_t>(0, at(cut + t.after) - at(cut));
             t.params.durationFrames = std::max<std::int64_t>(1, t.before + t.after);
@@ -1255,17 +1397,33 @@ ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
     if (!a || !b) {
         return 0;
     }
+    // La que ya hubiera en ese corte (o pegada al final de A o al inicio de B) se convierte
+    // en esta y conserva su sonido; las demás de esos bordes se quitan.
+    Transition* reuse = nullptr;
     for (Transition& existing : target.transitions) {
-        if (existing.to == b->id) {
+        if (existing.to == b->id || existing.from == a->id) {
+            if (reuse == nullptr) {
+                reuse = &existing;
+            } else {
+                existing.id = 0; // se quita abajo
+            }
+        }
+    }
+    std::erase_if(target.transitions, [](const Transition& t) { return t.id == 0; });
+    for (Transition& existing : target.transitions) {
+        if (existing.to == b->id || existing.from == a->id) {
+            existing.from = a->id;
+            existing.to = b->id;
             TransitionParams changed = params;
-            changed.durationFrames = existing.length();
+            changed.variant = TransitionVariant::Cut;
             existing.params = changed;
             const auto [before, after] = centered(std::max(params.durationFrames, kMinTransition),
                                                   limitsIn(project, existing));
             existing.before = before;
             existing.after = after;
             existing.params.durationFrames = existing.length();
-            return existing.id;
+            fixTransitions(project, {});
+            return project.transition(existing.id) ? existing.id : 0;
         }
     }
     Transition t;
@@ -1273,6 +1431,7 @@ ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
     t.from = a->id;
     t.to = b->id;
     t.params = params;
+    t.params.variant = TransitionVariant::Cut;
     const auto [before, after] =
         centered(std::max(params.durationFrames, kMinTransition), limitsIn(project, t));
     if (before + after < kMinTransition) {
@@ -1300,6 +1459,114 @@ bool removeTransition(Project& project, ObjectId transition, bool withSound) {
     return true;
 }
 
+ObjectId attachTransition(Project& project, ObjectId clipId, TransitionVariant variant,
+                          const TransitionParams& params) {
+    const auto ref = project.findClip(clipId);
+    if (!ref || variant == TransitionVariant::Cut || !hasVariants(params.type)) {
+        return 0;
+    }
+    Track& track = project.tracks[ref->track];
+    const Clip& clip = track.clips[ref->index];
+    if (track.kind != TrackKind::Video || track.locked || !attachable(&clip)) {
+        return 0;
+    }
+    const bool in = variant == TransitionVariant::In;
+    // La que ya tuviera ese borde se sustituye (conserva su id y su sonido).
+    ObjectId id = 0;
+    ObjectId sound = 0;
+    std::erase_if(track.transitions, [&](const Transition& t) {
+        const bool sameEdge = in ? t.to == clipId : t.from == clipId;
+        if (sameEdge && id == 0) {
+            id = t.id;
+            sound = t.sound;
+        }
+        return sameEdge;
+    });
+    Transition t;
+    t.id = id != 0 ? id : newId(project);
+    t.from = in ? 0 : clipId;
+    t.to = in ? clipId : 0;
+    t.sound = sound;
+    t.params = params;
+    t.params.variant = variant;
+    const TransitionLimits limits = limitsIn(project, t);
+    const std::int64_t length = std::max(params.durationFrames, kMinTransition);
+    t.before = in ? 0 : std::min(length, limits.maxBefore);
+    t.after = in ? std::min(length, limits.maxAfter) : 0;
+    if (t.length() < kMinTransition) {
+        return 0;
+    }
+    t.params.durationFrames = t.length();
+    track.transitions.push_back(t);
+    fixTransitions(project, {});
+    return project.transition(t.id) ? t.id : 0;
+}
+
+bool setTransitionVariant(Project& project, ObjectId transition, TransitionVariant variant) {
+    const auto ref = project.findTransition(transition);
+    if (!ref || project.tracks[ref->track].locked) {
+        return false;
+    }
+    Track& track = project.tracks[ref->track];
+    const Transition current = track.transitions[ref->index];
+    if (variantOf(current) == variant) {
+        return false;
+    }
+    TransitionParams params = current.params;
+    params.durationFrames = current.length();
+    if (variant == TransitionVariant::Cut) {
+        // Al corte de su borde: hace falta un clip pegado al otro lado.
+        const Clip* clip = project.clip(current.from != 0 ? current.from : current.to);
+        if (!clip) {
+            return false;
+        }
+        const std::int64_t cut = current.to != 0 ? clip->start : clip->end();
+        const bool neighbour = std::any_of(track.clips.begin(), track.clips.end(),
+                                           [&](const Clip& c) {
+                                               return c.id != clip->id &&
+                                                      (c.end() == cut || c.start == cut);
+                                           });
+        if (!neighbour) {
+            return false;
+        }
+        const ObjectId sound = current.sound;
+        track.transitions.erase(track.transitions.begin() + static_cast<std::ptrdiff_t>(ref->index));
+        const ObjectId created = addTransition(project, ref->track, cut, params);
+        if (created == 0) {
+            return false;
+        }
+        if (Transition* t = findTransitionMutable(project, created); t && t->sound == 0) {
+            t->sound = sound;
+        }
+        return true;
+    }
+    if (!hasVariants(params.type)) {
+        return false;
+    }
+    // Entrada o salida: del clip que la lleva (de una de corte, B para la entrada y A para
+    // la salida).
+    const bool in = variant == TransitionVariant::In;
+    const ObjectId clip = in ? (current.to != 0 ? current.to : current.from)
+                             : (current.from != 0 ? current.from : current.to);
+    Transition& t = track.transitions[ref->index];
+    t.from = in ? 0 : clip;
+    t.to = in ? clip : 0;
+    t.params.variant = variant;
+    // Las demás de ese borde se quitan.
+    const ObjectId keep = t.id;
+    std::erase_if(track.transitions, [&](const Transition& other) {
+        return other.id != keep && (in ? other.to == clip : other.from == clip);
+    });
+    Transition* updated = findTransitionMutable(project, keep);
+    const TransitionLimits limits = limitsIn(project, *updated);
+    const std::int64_t length = std::max(params.durationFrames, kMinTransition);
+    updated->before = in ? 0 : std::min(length, limits.maxBefore);
+    updated->after = in ? std::min(length, limits.maxAfter) : 0;
+    updated->params.durationFrames = updated->length();
+    fixTransitions(project, {});
+    return project.transition(keep) != nullptr;
+}
+
 bool setTransitionParams(Project& project, ObjectId transition, const TransitionParams& params) {
     Transition* t = findTransitionMutable(project, transition);
     if (!t || transitionLocked(project, transition)) {
@@ -1307,6 +1574,12 @@ bool setTransitionParams(Project& project, ObjectId transition, const Transition
     }
     TransitionParams changed = params;
     changed.durationFrames = t->length();
+    // La variante va con cómo está pegada (setTransitionVariant); pegada a un solo clip,
+    // solo tipos con entrada y salida.
+    changed.variant = t->params.variant;
+    if (changed.variant != TransitionVariant::Cut && !hasVariants(changed.type)) {
+        return false;
+    }
     changed.intensity = std::clamp(changed.intensity, 0.0, 1.0);
     changed.blur = std::clamp(changed.blur, 0.0, 1.0);
     if (t->params == changed) {

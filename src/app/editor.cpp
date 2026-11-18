@@ -513,6 +513,20 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
         }
     }
     entry[QStringLiteral("keyframes")] = keyframes;
+    // Tramos entre dos keyframes en los que no cambia nada: [inicio, fin] en la línea de
+    // tiempo, recortados al clip (la línea amarilla que los une).
+    QVariantList unchanged;
+    if (!clip.animation.empty()) {
+        for (const auto& [a, b] : sharkcut::unchangedSpans(clip.animation)) {
+            const std::int64_t from = std::max(clip.start, clip.start + (a - clip.in));
+            const std::int64_t to = std::min(clip.end() - 1, clip.start + (b - clip.in));
+            if (from < to) {
+                unchanged.append(QVariant(QVariantList{static_cast<qint64>(from),
+                                                       static_cast<qint64>(to)}));
+            }
+        }
+    }
+    entry[QStringLiteral("unchanged")] = unchanged;
     // Para las miniaturas de la línea de tiempo: el proxy si lo hay (mucho más rápido),
     // y los fps del medio (el tramo del clip va en fotogramas de la secuencia).
     if (item && item->hasVideo) {

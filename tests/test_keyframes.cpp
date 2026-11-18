@@ -163,3 +163,27 @@ TEST_CASE("Effect values can be animated", "[keyframes][efectos]") {
     const Project loaded = projectFromJson(projectToJson(t.p, {}), {});
     CHECK(loaded.clip(t.clip)->animation == t.c().animation);
 }
+
+TEST_CASE("Unchanged spans join keyframes where nothing changes", "[keyframes]") {
+    OneClip s;
+    // Escala: 0–100 igual, 100–200 cambia, 200–300 igual.
+    setKeyframe(s.p, s.clip, AnimProperty::Scale, 0, 1.0);
+    setKeyframe(s.p, s.clip, AnimProperty::Scale, 100, 1.0);
+    setKeyframe(s.p, s.clip, AnimProperty::Scale, 200, 1.5);
+    setKeyframe(s.p, s.clip, AnimProperty::Scale, 300, 1.5);
+    using Spans = std::vector<std::pair<std::int64_t, std::int64_t>>;
+    CHECK(unchangedSpans(s.c().animation) == Spans{{0, 100}, {200, 300}});
+
+    // La opacidad cambia entre 220 y 260: el tramo 200–300 se parte en tres y solo
+    // 220–260 cambia (antes de su primer keyframe la opacidad se queda fija).
+    setKeyframe(s.p, s.clip, AnimProperty::Opacity, 220, 1.0);
+    setKeyframe(s.p, s.clip, AnimProperty::Opacity, 260, 0.5);
+    CHECK(unchangedSpans(s.c().animation) == Spans{{0, 100}, {200, 220}, {260, 300}});
+
+    // Una propiedad con un solo keyframe se queda fija: no impide nada.
+    setKeyframe(s.p, s.clip, AnimProperty::X, 50, 0.3);
+    CHECK(unchangedSpans(s.c().animation) ==
+          Spans{{0, 50}, {50, 100}, {200, 220}, {260, 300}});
+
+    CHECK(unchangedSpans(ClipAnimation{}).empty());
+}

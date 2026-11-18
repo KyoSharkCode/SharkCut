@@ -1232,6 +1232,23 @@ Rectangle {
                                     }
                                 }
 
+                                // Entre dos keyframes en los que no cambia nada, una línea que
+                                // los une (el clip se queda igual en ese tramo).
+                                Repeater {
+                                    model: elemento.esVideo && !elemento.bloque && elemento.width > 16
+                                           && !elemento.enArrastre ? (elemento.modelData.unchanged || []) : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        x: (modelData[0] - elemento.modelData.start) * raiz.escala
+                                        width: Math.max(0, (modelData[1] - modelData[0]) * raiz.escala)
+                                        y: elemento.height - 8
+                                        height: 2
+                                        radius: 1
+                                        color: Theme.keyframeIgual
+                                        z: 4
+                                    }
+                                }
+
                                 // Keyframes del clip (◆ abajo): clic = ir ahí; arrastrar = moverlo.
                                 Repeater {
                                     model: elemento.esVideo && !elemento.bloque && elemento.width > 16

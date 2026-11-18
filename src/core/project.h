@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace sharkcut {
@@ -206,6 +207,11 @@ struct ClipAnimation {
 // Valor de una lista de keyframes en `mediaFrame`: antes del primero, el primero; después
 // del último, el último; entre dos, con la curva del primero.
 double keyframeValue(const std::vector<Keyframe>& keys, double mediaFrame);
+
+// Tramos entre dos keyframes seguidos (de cualquier propiedad) en los que no cambia nada:
+// ninguna propiedad animada varía entre ellos. {inicio, fin} en fotogramas del medio, en
+// orden. La línea de tiempo los une con una línea.
+std::vector<std::pair<std::int64_t, std::int64_t>> unchangedSpans(const ClipAnimation& animation);
 
 // Volumen de un clip de audio en dB. kMinVolumeDb o menos equivale a silencio.
 inline constexpr double kMinVolumeDb = -60.0;

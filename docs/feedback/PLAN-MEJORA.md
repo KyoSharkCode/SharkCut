@@ -386,6 +386,16 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   - Fade sigue sin sonido en sus tres variantes.
 - **Cuidado:** el archivo del proyecto sube de versión (13); los anteriores se abren igual.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `TransitionParams::variant` (transition.h; `hasVariants`: por ahora solo Fade):
+  la entrada recorre la segunda mitad del efecto y la salida la primera, con su curva
+  entera, así vale igual como clip (capa de ajuste) que pegada a los clips. Las transiciones
+  de los cortes (`Track::transitions`) pueden ir pegadas a un solo clip (sin `from`, la
+  entrada; sin `to`, la salida): `attachTransition` y `setTransitionVariant` (edit.h), y
+  `fixTransitions` las lleva con su clip al partirlo o cambiarlo de pista. Pestaña
+  Transiciones: «Como clip» / «En los clips» (QSettings "transiciones/colocacion"), Fade
+  agrupado con sus tres variantes; la línea de tiempo marca el borde donde caerá
+  (`Editor::attachTarget`). Propiedades: selector de variante. Comprobado exportando: el
+  brillo sube de negro en la entrada (pegada y como clip) y baja en la salida.
 
 ### M2 · Editar una secuencia ya creada y guardar presets · FB-015 · M
 - **Hacer:** cambiar lienzo (relación de aspecto, tamaño libre) y fps de una secuencia
@@ -570,6 +580,12 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 - **Nota:** hoy todas las pistas miden 50 px fijos (`alturaPista` en `LineaTiempo.qml`);
   con más altura se ven mejor las ondas y las miniaturas.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `Track::height` (30–200 px, 50 por defecto; archivo versión 13),
+  `setTrackHeight` y `resizeAllTracks` (edit.h). En LineaTiempo.qml cada fila tiene su alto
+  (`altosEnCurso` mientras se arrastra el borde de la cabecera o se usa Ctrl + rueda; se
+  guarda al soltar o al parar la rueda, como un paso de deshacer). Alt++ / Alt+− y el menú
+  de la pista cambian todas; doble clic en el borde, alto normal. Las pistas de subtítulos
+  siguen con su alto fijo. Comprobado con Xvfb.
 
 ### M16 · Máscaras con formas simples · FB-034 · M–L
 - **Hacer:** nuevo efecto «Máscara» con formas clásicas (rectángulo, elipse/círculo y
@@ -768,6 +784,11 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   - El centro de una transición-clip cuenta como un borde más: si cae sobre un corte, sale
     la línea. Con una duración impar basta con quedar a menos de medio fotograma.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `joinFrames` (edit.h) busca, con búsqueda binaria en cada pista, los bordes de
+  otros clips que coinciden con los de lo que se mueve (y el centro doblado de las
+  transiciones-clip, sin decimales); `Editor::moveGuides` y `trimGuides`; LineaTiempo.qml
+  dibuja `guiasUnion` (color `Theme.guiaUnion`) mientras se mueve o recorta. Comprobado con
+  Xvfb: sale al unir dos clips y al centrar un Fade en un corte, y no con un hueco.
 
 ### M28 · Línea amarilla entre keyframes iguales · FB-053 · S
 - **Problema:** los keyframes se ven como ◆ debajo de cada clip, pero no se ve en qué tramos
@@ -777,6 +798,11 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   ellos (si cambia cualquiera, no sale). La mini línea de tiempo con zoom va en M15, con su
   línea por propiedad.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+- **Hecho:** `unchangedSpans` (project.h): entre dos keyframes seguidos de la fila, mira cada
+  propiedad animada entre su keyframe anterior y el siguiente (una antes de su primero o
+  después de su último se queda fija). `Editor::clipEntry` da `unchanged` y LineaTiempo.qml
+  dibuja la línea (`Theme.keyframeIgual`). Un tramo con la curva «mantener» entre dos
+  valores distintos no cuenta (sus valores no son iguales).
 
 ---
 

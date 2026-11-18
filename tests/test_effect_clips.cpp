@@ -258,3 +258,23 @@ TEST_CASE("Join guides show edges that touch and centered effect clips", "[effec
     CHECK(joinFrames(p, {}, {2 * 284 + 31}, {}) == std::vector<std::int64_t>{300});
     CHECK(joinFrames(p, {}, {2 * 283 + 31}, {}).empty());
 }
+
+TEST_CASE("Transition variants are saved with the project", "[effects][variants][project]") {
+    TwoCuts s;
+    Project& p = s.p;
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 20;
+    const ObjectId first = p.tracks[kVideoTrack].clips[0].id;
+    REQUIRE(attachTransition(p, first, TransitionVariant::In, fade) != 0);
+    fade.variant = TransitionVariant::Out;
+    const ObjectId effect = placeEffect(p, kVideoTrack, 100, fade);
+    REQUIRE(effect != 0);
+
+    const std::string json = projectToJson(p, {});
+    CHECK(json.find("\"variant\": \"in\"") != std::string::npos);
+    CHECK(json.find("\"variant\": \"out\"") != std::string::npos);
+    const Project loaded = projectFromJson(json, {});
+    CHECK(loaded.tracks == p.tracks);
+    REQUIRE(loaded.clip(effect) != nullptr);
+    CHECK(loaded.clip(effect)->effect->variant == TransitionVariant::Out);
+}

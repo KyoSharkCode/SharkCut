@@ -120,3 +120,31 @@ TEST_CASE("La transicion no puede durar mas que el clip mas corto", "[sequence]"
     CHECK(makeLayout({0, 0}, {0, 100}, 30).transitionFrames == 0);
     CHECK(makeLayout({5, 3}, {0, 100}, 30).length() == 100); // tramo inválido = vacío
 }
+
+TEST_CASE("Fade in and out variants play one half of the fade", "[transitions][variants]") {
+    TransitionParams fade = transitionInfo(TransitionType::FadeToBlack).defaults;
+    fade.durationFrames = 20;
+    CHECK(hasVariants(TransitionType::FadeToBlack));
+    CHECK_FALSE(hasVariants(TransitionType::ZoomIn));
+
+    // Entrada: toda la duración recorre la segunda mitad (desde negro hasta el clip).
+    fade.variant = TransitionVariant::In;
+    CHECK(evaluateTransition(fade, 0).eased >= 0.5);
+    CHECK(evaluateTransition(fade, 0).eased < 0.51);
+    CHECK(evaluateTransition(fade, 19).eased > 0.99);
+    // Salida: la primera (del clip a negro).
+    fade.variant = TransitionVariant::Out;
+    CHECK(evaluateTransition(fade, 0).eased < 0.01);
+    CHECK(evaluateTransition(fade, 19).eased <= 0.5);
+    CHECK(evaluateTransition(fade, 19).eased > 0.49);
+    // Corte: entera, como siempre.
+    fade.variant = TransitionVariant::Cut;
+    CHECK(evaluateTransition(fade, 0).eased < 0.01);
+    CHECK(evaluateTransition(fade, 19).eased > 0.99);
+
+    // Un tipo sin variantes no cambia aunque la lleve.
+    TransitionParams zoom = transitionInfo(TransitionType::ZoomIn).defaults;
+    const TransitionState plain = evaluateTransition(zoom, 5);
+    zoom.variant = TransitionVariant::In;
+    CHECK(evaluateTransition(zoom, 5).eased == plain.eased);
+}

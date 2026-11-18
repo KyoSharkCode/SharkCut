@@ -231,8 +231,12 @@ const Transition* Project::transition(ObjectId id) const {
 }
 
 std::int64_t Project::cutOf(const Transition& t) const {
-    const Clip* b = clip(t.to);
-    return b ? b->start : -1;
+    if (t.to != 0) {
+        const Clip* b = clip(t.to);
+        return b ? b->start : -1;
+    }
+    const Clip* a = clip(t.from);
+    return a ? a->end() : -1;
 }
 
 const Transition* Project::transitionAt(std::size_t track, std::int64_t frame) const {
@@ -277,8 +281,10 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
             continue;
         }
         if (const Transition* tr = transitionAt(t, frame)) {
-            const Clip* a = clip(tr->from);
-            const Clip* b = clip(tr->to);
+            // Pegada a un solo clip (entrada o salida): A y B son el mismo clip, y la
+            // variante hace que solo se vea su mitad.
+            const Clip* a = clip(tr->from != 0 ? tr->from : tr->to);
+            const Clip* b = clip(tr->to != 0 ? tr->to : tr->from);
             const MediaItem* itemA = a ? findMedia(a->media) : nullptr;
             const MediaItem* itemB = b ? findMedia(b->media) : nullptr;
             if (itemA && itemB) {
@@ -291,7 +297,7 @@ std::vector<Project::Layer> Project::videoLayersAt(std::int64_t frame) const {
                 layer.clipB = b;
                 layer.mediaB = itemB;
                 layer.mediaFrameB = mediaFrameIndex(*b, frame);
-                layer.transitionFrame = frame - (b->start - tr->before);
+                layer.transitionFrame = frame - (cutOf(*tr) - tr->before);
                 layers.push_back(layer);
                 continue;
             }

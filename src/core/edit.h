@@ -292,6 +292,18 @@ TransitionLimits transitionLimits(const Project& project, ObjectId transition);
 ObjectId addTransition(Project& project, std::size_t track, std::int64_t cut,
                        const TransitionParams& params);
 
+// Pega una transición al inicio (variante In, entrada) o al final (Out, salida) del clip,
+// hacia dentro de él (params.durationFrames, limitado a lo que cabe). Solo tipos con
+// variantes (hasVariants) y clips que leen un medio de una pista de video sin bloquear. Si
+// ese borde ya tenía una, la sustituye y conserva su sonido. Devuelve su id, o 0.
+ObjectId attachTransition(Project& project, ObjectId clip, TransitionVariant variant,
+                          const TransitionParams& params);
+
+// Cambia la variante de una transición de los clips: a entrada o salida, se queda pegada
+// al clip que la lleva (de una de corte, B o A); a corte, va al corte de su borde (si hay
+// un clip pegado al otro lado). Conserva la duración en lo que quepa.
+bool setTransitionVariant(Project& project, ObjectId transition, TransitionVariant variant);
+
 // Quita la transición y, con `withSound`, también su efecto de sonido.
 bool removeTransition(Project& project, ObjectId transition, bool withSound = true);
 

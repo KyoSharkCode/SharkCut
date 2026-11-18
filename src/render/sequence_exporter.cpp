@@ -172,7 +172,10 @@ public:
             out.a = reader(layer.track, *layer.media, 0).at(layer.mediaFrame);
             out.transform = scaled(transformAt(*layer.clip, frame));
             if (layer.transition) {
-                out.b = reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
+                // Pegada a un solo clip (entrada o salida): A y B son el mismo fotograma.
+                out.b = layer.clipB == layer.clip
+                            ? out.a
+                            : reader(layer.track, *layer.mediaB, 1).at(layer.mediaFrameB);
                 out.transformB = scaled(transformAt(*layer.clipB, frame));
                 out.transition = layer.transition->params;
                 out.state = evaluateTransition(layer.transition->params, layer.transitionFrame);

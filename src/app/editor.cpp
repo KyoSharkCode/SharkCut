@@ -64,7 +64,46 @@ namespace {
 // Ajustes de la aplicación (QSettings).
 constexpr auto kExportSettingsKey = "exportar/ajustes";
 constexpr auto kRecentProjectsKey = "proyectos/recientes";
+constexpr auto kTransitionPlacementKey = "transiciones/colocacion";
 constexpr int kMaxRecentProjects = 15;
+
+// Variante de una transición para la interfaz: 0 corte, 1 entrada, 2 salida.
+sharkcut::TransitionVariant variantFromIndex(int index) {
+    switch (index) {
+    case 1:
+        return sharkcut::TransitionVariant::In;
+    case 2:
+        return sharkcut::TransitionVariant::Out;
+    default:
+        return sharkcut::TransitionVariant::Cut;
+    }
+}
+
+int variantIndex(sharkcut::TransitionVariant variant) {
+    switch (variant) {
+    case sharkcut::TransitionVariant::In:
+        return 1;
+    case sharkcut::TransitionVariant::Out:
+        return 2;
+    case sharkcut::TransitionVariant::Cut:
+        break;
+    }
+    return 0;
+}
+
+// Nombre de una transición con su variante si es de entrada o de salida ("Fade to Black ·
+// Entrada").
+QString transitionLabel(const sharkcut::TransitionParams& params) {
+    QString name = QString::fromUtf8(sharkcut::transitionInfo(params.type).name.data(),
+                                     static_cast<qsizetype>(
+                                         sharkcut::transitionInfo(params.type).name.size()));
+    if (params.variant != sharkcut::TransitionVariant::Cut && sharkcut::hasVariants(params.type)) {
+        const std::string_view variant = sharkcut::transitionVariantInfo(params.variant).name;
+        name += QStringLiteral(" · ") +
+                QString::fromUtf8(variant.data(), static_cast<qsizetype>(variant.size()));
+    }
+    return name;
+}
 // Cada cuánto se hace la copia de recuperación (SHARKCUT_AUTOSAVE_MS la cambia, para
 // probarlo).
 int autosaveIntervalMs() {
@@ -487,7 +526,7 @@ QVariantMap Editor::clipEntry(std::size_t track, const Clip& clip) const {
     // Transición-clip: se dibuja como una transición, con su nombre.
     entry[QStringLiteral("effect")] = clip.isEffect();
     if (clip.isEffect()) {
-        entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(clip.effect->type).name);
+        entry[QStringLiteral("name")] = transitionLabel(*clip.effect);
     }
     // Texto libre: se dibuja con su color y con el texto (su primera línea) como nombre.
     entry[QStringLiteral("text")] = clip.isText();
@@ -765,10 +804,12 @@ QVariantMap Editor::selectedClip() const {
         result[QStringLiteral("audio")] = qint64{0};
         result[QStringLiteral("start")] = static_cast<qint64>(first->start);
         result[QStringLiteral("end")] = static_cast<qint64>(first->end());
-        result[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(e.type).name);
+        result[QStringLiteral("name")] = transitionLabel(e);
         result[QStringLiteral("effectClip")] = static_cast<qint64>(first->id);
         result[QStringLiteral("effect")] =
             QVariantMap{{QStringLiteral("typeIndex"), static_cast<int>(e.type)},
+                        {QStringLiteral("variant"), variantIndex(e.variant)},
+                        {QStringLiteral("hasVariants"), sharkcut::hasVariants(e.type)},
                         {QStringLiteral("intensity"), e.intensity},
                         {QStringLiteral("blur"), e.blur},
                         {QStringLiteral("easingIndex"), static_cast<int>(e.easing)},
@@ -3815,7 +3856,8 @@ QVariantList Editor::transitions() const {
             entry[QStringLiteral("cut")] = static_cast<qint64>(p.cutOf(tr));
             entry[QStringLiteral("before")] = static_cast<qint64>(tr.before);
             entry[QStringLiteral("after")] = static_cast<qint64>(tr.after);
-            entry[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(tr.params.type).name);
+            entry[QStringLiteral("name")] = transitionLabel(tr.params);
+            entry[QStringLiteral("variant")] = variantIndex(tr.params.variant);
             entry[QStringLiteral("sound")] = tr.sound != 0;
             entry[QStringLiteral("locked")] = p.tracks[t].locked;
             const sharkcut::TransitionLimits limits = sharkcut::transitionLimits(p, tr.id);
@@ -3869,6 +3911,56 @@ QStringList Editor::transitionSounds() const {
     return names;
 }
 
+QVariantList Editor::transitionCatalog() const {
+    QVariantList list;
+    for (std::size_t i = 0; i < sharkcut::kTransitions.size(); ++i) {
+        const sharkcut::TransitionInfo& info = sharkcut::kTransitions[i];
+        const sharkcut::SoundEffect* effect =
+            sharkcut::soundEffect(sharkcut::defaultSoundFor(info.type));
+        const QString sound = effect ? fromView(effect->name) : QString();
+        const QString group = fromView(info.name);
+        if (sharkcut::hasVariants(info.type)) {
+            for (const sharkcut::TransitionVariantInfo& v : sharkcut::kTransitionVariants) {
+                list.append(QVariantMap{{QStringLiteral("group"), group},
+                                        {QStringLiteral("name"), fromView(v.name)},
+                                        {QStringLiteral("typeIndex"), static_cast<int>(i)},
+                                        {QStringLiteral("variant"), variantIndex(v.variant)},
+                                        {QStringLiteral("sound"), sound}});
+            }
+        } else {
+            list.append(QVariantMap{{QStringLiteral("group"), group},
+                                    {QStringLiteral("name"), group},
+                                    {QStringLiteral("typeIndex"), static_cast<int>(i)},
+                                    {QStringLiteral("variant"), 0},
+                                    {QStringLiteral("sound"), sound}});
+        }
+    }
+    return list;
+}
+
+QStringList Editor::transitionVariantNames() const {
+    QStringList names;
+    for (int i = 0; i < 3; ++i) {
+        names << fromView(sharkcut::transitionVariantInfo(variantFromIndex(i)).name);
+    }
+    return names;
+}
+
+QString Editor::transitionPlacement() const {
+    const QString value =
+        QSettings().value(QLatin1String(kTransitionPlacementKey), QStringLiteral("clip")).toString();
+    return value == QLatin1String("clips") ? value : QStringLiteral("clip");
+}
+
+void Editor::setTransitionPlacement(const QString& placement) {
+    const QString value = placement == QLatin1String("clips") ? placement : QStringLiteral("clip");
+    if (value == transitionPlacement()) {
+        return;
+    }
+    QSettings().setValue(QLatin1String(kTransitionPlacementKey), value);
+    emit transitionPlacementChanged();
+}
+
 QVariantMap Editor::selectedTransition() const {
     const Project& p = project();
     const sharkcut::Transition* t = p.transition(m_selectedTransition);
@@ -3878,7 +3970,9 @@ QVariantMap Editor::selectedTransition() const {
     const auto ref = p.findTransition(t->id);
     QVariantMap result;
     result[QStringLiteral("id")] = static_cast<qint64>(t->id);
-    result[QStringLiteral("name")] = fromView(sharkcut::transitionInfo(t->params.type).name);
+    result[QStringLiteral("name")] = transitionLabel(t->params);
+    result[QStringLiteral("variant")] = variantIndex(t->params.variant);
+    result[QStringLiteral("hasVariants")] = sharkcut::hasVariants(t->params.type);
     result[QStringLiteral("track")] = QString::fromStdString(p.trackName(ref->track));
     result[QStringLiteral("locked")] = p.tracks[ref->track].locked;
     result[QStringLiteral("typeIndex")] = static_cast<int>(t->params.type);
@@ -3966,7 +4060,7 @@ void Editor::addTransition(int track, qint64 cut, int typeIndex) {
     }
 }
 
-void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
+void Editor::addEffectClip(int track, qint64 frame, int typeIndex, int variant) {
     if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
         return;
     }
@@ -3974,7 +4068,7 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
         sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
     ObjectId created = 0;
     edit(QStringLiteral("Añadir transición"), [&](Project& p) {
-        const sharkcut::TransitionParams params = effectParams(p, info);
+        const sharkcut::TransitionParams params = effectParams(p, info, variant);
         const sharkcut::FrameRate rate = p.settings.frameRate;
         std::size_t target = 0;
         if (track >= 0 && static_cast<std::size_t>(track) < p.tracks.size() &&
@@ -4004,9 +4098,15 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
                 }
             }
         }
-        const std::int64_t start = best >= 0
-                                       ? std::max<std::int64_t>(0, best - params.durationFrames / 2)
-                                       : std::max<std::int64_t>(0, frame);
+        // La entrada empieza en ese borde y la salida acaba en él.
+        std::int64_t offset = params.durationFrames / 2;
+        if (params.variant == sharkcut::TransitionVariant::In) {
+            offset = 0;
+        } else if (params.variant == sharkcut::TransitionVariant::Out) {
+            offset = params.durationFrames;
+        }
+        const std::int64_t start = best >= 0 ? std::max<std::int64_t>(0, best - offset)
+                                             : std::max<std::int64_t>(0, frame);
         created = placeEffectWithSound(p, target, start, params);
         return created != 0;
     });
@@ -4015,7 +4115,7 @@ void Editor::addEffectClip(int track, qint64 frame, int typeIndex) {
     }
 }
 
-void Editor::addEffectClipAtPlayhead(int typeIndex) {
+void Editor::addEffectClipAtPlayhead(int typeIndex, int variant) {
     if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
         return;
     }
@@ -4023,10 +4123,16 @@ void Editor::addEffectClipAtPlayhead(int typeIndex) {
         sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
     ObjectId created = 0;
     edit(QStringLiteral("Añadir transición"), [&](Project& p) {
-        const sharkcut::TransitionParams params = effectParams(p, info);
-        // Su punto medio (el del cambio) en el cabezal, haya un corte ahí o no.
-        const std::int64_t start =
+        const sharkcut::TransitionParams params = effectParams(p, info, variant);
+        // Su punto medio (el del cambio) en el cabezal, haya un corte ahí o no; la entrada
+        // empieza en el cabezal y la salida acaba en él.
+        std::int64_t start =
             sharkcut::effectStartCenteredAt(m_currentFrame, params.durationFrames);
+        if (params.variant == sharkcut::TransitionVariant::In) {
+            start = m_currentFrame;
+        } else if (params.variant == sharkcut::TransitionVariant::Out) {
+            start = std::max<std::int64_t>(0, m_currentFrame - params.durationFrames);
+        }
         const std::size_t v1 = p.trackIndex(sharkcut::TrackKind::Video, 0).value_or(0);
         created = placeEffectWithSound(p, v1, start, params);
         return created != 0;
@@ -4037,13 +4143,154 @@ void Editor::addEffectClipAtPlayhead(int typeIndex) {
 }
 
 sharkcut::TransitionParams Editor::effectParams(const Project& p,
-                                                const sharkcut::TransitionInfo& info) {
+                                                const sharkcut::TransitionInfo& info,
+                                                int variant) {
     sharkcut::TransitionParams params = info.defaults;
     // Las duraciones del catálogo son para 60 fps: el mismo tiempo en estos fps.
     const sharkcut::FrameRate rate = p.settings.frameRate;
     params.durationFrames = std::max<std::int64_t>(
         2, sharkcut::mulDiv(info.defaults.durationFrames, rate.num, rate.den * 60));
+    if (sharkcut::hasVariants(info.type)) {
+        params.variant = variantFromIndex(variant);
+    }
     return params;
+}
+
+QVariantMap Editor::attachTarget(int track, qint64 frame, int typeIndex, int variant,
+                                 double maxDistance) const {
+    const Project& p = project();
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(sharkcut::kTransitions.size()) ||
+        track < 0 || static_cast<std::size_t>(track) >= p.tracks.size()) {
+        return {};
+    }
+    const sharkcut::Track& t = p.tracks[static_cast<std::size_t>(track)];
+    if (t.kind != sharkcut::TrackKind::Video || t.locked) {
+        return {};
+    }
+    const sharkcut::TransitionType type =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)].type;
+    const bool variants = sharkcut::hasVariants(type);
+    const sharkcut::TransitionVariant wanted =
+        variants ? variantFromIndex(variant) : sharkcut::TransitionVariant::Cut;
+    // ¿Hay un clip con medio pegado a ese borde (que termine o empiece ahí)?
+    const auto mediaClipAt = [&t](std::int64_t edge, bool ending) -> const Clip* {
+        for (const Clip& c : t.clips) {
+            if (c.hasMedia() && (ending ? c.end() == edge : c.start == edge)) {
+                return &c;
+            }
+        }
+        return nullptr;
+    };
+    QVariantMap best;
+    double distance = maxDistance;
+    const auto consider = [&](std::int64_t edge, const Clip& clip,
+                              sharkcut::TransitionVariant result) {
+        const double d = std::abs(static_cast<double>(edge - frame));
+        if (d <= distance) {
+            distance = d;
+            best = {{QStringLiteral("track"), track},
+                    {QStringLiteral("cut"), static_cast<qint64>(edge)},
+                    {QStringLiteral("clip"), static_cast<qint64>(clip.id)},
+                    {QStringLiteral("variant"), variantIndex(result)}};
+        }
+    };
+    for (const Clip& c : t.clips) {
+        if (!c.hasMedia()) {
+            continue;
+        }
+        // Inicio: entrada de este clip, o corte si el anterior termina ahí.
+        const bool hasPrevious = mediaClipAt(c.start, true) != nullptr;
+        if (wanted == sharkcut::TransitionVariant::In) {
+            consider(c.start, c, sharkcut::TransitionVariant::In);
+        } else if (wanted == sharkcut::TransitionVariant::Cut) {
+            if (hasPrevious) {
+                consider(c.start, c, sharkcut::TransitionVariant::Cut);
+            } else if (variants) {
+                consider(c.start, c, sharkcut::TransitionVariant::In);
+            }
+        }
+        // Final: salida de este clip (el corte con el siguiente ya cuenta en su inicio).
+        const bool hasNext = mediaClipAt(c.end(), false) != nullptr;
+        if (wanted == sharkcut::TransitionVariant::Out ||
+            (wanted == sharkcut::TransitionVariant::Cut && !hasNext && variants)) {
+            consider(c.end(), c, sharkcut::TransitionVariant::Out);
+        }
+    }
+    return best;
+}
+
+void Editor::attachTransitionAt(const QVariantMap& target, int typeIndex) {
+    if (target.isEmpty() || typeIndex < 0 ||
+        typeIndex >= static_cast<int>(sharkcut::kTransitions.size())) {
+        return;
+    }
+    const int variant = target.value(QStringLiteral("variant")).toInt();
+    const int track = target.value(QStringLiteral("track")).toInt();
+    if (variantFromIndex(variant) == sharkcut::TransitionVariant::Cut) {
+        addTransition(track, target.value(QStringLiteral("cut")).toLongLong(), typeIndex);
+        return;
+    }
+    const auto clip = static_cast<ObjectId>(target.value(QStringLiteral("clip")).toLongLong());
+    const sharkcut::TransitionInfo& info =
+        sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    ObjectId created = 0;
+    const bool added = edit(QStringLiteral("Añadir transición"), [&](Project& p) {
+        const sharkcut::TransitionParams params = effectParams(p, info, variant);
+        created = sharkcut::attachTransition(p, clip, params.variant, params);
+        if (created == 0) {
+            return false;
+        }
+        const std::string_view sound = sharkcut::defaultSoundFor(info.type);
+        if (!sound.empty()) {
+            placeSound(p, created, sound);
+        }
+        return true;
+    });
+    if (added) {
+        m_selection.clear();
+        m_selectedCaptions.clear();
+        m_selectedTransition = created;
+        emit selectionChanged();
+    } else {
+        setError(QStringLiteral("Esa transición no cabe en ese borde del clip"));
+    }
+}
+
+void Editor::attachTransitionAtPlayhead(int typeIndex, int variant) {
+    const Project& p = project();
+    const sharkcut::FrameRate rate = p.settings.frameRate;
+    const double reach = static_cast<double>(rate.num) / (2.0 * rate.den); // medio segundo
+    // De la pista de video más alta a V1.
+    for (std::size_t i = p.tracks.size(); i-- > 0;) {
+        if (p.tracks[i].kind != sharkcut::TrackKind::Video) {
+            continue;
+        }
+        const QVariantMap target =
+            attachTarget(static_cast<int>(i), m_currentFrame, typeIndex, variant, reach);
+        if (!target.isEmpty()) {
+            attachTransitionAt(target, typeIndex);
+            return;
+        }
+    }
+    setError(QStringLiteral("Pon el cabezal cerca del inicio, del final o de un corte de un clip "
+                            "para pegarle la transición"));
+}
+
+void Editor::setTransitionVariant(qint64 id, int variant) {
+    const auto transition = static_cast<ObjectId>(id);
+    const sharkcut::TransitionVariant v = variantFromIndex(variant);
+    const sharkcut::Transition* t = project().transition(transition);
+    if (!t || t->params.variant == v) {
+        return;
+    }
+    if (!edit(QStringLiteral("Variante de la transición"), [transition, v](Project& p) {
+            return sharkcut::setTransitionVariant(p, transition, v);
+        })) {
+        setError(v == sharkcut::TransitionVariant::Cut
+                     ? QStringLiteral("Para que sea de corte hace falta otro clip pegado a ese "
+                                      "borde")
+                     : QStringLiteral("Esa variante no cabe en el clip"));
+    }
 }
 
 ObjectId Editor::placeEffectWithSound(Project& p, std::size_t track, std::int64_t start,
@@ -4210,11 +4457,18 @@ void Editor::setEffectClip(qint64 clipId, const QVariantMap& values) {
         const int type = values.value(QStringLiteral("typeIndex")).toInt();
         if (type >= 0 && type < static_cast<int>(sharkcut::kTransitions.size()) &&
             type != static_cast<int>(params.type)) {
-            // Otro tipo: con sus valores, la misma duración.
+            // Otro tipo: con sus valores, la misma duración (y la variante, si la tiene).
             const std::int64_t duration = params.durationFrames;
+            const sharkcut::TransitionVariant variant = params.variant;
             params = sharkcut::kTransitions[static_cast<std::size_t>(type)].defaults;
             params.durationFrames = duration;
+            if (sharkcut::hasVariants(params.type)) {
+                params.variant = variant;
+            }
         }
+    }
+    if (values.contains(QStringLiteral("variant")) && sharkcut::hasVariants(params.type)) {
+        params.variant = variantFromIndex(values.value(QStringLiteral("variant")).toInt());
     }
     if (values.contains(QStringLiteral("intensity"))) {
         params.intensity = values.value(QStringLiteral("intensity")).toDouble();
@@ -4264,6 +4518,13 @@ void Editor::setTransitionType(qint64 id, int typeIndex) {
     const auto transition = static_cast<ObjectId>(id);
     const sharkcut::TransitionInfo& info =
         sharkcut::kTransitions[static_cast<std::size_t>(typeIndex)];
+    if (const sharkcut::Transition* t = project().transition(transition);
+        t && t->params.variant != sharkcut::TransitionVariant::Cut &&
+        !sharkcut::hasVariants(info.type)) {
+        setError(QStringLiteral("Al inicio o al final de un clip solo puede ir una transición con "
+                                "entrada y salida (por ahora, Fade)"));
+        return;
+    }
     edit(QStringLiteral("Tipo de transición"), [&](Project& p) {
         const sharkcut::Transition* t = p.transition(transition);
         if (!t || t->params.type == info.type) {

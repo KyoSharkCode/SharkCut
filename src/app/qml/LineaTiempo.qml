@@ -50,7 +50,7 @@ Rectangle {
     // Zona vacía donde se suelta un medio para crear pistas nuevas: "", "video" (encima de
     // la última de video) o "audio" (debajo de la última de audio).
     property string zonaNueva: ""
-    property var corteSoltar: null // {track, cut} donde caería una transición
+    property var corteSoltar: null // {track, cut, clip, variant} donde caería una transición
 
     property real escala: 0.5 // píxeles por fotograma
     // Con otros fps (otra secuencia, o los de esta cambiados), el mismo zoom en segundos.
@@ -1672,10 +1672,13 @@ Rectangle {
                             color: Theme.acento
                             z: 4
                         }
-                        // Dónde caerá una transición: el corte más cercano.
+                        // Dónde caerá una transición pegada a los clips: en el corte, centrada;
+                        // una entrada, después del borde, y una salida, antes.
                         Rectangle {
                             visible: raiz.corteSoltar !== null
-                            x: raiz.corteSoltar ? raiz.corteSoltar.cut * raiz.escala - 12 : 0
+                            x: !raiz.corteSoltar ? 0
+                               : raiz.corteSoltar.cut * raiz.escala
+                                 - (raiz.corteSoltar.variant === 1 ? 0 : raiz.corteSoltar.variant === 2 ? 24 : 12)
                             y: raiz.corteSoltar ? raiz.yDePista(raiz.corteSoltar.track) + 4 : 0
                             width: 24
                             height: raiz.corteSoltar ? raiz.altoDePista(raiz.corteSoltar.track) - 8 : 0
@@ -1738,6 +1741,18 @@ Rectangle {
                                     raiz.pistaSoltar = p && p.video ? p.index : -1
                                     return
                                 }
+                                if (esTransicion(d) && raiz.editor.transitionPlacement === "clips") {
+                                    // Pegada a los clips: el borde donde caería (y su variante).
+                                    const destino = p && p.video && d.source
+                                        ? raiz.editor.attachTarget(p.index, raiz.frameEn(d.x),
+                                                                   d.source.transicion,
+                                                                   d.source.variante, 60 / raiz.escala)
+                                        : null
+                                    raiz.corteSoltar = destino && destino.cut !== undefined ? destino : null
+                                    raiz.marcaSoltar = -1
+                                    raiz.pistaSoltar = p && p.video ? p.index : -1
+                                    return
+                                }
                                 if (esTransicion(d)) {
                                     // Transición como clip: dónde se suelta (se centra en el
                                     // corte más cercano al soltarla).
@@ -1786,11 +1801,17 @@ Rectangle {
                                         Qt.callLater(raiz.editor.addText, p && p.video ? p.index : -1,
                                                      f, d.source.ajusteTexto)
                                     d.accept()
+                                } else if (esTransicion(d) && raiz.editor.transitionPlacement === "clips") {
+                                    // Pegada a los clips, en el borde que se marcaba.
+                                    if (d.source && corte !== null)
+                                        Qt.callLater(raiz.editor.attachTransitionAt, corte, d.source.transicion)
+                                    d.accept()
                                 } else if (esTransicion(d)) {
                                     // Una transición-clip: afecta a todo lo que hay debajo.
                                     if (d.source)
                                         Qt.callLater(raiz.editor.addEffectClip, p && p.video ? p.index : -1,
-                                                     raiz.frameEn(d.x), d.source.transicion)
+                                                     raiz.frameEn(d.x), d.source.transicion,
+                                                     d.source.variante)
                                     d.accept()
                                 } else if (d.hasUrls && d.urls.length > 0) {
                                     raiz.editor.importFiles(d.urls, f, pista)

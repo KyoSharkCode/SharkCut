@@ -1256,6 +1256,7 @@ Window {
         id: fantasma
         property var mediaId: undefined
         property int transicion: -1 // índice del catálogo si se arrastra una transición
+        property int variante: 0    // y su variante (0 corte, 1 entrada, 2 salida)
         property string efecto      // nombre del efecto si se arrastra uno ("croma")
         property string sonido      // id del efecto de sonido si se arrastra uno
         property string ajusteTexto // estilo guardado de un texto que se arrastra ("": el de siempre)

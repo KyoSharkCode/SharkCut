@@ -82,8 +82,35 @@ TEST_CASE("Project survives a save and load round trip", "[project]") {
 
 TEST_CASE("Project file has a version field", "[project]") {
     const std::string json = projectToJson(Project{}, {});
-    CHECK(json.find("\"version\": 12") != std::string::npos);
+    CHECK(json.find("\"version\": 13") != std::string::npos);
     CHECK(sameContent(projectFromJson(json, {}), Project{}));
+}
+
+TEST_CASE("Track heights are kept, limited and saved", "[project][tracks]") {
+    Project p = sampleProject("/no/existe.mp4");
+    REQUIRE(p.tracks.size() >= 2);
+    CHECK(p.tracks[0].height == kDefaultTrackHeight);
+
+    CHECK(setTrackHeight(p, 0, 120));
+    CHECK_FALSE(setTrackHeight(p, 0, 120)); // sin cambios
+    CHECK(setTrackHeight(p, 1, 5000));
+    CHECK(p.tracks[1].height == kMaxTrackHeight);
+    CHECK_FALSE(setTrackHeight(p, 99, 80));
+
+    CHECK(resizeAllTracks(p, -1000));
+    for (const Track& t : p.tracks) {
+        CHECK(t.height == kMinTrackHeight);
+    }
+    CHECK_FALSE(resizeAllTracks(p, -10)); // ya están en el mínimo
+    CHECK(resizeAllTracks(p, 20));
+
+    const Project loaded = projectFromJson(projectToJson(p, {}), {});
+    CHECK(sameContent(loaded, p));
+    CHECK(loaded.tracks[0].height == kMinTrackHeight + 20);
+
+    // Sin el campo (archivos anteriores) cada pista tiene el alto de siempre.
+    const Project old = projectFromJson(projectToJson(sampleProject("/no/existe.mp4"), {}), {});
+    CHECK(old.tracks[0].height == kDefaultTrackHeight);
 }
 
 TEST_CASE("Moved projects find their media by relative path", "[project]") {
@@ -109,7 +136,7 @@ TEST_CASE("Invalid project files are rejected", "[project]") {
     CHECK_THROWS_AS(projectFromJson("{}", {}), ProjectError);
 
     std::string newer = valid;
-    newer.replace(newer.find("\"version\": 12"), 13, "\"version\": 99");
+    newer.replace(newer.find("\"version\": 13"), 13, "\"version\": 99");
     CHECK_THROWS_AS(projectFromJson(newer, {}), ProjectError);
 
     // Clips solapados.

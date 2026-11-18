@@ -304,6 +304,11 @@ struct Transition {
     friend bool operator==(const Transition&, const Transition&) = default;
 };
 
+// Alto de una pista en la línea de tiempo: se guarda con la secuencia.
+inline constexpr int kDefaultTrackHeight = 50;
+inline constexpr int kMinTrackHeight = 30;
+inline constexpr int kMaxTrackHeight = 200;
+
 struct Track {
     TrackKind kind = TrackKind::Video;
     std::vector<Clip> clips;               // ordenados por `start` y sin solaparse
@@ -311,6 +316,7 @@ struct Track {
     bool hidden = false;                   // video: no se ve (ni en la vista previa ni al exportar)
     bool muted = false;                    // audio: no suena
     bool locked = false;                   // sus clips no se pueden editar
+    int height = kDefaultTrackHeight;      // alto en la línea de tiempo (px de la interfaz)
 
     friend bool operator==(const Track&, const Track&) = default;
 };

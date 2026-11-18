@@ -34,6 +34,10 @@ QtObject {
     readonly property color clipTexto: "#9C8340"
     // Marcadores de la secuencia, en la regla
     readonly property color marcador: "#E5B94E"
+    // Guía de unión: dos bordes juntos mientras se arrastra (espuma, clara sobre los clips)
+    readonly property color guiaUnion: "#C9E6F2"
+    // Tramo entre dos keyframes iguales (nada cambia ahí): oro de luna
+    readonly property color keyframeIgual: "#F4C542"
     // Versiones claras para iconos de tipo de medio sobre fondos oscuros
     readonly property color clipVideoClaro: "#7FA2DA"
     readonly property color clipAudioClaro: "#6FC1B8"

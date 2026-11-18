@@ -333,6 +333,25 @@ bool setTrackLocked(Project& project, std::size_t track, bool locked) {
     return true;
 }
 
+bool setTrackHeight(Project& project, std::size_t track, int height) {
+    height = std::clamp(height, kMinTrackHeight, kMaxTrackHeight);
+    if (track >= project.tracks.size() || project.tracks[track].height == height) {
+        return false;
+    }
+    project.tracks[track].height = height;
+    return true;
+}
+
+bool resizeAllTracks(Project& project, int delta) {
+    bool changed = false;
+    for (Track& track : project.tracks) {
+        const int height = std::clamp(track.height + delta, kMinTrackHeight, kMaxTrackHeight);
+        changed = changed || height != track.height;
+        track.height = height;
+    }
+    return changed;
+}
+
 // --- Clips ------------------------------------------------------------------------
 
 ObjectId placeClip(Project& project, ObjectId media, std::int64_t start, std::int64_t in,
@@ -726,6 +745,54 @@ bool trimEnd(Project& project, ObjectId clip, std::int64_t end) {
     }
     fixLinks(project, {});
     return true;
+}
+
+std::vector<std::int64_t> joinFrames(const Project& project,
+                                     const std::vector<std::int64_t>& edges,
+                                     const std::vector<std::int64_t>& doubledCenters,
+                                     const std::vector<ObjectId>& exclude) {
+    const auto excluded = [&](ObjectId id) {
+        return std::find(exclude.begin(), exclude.end(), id) != exclude.end();
+    };
+    // ¿Empieza o acaba en `frame` algún clip (que no se mueve) de alguna pista? Cada pista
+    // está ordenada y sin solapes: sus inicios y sus finales están ordenados.
+    const auto isEdge = [&](std::int64_t frame) {
+        for (const Track& track : project.tracks) {
+            const auto& clips = track.clips;
+            auto s = std::lower_bound(clips.begin(), clips.end(), frame,
+                                      [](const Clip& c, std::int64_t f) { return c.start < f; });
+            if (s != clips.end() && s->start == frame && !excluded(s->id)) {
+                return true;
+            }
+            auto e = std::lower_bound(clips.begin(), clips.end(), frame,
+                                      [](const Clip& c, std::int64_t f) { return c.end() < f; });
+            if (e != clips.end() && e->end() == frame && !excluded(e->id)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<std::int64_t> result;
+    for (std::int64_t edge : edges) {
+        if (isEdge(edge)) {
+            result.push_back(edge);
+        }
+    }
+    for (std::int64_t center : doubledCenters) {
+        if (center < 0) {
+            continue;
+        }
+        // Par: el centro cae en un borde de fotograma; impar: entre dos, a medio fotograma.
+        const std::int64_t below = center / 2;
+        for (std::int64_t frame : {below, center % 2 == 0 ? below : below + 1}) {
+            if (isEdge(frame)) {
+                result.push_back(frame);
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
 }
 
 std::int64_t limitMove(const Project& project, const std::vector<ObjectId>& clips,

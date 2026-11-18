@@ -365,6 +365,9 @@ Window {
     Shortcut { sequences: ["+", "="]; enabled: ventana.enEditor; onActivated: lineaTiempo.acercar() }
     Shortcut { sequence: "-"; enabled: ventana.enEditor; onActivated: lineaTiempo.alejar() }
     Shortcut { sequence: "\\"; enabled: ventana.enEditor; onActivated: lineaTiempo.encajar() }
+    // Alto de todas las pistas (Ctrl + rueda sobre una cabecera cambia solo esa).
+    Shortcut { sequences: ["Alt++", "Alt+="]; enabled: ventana.enEditor; onActivated: lineaTiempo.altoDeTodas(1) }
+    Shortcut { sequence: "Alt+-"; enabled: ventana.enEditor; onActivated: lineaTiempo.altoDeTodas(-1) }
     Shortcut { sequence: "Ctrl+I"; enabled: ventana.enEditor; onActivated: dialogoImportar.open() }
 
     ColumnLayout {

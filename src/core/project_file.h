@@ -31,8 +31,9 @@ namespace sharkcut {
 // 10: imágenes fijas (media.still; sus clips pueden tener `in` negativo). 11: colores
 // sólidos (medios con ruta "sharkcut-color:…") y tinte (transform.effects.tint*). 12: textos
 // libres (clip.text, sin medio) y pista de audio del archivo de cada clip
-// (clip.audioStream). Abre también la 1 a la 11.
-inline constexpr int kProjectFileVersion = 12;
+// (clip.audioStream). 13: alto de cada pista (track.height) y variante de las transiciones
+// (entrada, salida o corte). Abre también la 1 a la 12.
+inline constexpr int kProjectFileVersion = 13;
 inline constexpr std::string_view kProjectExtension = ".sharkp";
 
 class ProjectError : public std::runtime_error {

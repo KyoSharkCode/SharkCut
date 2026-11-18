@@ -234,3 +234,27 @@ TEST_CASE("An effect clip can be centred exactly on the playhead", "[effects]") 
     // Al principio de la secuencia no empieza antes del 0.
     CHECK(effectStartCenteredAt(5, 30) == 0);
 }
+
+TEST_CASE("Join guides show edges that touch and centered effect clips", "[effects][guides]") {
+    TwoCuts s;
+    const Project& p = s.p;
+    const ObjectId first = p.tracks[kVideoTrack].clips[0].id;
+    const ObjectId second = p.tracks[kVideoTrack].clips[1].id;
+
+    // Un borde que cae justo en el corte (fin del primero = inicio del segundo).
+    CHECK(joinFrames(p, {300}, {}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {300}, {}, {second}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {300}, {}, {first, second}).empty());
+    // Con un hueco o pisando el otro clip, no hay guía.
+    CHECK(joinFrames(p, {310, 290}, {}, {}).empty());
+    // Inicio de la secuencia y final del último clip.
+    CHECK(joinFrames(p, {0, 600, 700}, {}, {}) == std::vector<std::int64_t>{0, 600});
+
+    // Centro de una transición: 285–315 está centrada en el corte; 286–316, no.
+    CHECK(joinFrames(p, {}, {2 * 285 + 30}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 286 + 30}, {}).empty());
+    // Con una duración impar basta con quedar a medio fotograma del corte.
+    CHECK(joinFrames(p, {}, {2 * 285 + 31}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 284 + 31}, {}) == std::vector<std::int64_t>{300});
+    CHECK(joinFrames(p, {}, {2 * 283 + 31}, {}).empty());
+}

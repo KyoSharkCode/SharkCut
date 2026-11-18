@@ -412,6 +412,10 @@ public:
     Q_INVOKABLE void setTrackHidden(int track, bool hidden);
     Q_INVOKABLE void setTrackMuted(int track, bool muted);
     Q_INVOKABLE void setTrackLocked(int track, bool locked);
+    // Alto de una pista en la línea de tiempo (se guarda con la secuencia; se deshace).
+    Q_INVOKABLE void setTrackHeight(int track, int height);
+    // Todas las pistas más altas (delta > 0) o más bajas.
+    Q_INVOKABLE void resizeAllTracks(int delta);
 
     // --- Edición ---
     // Coloca el medio entero en `frame` (sobrescribiendo); `frame` < 0: al final.
@@ -637,6 +641,13 @@ public:
     // `withPlayhead` = false al mover el propio cabezal.
     Q_INVOKABLE qint64 snapFrame(qint64 frame, const QVariantList& exclude, double maxDistance,
                                  bool withPlayhead = true) const;
+    // Guía de unión (sharkcut::joinFrames): fotogramas donde el grupo `clips`, movido
+    // `delta`, queda borde con borde con otro clip (o el centro de una transición-clip
+    // sobre un borde). trimGuides: lo mismo al recortar el inicio (`atStart`) o el final de
+    // `clipId` hasta `frame` (`clips`: él y sus enlazados, que no cuentan).
+    Q_INVOKABLE QVariantList moveGuides(const QVariantList& clips, qint64 delta) const;
+    Q_INVOKABLE QVariantList trimGuides(qint64 clipId, bool atStart, qint64 frame,
+                                        const QVariantList& clips) const;
     // Corte (fin de un clip = inicio del siguiente) de la pista más cercano a `frame`, a
     // menos de `maxDistance` fotogramas: {track, cut}, o un mapa vacío.
     Q_INVOKABLE QVariantMap nearestCut(int track, qint64 frame, double maxDistance) const;

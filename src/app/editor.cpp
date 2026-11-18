@@ -565,6 +565,58 @@ qint64 Editor::snapFrame(qint64 frame, const QVariantList& exclude, double maxDi
     return best;
 }
 
+namespace {
+
+std::vector<ObjectId> idsOf(const QVariantList& list) {
+    std::vector<ObjectId> ids;
+    ids.reserve(static_cast<std::size_t>(list.size()));
+    for (const QVariant& v : list) {
+        ids.push_back(static_cast<ObjectId>(v.toLongLong()));
+    }
+    return ids;
+}
+
+QVariantList framesToList(const std::vector<std::int64_t>& frames) {
+    QVariantList list;
+    for (std::int64_t f : frames) {
+        list.append(static_cast<qint64>(f));
+    }
+    return list;
+}
+
+} // namespace
+
+QVariantList Editor::moveGuides(const QVariantList& clips, qint64 delta) const {
+    const Project& p = project();
+    const std::vector<ObjectId> ids = idsOf(clips);
+    std::vector<std::int64_t> edges;
+    std::vector<std::int64_t> centers;
+    for (ObjectId id : ids) {
+        if (const Clip* clip = p.clip(id)) {
+            edges.push_back(clip->start + delta);
+            edges.push_back(clip->end() + delta);
+            if (clip->isEffect()) {
+                centers.push_back(2 * (clip->start + delta) + clip->length);
+            }
+        }
+    }
+    return framesToList(sharkcut::joinFrames(p, edges, centers, ids));
+}
+
+QVariantList Editor::trimGuides(qint64 clipId, bool atStart, qint64 frame,
+                                const QVariantList& clips) const {
+    const Project& p = project();
+    const Clip* clip = p.clip(static_cast<ObjectId>(clipId));
+    if (clip == nullptr) {
+        return {};
+    }
+    std::vector<std::int64_t> centers;
+    if (clip->isEffect()) {
+        centers.push_back(atStart ? frame + clip->end() : clip->start + frame);
+    }
+    return framesToList(sharkcut::joinFrames(p, {frame}, centers, idsOf(clips)));
+}
+
 QVariantMap Editor::nearestCut(int track, qint64 frame, double maxDistance) const {
     const Project& p = project();
     if (track < 0 || static_cast<std::size_t>(track) >= p.tracks.size()) {
@@ -652,6 +704,7 @@ QVariantList Editor::tracks() const {
         entry[QStringLiteral("hidden")] = track.hidden;
         entry[QStringLiteral("muted")] = track.muted;
         entry[QStringLiteral("locked")] = track.locked;
+        entry[QStringLiteral("height")] = track.height;
         entry[QStringLiteral("empty")] = track.clips.empty();
         list.append(entry);
     }
@@ -2802,6 +2855,17 @@ void Editor::setTrackLocked(int track, bool locked) {
              return track >= 0 &&
                     sharkcut::setTrackLocked(p, static_cast<std::size_t>(track), locked);
          });
+}
+
+void Editor::setTrackHeight(int track, int height) {
+    edit(QStringLiteral("Alto de la pista"), [track, height](Project& p) {
+        return track >= 0 && sharkcut::setTrackHeight(p, static_cast<std::size_t>(track), height);
+    });
+}
+
+void Editor::resizeAllTracks(int delta) {
+    edit(delta > 0 ? QStringLiteral("Pistas más altas") : QStringLiteral("Pistas más bajas"),
+         [delta](Project& p) { return sharkcut::resizeAllTracks(p, delta); });
 }
 
 // --- Clips --------------------------------------------------------------------------

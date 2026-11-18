@@ -612,6 +612,9 @@ json tracksToJson(const std::vector<Track>& tracks) {
         if (track.locked) {
             entry["locked"] = true;
         }
+        if (track.height != kDefaultTrackHeight) {
+            entry["height"] = track.height;
+        }
         if (!track.transitions.empty()) {
             json transitions = json::array();
             for (const Transition& t : track.transitions) {
@@ -639,6 +642,8 @@ std::vector<Track> tracksFromJson(const json& value) {
         track.hidden = track.kind == TrackKind::Video && entry.value("hidden", false);
         track.muted = track.kind == TrackKind::Audio && entry.value("muted", false);
         track.locked = entry.value("locked", false);
+        track.height = std::clamp(entry.value("height", kDefaultTrackHeight), kMinTrackHeight,
+                                  kMaxTrackHeight);
         for (const json& c : entry.at("clips")) {
             Clip clip;
             clip.id = c.at("id").get<ObjectId>();

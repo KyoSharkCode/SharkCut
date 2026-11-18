@@ -13,7 +13,9 @@ import SharkCut
 //
 // Cabecera de cada pista: ocultar (video) o silenciar (audio) y bloquear. Clic derecho:
 // añadir o quitar pistas (y, sobre un hueco, cerrarlo). Rueda: desplazar en el tiempo;
-// sobre las cabeceras o con Alt, desplazar entre pistas; con Ctrl, zoom.
+// sobre las cabeceras o con Alt, desplazar entre pistas; con Ctrl, zoom (sobre las
+// cabeceras, el alto de esa pista). El borde inferior de una cabecera se arrastra para
+// cambiar el alto de la pista; Alt++ y Alt+− cambian el de todas.
 //
 // Regla: marcadores (M). Encima de la última pista de video y debajo de la última de
 // audio hay una zona vacía: soltar ahí un medio crea pistas nuevas para él.
@@ -31,6 +33,18 @@ Rectangle {
     // {tipo: "mover" | "inicio" | "final", grupo: [ids], delta, valor, pistas, video}
     // (`pistas`: cambio de pista de los clips del tipo `video` al mover)
     property var arrastre: null
+    // Guía de unión: fotogramas donde lo que se arrastra queda borde con borde con otro
+    // clip (o el centro de una transición-clip sobre un corte). Solo durante el arrastre.
+    readonly property var guiasUnion: {
+        const a = arrastre
+        if (a === null || !editor)
+            return []
+        if (a.tipo === "mover")
+            return editor.moveGuides(a.grupo, a.delta)
+        if (a.tipo === "inicio" || a.tipo === "final")
+            return editor.trimGuides(a.id, a.tipo === "inicio", a.valor, a.grupo)
+        return []
+    }
     property real marcaSoltar: -1 // fotograma donde caería lo que se arrastra encima
     property int pistaSoltar: -1  // pista donde caería
     // Zona vacía donde se suelta un medio para crear pistas nuevas: "", "video" (encima de
@@ -52,7 +66,9 @@ Rectangle {
         Math.max(0.0005, (vista.width - 40) / Math.max(editor.frameCount, editor.fps * 10)))
 
     readonly property int alturaRegla: 26
-    readonly property int alturaPista: 50
+    readonly property int alturaPista: 50 // alto de una pista por defecto (cada una tiene el suyo)
+    readonly property int alturaMinima: 30
+    readonly property int alturaMaxima: 200
     readonly property int separacion: 4
     readonly property int separacionGrupos: 10 // entre las pistas de video y las de audio
     readonly property int filasVisibles: 6      // más pistas: desplazamiento vertical
@@ -87,7 +103,45 @@ Rectangle {
     // Arrastre de subtítulos: {tipo: "mover" | "inicio" | "final", id, grupo, delta, valor}
     property var arrastreSub: null
 
-    // Filas en pantalla, de arriba abajo: {pista, y} (y relativa a la primera fila).
+    // Alto de cada pista mientras se cambia (arrastrando el borde de su cabecera o con
+    // Ctrl + rueda): {índice: alto}. Al soltar (o al parar la rueda) se guarda en el
+    // proyecto como un paso de deshacer y se vacía.
+    property var altosEnCurso: ({})
+    function altoDe(pista) {
+        const enCurso = altosEnCurso[pista.index]
+        return enCurso !== undefined ? enCurso : (pista.height || alturaPista)
+    }
+    function cambiarAltoEnCurso(indice, alto) {
+        const mapa = Object.assign({}, altosEnCurso)
+        mapa[indice] = Math.max(alturaMinima, Math.min(alturaMaxima, Math.round(alto)))
+        altosEnCurso = mapa
+    }
+    function guardarAltos() {
+        const mapa = altosEnCurso
+        altosEnCurso = ({})
+        for (const indice in mapa) {
+            const pista = editor.tracks[indice]
+            if (pista && pista.height !== mapa[indice])
+                editor.setTrackHeight(Number(indice), mapa[indice])
+        }
+    }
+    // Ctrl + rueda sobre una cabecera: cambia su alto; se guarda cuando la rueda se para.
+    function altoConRueda(pista, pasos) {
+        cambiarAltoEnCurso(pista.index, altoDe(pista) + pasos * 8)
+        temporizadorAltos.restart()
+    }
+    // Todas las pistas más altas (1) o más bajas (-1): atajo Alt + «+» / Alt + «−».
+    function altoDeTodas(sentido) {
+        guardarAltos()
+        editor.resizeAllTracks(sentido * 10)
+    }
+    Timer {
+        id: temporizadorAltos
+        interval: 400
+        onTriggered: raiz.guardarAltos()
+    }
+
+    // Filas en pantalla, de arriba abajo: {pista, y, alto} (y relativa a la primera fila).
     readonly property var filas: {
         const pistas = editor.tracks
         const videos = pistas.filter((p) => p.video).reverse()
@@ -95,24 +149,35 @@ Rectangle {
         const lista = []
         let y = altoSubtitulos + bandaNueva
         for (const p of videos) {
-            lista.push({ pista: p, y: y })
-            y += alturaPista + separacion
+            const alto = altoDe(p)
+            lista.push({ pista: p, y: y, alto: alto })
+            y += alto + separacion
         }
         y += separacionGrupos - separacion
         for (const p of audios) {
-            lista.push({ pista: p, y: y })
-            y += alturaPista + separacion
+            const alto = altoDe(p)
+            lista.push({ pista: p, y: y, alto: alto })
+            y += alto + separacion
         }
         return lista
     }
     readonly property real altoPistas: filas.length > 0
-        ? filas[filas.length - 1].y + alturaPista + bandaNueva : 0
+        ? filas[filas.length - 1].y + filas[filas.length - 1].alto + bandaNueva : 0
     readonly property real yPrimeraFila: alturaRegla + separacion
     readonly property var yPorPista: {
         const mapa = {}
         for (const f of filas)
             mapa[f.pista.index] = f.y
         return mapa
+    }
+    readonly property var altoPorPista: {
+        const mapa = {}
+        for (const f of filas)
+            mapa[f.pista.index] = f.alto
+        return mapa
+    }
+    function altoDePista(indice) {
+        return altoPorPista[indice] !== undefined ? altoPorPista[indice] : alturaPista
     }
 
     color: Theme.panel
@@ -150,7 +215,7 @@ Rectangle {
         const pistas = []
         for (const f of filas) {
             const y = yPrimeraFila + f.y
-            if (y < m.y1 && y + alturaPista > m.y0)
+            if (y < m.y1 && y + f.alto > m.y0)
                 pistas.push(f.pista.index)
         }
         const subtitulos = []
@@ -246,7 +311,8 @@ Rectangle {
             return ""
         if (y < filas[0].y - separacion)
             return "video"
-        if (y > filas[filas.length - 1].y + alturaPista + separacion)
+        const ultima = filas[filas.length - 1]
+        if (y > ultima.y + ultima.alto + separacion)
             return "audio"
         return ""
     }
@@ -255,7 +321,7 @@ Rectangle {
     function pistaEnY(yContenido) {
         const y = yContenido - yPrimeraFila
         for (const f of filas) {
-            if (y >= f.y - separacion && y < f.y + alturaPista + separacion)
+            if (y >= f.y - separacion && y < f.y + f.alto + separacion)
                 return f.pista
         }
         return null
@@ -543,7 +609,7 @@ Rectangle {
                                 required property var modelData
                                 pista: modelData.pista
                                 y: raiz.yPrimeraFila + modelData.y
-                                height: raiz.alturaPista
+                                height: modelData.alto
                             }
                         }
                         Repeater {
@@ -593,6 +659,15 @@ Rectangle {
                         acceptedModifiers: Qt.NoModifier
                         onWheel: (e) => raiz.desplazarPistas(e.angleDelta.y)
                     }
+                    // Ctrl + rueda sobre una cabecera: más alta o más baja esa pista.
+                    WheelHandler {
+                        acceptedModifiers: Qt.ControlModifier
+                        onWheel: (e) => {
+                            const pista = raiz.pistaEnY(e.y + vista.contentY)
+                            if (pista && e.angleDelta.y !== 0)
+                                raiz.altoConRueda(pista, e.angleDelta.y > 0 ? 1 : -1)
+                        }
+                    }
                 }
 
                 Flickable {
@@ -623,7 +698,7 @@ Rectangle {
                                 required property var modelData
                                 y: raiz.yPrimeraFila + modelData.y
                                 width: contenido.width
-                                height: raiz.alturaPista
+                                height: modelData.alto
                                 readonly property color base: modelData.pista.video
                                                               ? Theme.pistaVideo : Theme.pistaAudio
                                 color: raiz.pistaSoltar === modelData.pista.index
@@ -1009,7 +1084,7 @@ Rectangle {
                                 y: raiz.yDePista(pistaVista)
                                 z: enArrastre ? 2 : 1
                                 width: Math.max(2, (finVista - inicioVista) * raiz.escala)
-                                height: raiz.alturaPista
+                                height: raiz.altoDePista(pistaVista)
                                 radius: 3
                                 color: {
                                     const base = elemento.modelData.effect ? Theme.clipTransicion
@@ -1413,8 +1488,8 @@ Rectangle {
                                             let f = raiz.ajustar(base + Math.round(dx / raiz.escala), grupo)
                                             f = lado === "inicio" ? raiz.editor.limitTrimStart(c.id, f)
                                                                   : raiz.editor.limitTrimEnd(c.id, f)
-                                            raiz.arrastre = { tipo: lado, grupo: grupo, delta: 0, valor: f,
-                                                              pistas: 0, video: elemento.esVideo }
+                                            raiz.arrastre = { tipo: lado, id: c.id, grupo: grupo, delta: 0,
+                                                              valor: f, pistas: 0, video: elemento.esVideo }
                                         })
                                         onReleased: {
                                             const a = raiz.arrastre
@@ -1454,7 +1529,7 @@ Rectangle {
                                               : modelData.cut * raiz.escala - 4
                                 width: Math.max(8, ancho)
                                 y: raiz.yDePista(modelData.track) + 8
-                                height: raiz.alturaPista - 16
+                                height: raiz.altoDePista(modelData.track) - 16
                                 z: 3
                                 radius: 4
                                 color: seleccionada ? Qt.lighter(Theme.clipTransicion, 1.25)
@@ -1554,6 +1629,22 @@ Rectangle {
                             }
                         }
 
+                        // Guía de unión: cruza todas las pistas donde lo que se arrastra
+                        // queda junto a otro clip (si no sale, hay un hueco o se pisan).
+                        Repeater {
+                            model: raiz.guiasUnion
+                            delegate: Rectangle {
+                                required property var modelData
+                                x: modelData * raiz.escala - 1
+                                y: raiz.yPrimeraFila
+                                width: 2
+                                height: raiz.altoPistas
+                                color: Theme.guiaUnion
+                                opacity: 0.9
+                                z: 4
+                            }
+                        }
+
                         // Dónde caerá lo que se arrastra desde la biblioteca o el explorador.
                         Rectangle {
                             visible: raiz.marcaSoltar >= 0
@@ -1570,7 +1661,7 @@ Rectangle {
                             x: raiz.corteSoltar ? raiz.corteSoltar.cut * raiz.escala - 12 : 0
                             y: raiz.corteSoltar ? raiz.yDePista(raiz.corteSoltar.track) + 4 : 0
                             width: 24
-                            height: raiz.alturaPista - 8
+                            height: raiz.corteSoltar ? raiz.altoDePista(raiz.corteSoltar.track) - 8 : 0
                             radius: 4
                             color: Theme.clipTransicion
                             border.color: Theme.acento
@@ -2021,6 +2112,22 @@ Rectangle {
             contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
         }
         Action {
+            text: "Alto normal de esta pista"
+            enabled: menuPista.pista !== null && menuPista.pista.height !== raiz.alturaPista
+            onTriggered: raiz.editor.setTrackHeight(menuPista.pista.index, raiz.alturaPista)
+        }
+        Action {
+            text: "Todas las pistas más altas (Alt++)"
+            onTriggered: raiz.altoDeTodas(1)
+        }
+        Action {
+            text: "Todas las pistas más bajas (Alt+−)"
+            onTriggered: raiz.altoDeTodas(-1)
+        }
+        MenuSeparator {
+            contentItem: Rectangle { implicitHeight: 1; color: Theme.borde }
+        }
+        Action {
             text: menuPista.pista === null ? "Quitar pista"
                   : "Quitar la pista " + menuPista.pista.name
                     + (menuPista.pista.empty ? "" : " y sus clips")
@@ -2305,6 +2412,41 @@ Rectangle {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
             onPressed: menuPista.abrir(cabecera.pista)
+        }
+        // Borde inferior: arrastrarlo cambia el alto de la pista (doble clic: alto normal).
+        MouseArea {
+            id: bordeAlto
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: -3
+            height: 7
+            z: 2
+            hoverEnabled: true
+            preventStealing: true
+            cursorShape: Qt.SizeVerCursor
+            property real yInicio: 0
+            property real altoInicio: 0
+            onPressed: (m) => {
+                yInicio = mapToItem(raiz, m.x, m.y).y
+                altoInicio = raiz.altoDe(cabecera.pista)
+            }
+            onPositionChanged: (m) => {
+                if (pressed)
+                    raiz.cambiarAltoEnCurso(cabecera.pista.index,
+                                            altoInicio + mapToItem(raiz, m.x, m.y).y - yInicio)
+            }
+            onReleased: raiz.guardarAltos()
+            onCanceled: raiz.altosEnCurso = ({})
+            onDoubleClicked: raiz.editor.setTrackHeight(cabecera.pista.index, raiz.alturaPista)
+        }
+        Rectangle {
+            visible: bordeAlto.containsMouse || bordeAlto.pressed
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 2
+            color: Theme.acento
         }
         Row {
             anchors.verticalCenter: parent.verticalCenter

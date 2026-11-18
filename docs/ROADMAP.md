@@ -10,7 +10,7 @@ Las próximas versiones salen de dos o tres puntos cada una; después de la 0.1.
 nuevo. La página de descarga lo muestra en `web/roadmap.html`: al cambiar este archivo,
 actualizar también esa página.
 
-Última actualización: 2026-10-31.
+Última actualización: 2026-11-18.
 
 ---
 
@@ -19,8 +19,10 @@ actualizar también esa página.
 ### 0.1.9 · Línea de tiempo
 | Punto | Qué trae | Tamaño |
 |-------|----------|--------|
-| M1 | Transiciones de entrada y de salida, con marca de centro e imán al moverlas. | Grande |
+| M1 | Transiciones de entrada y de salida: Fade de entrada, de salida y de corte, como clip o pegado a los clips. | Grande |
 | M17 | Altura de las pistas ajustable. | Medio |
+| M27 | Guía de unión al arrastrar: una línea avisa cuando dos clips quedan borde con borde o una transición queda centrada en un corte. | Pequeño |
+| M28 | Línea amarilla entre dos keyframes iguales. | Pequeño |
 
 ### 0.2.0 · Nueva aleta y atajos a tu gusto
 | Punto | Qué trae | Tamaño |

@@ -369,16 +369,22 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 
 ## Prioridad media (0.2.0)
 
-### M1 · Transiciones de entrada y salida, marca de centro e imán · FB-007, FB-008 · L
+### M1 · Transiciones de entrada y salida · FB-007 · L
 - **Pedido:** mantener las transiciones como clips en su pista y, además, poder ponerlas
   al principio o al final de un clip para que se adapten (fundido a negro de entrada:
-  empieza en negro y aparece el clip; de salida: se ve el clip y pasa a negro). Que la
-  transición muestre el centro exacto del corte, que ese centro tenga imán con los cortes
-  y que sus dos mitades se puedan separar (una mitad como cierre, la otra como apertura).
-- **Hacer:** diseñar juntos los dos pedidos: las mitades separables y las transiciones de
-  entrada/salida son la misma idea. Marca de centro e imán al mover una transición.
-- **Por decidir:** con Kyo, la forma final (transición partida en dos mitades frente a
-  tres variantes: entrada, salida y corte).
+  empieza en negro y aparece el clip; de salida: se ve el clip y pasa a negro).
+- **Decidido con Kyo (2026-11-18):**
+  - Sin mitades separables: cortar la transición por la mitad ya sirve.
+  - Dos formas de colocarlas: como clip en la línea de tiempo (como hoy, afecta a todo lo
+    de debajo) o pegadas a los clips (como al principio, `Track::transitions`).
+  - Variantes agrupadas en la pestaña Efectos. Por ahora solo Fade tiene las tres:
+    **Entrada** (de negro aparece el clip), **Salida** (el clip pasa a negro) y **Corte**
+    (de A a negro y de negro a B, el Fade to Black de hoy). Las demás siguen solo con corte.
+  - Pegada a los clips, la variante sale de dónde se suelta: en el inicio de un clip,
+    Entrada; en el final, Salida; en un corte entre dos clips, Corte. Se cambia después en
+    Propiedades. Entrada y Salida no necesitan material sobrante del medio.
+  - Fade sigue sin sonido en sus tres variantes.
+- **Cuidado:** el archivo del proyecto sube de versión (13); los anteriores se abren igual.
 - **Para:** 0.1.9 (decidido con Kyo, 2026-10-27; ver [ROADMAP.md](../ROADMAP.md)).
 
 ### M2 · Editar una secuencia ya creada y guardar presets · FB-015 · M
@@ -748,6 +754,30 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
   al abrir un proyecto con un medio sin usar se crea su onda, y al ponerlo en la línea de
   tiempo sale al momento.
 
+### M27 · Guía de unión al arrastrar · FB-008 · S
+- **Problema:** al acomodar clips a mano no se sabe si quedaron borde con borde, con un
+  hueco o pisando el siguiente; y para centrar una transición en un corte hay que mirarlo a
+  ojo o cortarla por la mitad.
+- **Decidido con Kyo (2026-11-18):** el imán y las mitades separables no hacen falta (al
+  soltar una transición ya se centra sola). En su lugar, una guía visual:
+  - Solo mientras se arrastra un clip, se recorta uno de sus bordes o se mueve una
+    transición. Sin arrastrar no se ve ninguna.
+  - Cuando el borde que se mueve cae en el mismo fotograma exacto que otro borde (de
+    cualquier pista), una línea vertical cruza toda la línea de tiempo. Si no sale, hay un
+    hueco o se pisan. Funciona con el imán encendido o apagado.
+  - El centro de una transición-clip cuenta como un borde más: si cae sobre un corte, sale
+    la línea. Con una duración impar basta con quedar a menos de medio fotograma.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+
+### M28 · Línea amarilla entre keyframes iguales · FB-053 · S
+- **Problema:** los keyframes se ven como ◆ debajo de cada clip, pero no se ve en qué tramos
+  el clip se queda igual.
+- **Decidido con Kyo (2026-11-18):** en la línea de tiempo general, una línea amarilla une
+  dos keyframes seguidos de la fila del clip cuando ninguna propiedad animada cambia entre
+  ellos (si cambia cualquiera, no sale). La mini línea de tiempo con zoom va en M15, con su
+  línea por propiedad.
+- **Para:** 0.1.9 (decidido con Kyo, 2026-11-18; ver [ROADMAP.md](../ROADMAP.md)).
+
 ---
 
 ## Prioridad baja (más adelante)
@@ -810,5 +840,5 @@ Qué va en cada versión, lo hecho y lo pendiente: [ROADMAP.md](../ROADMAP.md).
 | Prioridad | Puntos | Entradas |
 |-----------|--------|----------|
 | Alta | A1–A17 | FB-002, 003, 004, 005, 006, 010, 012, 017, 020, 023, 025, 026, 028, 030, 044, 046, 047 |
-| Media | M1–M23 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048 |
+| Media | M1–M28 | FB-001, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 024, 027, 031, 032, 033, 034, 035, 036, 037, 039, 040, 041, 043, 048, 050, 051, 052, 053 |
 | Baja | B1–B6 | FB-011, 016, 018, 029, 038, 042 |
